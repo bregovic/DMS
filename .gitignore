@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local file uploads (dev storage driver)
 /.uploads
+
+# datové soubory (neukládat do repa)
+*.csv
