@@ -6,15 +6,23 @@ V Railway otevři svoji **app service** (ne databázi) → záložka **Variables
 tlačítko **Raw Editor** → vlož tohle a ulož:
 
 ```env
-DATABASE_URL="postgresql://postgres:KkRlymmzDfBZpZKYFvNwNGNsOYdpFTHN@postgres-cjaq.railway.internal:5432/railway?schema=dms"
+DATABASE_URL="postgresql://postgres:KkRlymmzDfBZpZKYFvNwNGNsOYdpFTHN@switchback.proxy.rlwy.net:37182/railway?schema=dms"
 AUTH_SECRET="WwCg6sHUqDYczUScJv+TqzX+d/vKKkBgvD/WuWZzyMY="
 AUTH_TRUST_HOST="true"
-AUTH_URL="https://ZMEN-NA-SVOJI-DOMENU.up.railway.app"
+AUTH_URL="https://dokumenty.up.railway.app"
 AUTH_GOOGLE_ID=""
 AUTH_GOOGLE_SECRET=""
 STORAGE_DRIVER="local"
 STORAGE_LOCAL_DIR="./.uploads"
+PORT="8080"
 ```
+
+> **Proč public DATABASE_URL a PORT=8080 (poučení z reálného nasazení):**
+> - Postgres DB je v **jiném Railway environmentu** než služba DMS, takže interní
+>   adresa `*.railway.internal` odsud nedosáhne (chyba `P1001`). Proto používáme
+>   **public proxy URL** (`switchback.proxy.rlwy.net`).
+> - Služba DMS měla nastavený **TCP port 5432**, kvůli čemuž Next.js naslouchal na
+>   5432 a veřejná HTTP doména vracela **502**. `PORT=8080` to srovná.
 
 ### Co případně upravit
 
