@@ -28,6 +28,7 @@ model User {
   projects          Project[]  @relation("ProjectOwner")
   expensesCreated   Expense[]  @relation("ExpenseCreatedBy")
   documentsUploaded Document[] @relation("DocumentUploadedBy")
+  vendors           Vendor[]   @relation("VendorOwner")
 }
 
 model Account {
@@ -69,6 +70,25 @@ model VerificationToken {
 // ---------------------------------------------------------------------------
 // Doménový model
 // ---------------------------------------------------------------------------
+
+// Evidence dodavatelů v rámci účtu. E-mail je identifikátor (unikátní na účet)
+// a bude sloužit i pro budoucí přístup dodavatele k dedikovaným projektům.
+model Vendor {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  email       String
+  category    String   @default("other")
+  phone       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, email])
+  @@index([ownerId])
+}
 
 // Sdílený číselník vlastních typů projektů (vestavěné typy jsou v kódu).
 model ProjectType {

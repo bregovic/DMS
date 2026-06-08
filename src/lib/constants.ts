@@ -25,3 +25,20 @@ export const EXPENSE_CATEGORIES = [
 export function categoryLabel(value: string) {
   return EXPENSE_CATEGORIES.find((c) => c.value === value)?.label ?? "Ostatní";
 }
+
+export const VENDOR_CATEGORIES = [
+  { value: "construction", label: "Stavební práce" },
+  { value: "plumbing", label: "Instalatér / Topenář" },
+  { value: "electrical", label: "Elektrikář" },
+  { value: "wholesale", label: "Velkoobchod" },
+  { value: "service", label: "Servis" },
+  { value: "cleaning", label: "Úklid" },
+  { value: "garden", label: "Zahrada" },
+  { value: "transport", label: "Doprava" },
+  { value: "it", label: "IT / Elektronika" },
+  { value: "other", label: "Ostatní" },
+] as const;
+
+export function vendorCategoryLabel(value: string) {
+  return VENDOR_CATEGORIES.find((c) => c.value === value)?.label ?? "Ostatní";
+}
