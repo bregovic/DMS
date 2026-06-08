@@ -1,0 +1,128 @@
+// DMS – datový model
+// Dokumentace: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) tabulky
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String? // pro přihlášení e-mailem/heslem (Credentials)
+  createdAt     DateTime  @default(now())
+
+  accounts          Account[]
+  sessions          Session[]
+  projects          Project[]  @relation("ProjectOwner")
+  expensesCreated   Expense[]  @relation("ExpenseCreatedBy")
+  documentsUploaded Document[] @relation("DocumentUploadedBy")
+}
+
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+  refresh_token_expires_in Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Doménový model
+// ---------------------------------------------------------------------------
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("other") // house, garage, car, other...
+  description String?
+  color       String   @default("#6366f1")
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
+  documents Document[]
+
+  @@index([ownerId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("CZK")
+  category    String   @default("other")
+  date        DateTime @default(now())
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  documents Document[]
+
+  @@index([projectId])
+  @@index([date])
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  projectId    String
+  expenseId    String?
+  fileName     String // klíč v úložišti (storage key)
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  uploadedBy User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([projectId])
+  @@index([expenseId])
+}
