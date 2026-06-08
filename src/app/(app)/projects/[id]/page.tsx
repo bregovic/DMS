@@ -12,8 +12,8 @@ import { deleteProject } from "@/server/actions/projects";
 import { deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { categoryLabel } from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
+import { getExpenseCategories } from "@/server/expense-categories";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -27,7 +27,7 @@ export default async function ProjectDetailPage({
   const user = await requireUser();
   const { id } = await params;
 
-  const [project, accountVendors, typeMap] = await Promise.all([
+  const [project, accountVendors, typeMap, categories] = await Promise.all([
     prisma.project.findFirst({
       where: { id, ownerId: user.id },
       include: {
@@ -48,11 +48,13 @@ export default async function ProjectDetailPage({
       select: { id: true, name: true, email: true },
     }),
     getProjectTypeMap(),
+    getExpenseCategories(),
   ]);
 
   if (!project) notFound();
 
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
+  const catMap = new Map(categories.map((c) => [c.key, c.label]));
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
 
   const assignedIds = new Set(project.vendors.map((v) => v.id));
@@ -106,6 +108,7 @@ export default async function ProjectDetailPage({
             <NewExpenseForm
               projectId={project.id}
               vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+              categories={categories}
             />
           </div>
 
@@ -125,7 +128,7 @@ export default async function ProjectDetailPage({
                       {e.title}
                     </p>
                     <p className="kicker mt-0.5">
-                      {categoryLabel(e.category)} · {formatDate(e.date)}
+                      {catMap.get(e.category) ?? e.category} · {formatDate(e.date)}
                       {e.vendor ? ` · ${e.vendor.name}` : ""}
                       {e.description ? ` · ${e.description}` : ""}
                     </p>

@@ -30,11 +30,17 @@ export function ImportForm() {
       {state?.summary && (
         <div className="border border-stone-300 bg-white p-4">
           <p className="kicker mb-2">Hotovo</p>
-          <ul className="space-y-1 text-sm text-stone-700">
+          <ul className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-stone-700">
             <li>
               Vytvořeno výdajů:{" "}
               <span className="font-mono text-stone-950">
                 {state.summary.created}
+              </span>
+            </li>
+            <li>
+              Aktualizováno:{" "}
+              <span className="font-mono text-stone-950">
+                {state.summary.updated}
               </span>
             </li>
             <li>
@@ -47,6 +53,12 @@ export function ImportForm() {
               Nových dodavatelů:{" "}
               <span className="font-mono text-stone-950">
                 {state.summary.newVendors}
+              </span>
+            </li>
+            <li>
+              Nových kategorií:{" "}
+              <span className="font-mono text-stone-950">
+                {state.summary.newCategories}
               </span>
             </li>
             <li>

@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { parseCsv } from "@/lib/csv";
+import {
+  getExpenseCategories,
+  slugifyCategory,
+} from "@/server/expense-categories";
 
 export type ImportSummary = {
   created: number;
+  updated: number;
   skipped: number;
   newProjects: number;
   newVendors: number;
+  newCategories: number;
 };
 
 export type ImportState = { error?: string; summary?: ImportSummary } | undefined;
@@ -27,7 +33,6 @@ function parseAmount(s: string): number {
 }
 
 function parseCzDate(s: string): Date {
-  // očekává DD.MM.YYYY; fallback na Date() parsing nebo dnešek
   const m = s.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
   const d = new Date(s);
@@ -45,8 +50,7 @@ export async function importExpensesCsv(
     return { error: "Vyber CSV soubor." };
   }
 
-  // Detekce kódování: zkus UTF-8, při nevalidních bajtech spadni na Windows-1250
-  // (české Excel CSV bývá ve Windows-1250).
+  // UTF-8 s fallbackem na Windows-1250 (české Excel CSV).
   const buf = Buffer.from(await file.arrayBuffer());
   let text: string;
   try {
@@ -63,6 +67,7 @@ export async function importExpensesCsv(
   const header = rows[0].map(norm);
   const col = (name: string) => header.indexOf(norm(name));
   const ci = {
+    id: col("ID"),
     date: col("Datum"),
     email: col("Email"),
     vendor: col("Název dodavatele"),
@@ -77,14 +82,39 @@ export async function importExpensesCsv(
     return { error: "Chybí povinné sloupce Projekt a Částka." };
   }
 
-  const get = (r: string[], idx: number) => (idx >= 0 ? (r[idx] ?? "").trim() : "");
+  const get = (r: string[], idx: number) =>
+    idx >= 0 ? (r[idx] ?? "").trim() : "";
+
+  // Cache kategorií: normalizovaný label -> key
+  const catCache = new Map<string, string>();
+  for (const c of await getExpenseCategories()) {
+    catCache.set(norm(c.label), c.key);
+  }
 
   const projectCache = new Map<string, string>();
   const vendorCache = new Map<string, string>();
   let created = 0;
+  let updated = 0;
   let skipped = 0;
   let newProjects = 0;
   let newVendors = 0;
+  let newCategories = 0;
+
+  async function resolveCategory(label: string): Promise<string> {
+    if (!label) return "other";
+    const nl = norm(label);
+    const found = catCache.get(nl);
+    if (found) return found;
+    const key = slugifyCategory(label);
+    await prisma.expenseCategory.upsert({
+      where: { key },
+      update: { label },
+      create: { key, label },
+    });
+    catCache.set(nl, key);
+    newCategories++;
+    return key;
+  }
 
   for (const r of rows.slice(1)) {
     const projectName = get(r, ci.project);
@@ -94,7 +124,7 @@ export async function importExpensesCsv(
       continue;
     }
 
-    // Projekt (najdi/vytvoř)
+    // Projekt
     const pKey = projectName.toLowerCase();
     let projectId = projectCache.get(pKey);
     if (!projectId) {
@@ -115,7 +145,7 @@ export async function importExpensesCsv(
       projectCache.set(pKey, projectId);
     }
 
-    // Dodavatel (volitelně, podle e-mailu)
+    // Dodavatel (volitelně)
     let vendorId: string | null = null;
     const email = get(r, ci.email);
     if (email) {
@@ -143,7 +173,6 @@ export async function importExpensesCsv(
         }
         vendorCache.set(vKey, vendorId);
       }
-      // Přiřaď dodavatele k projektu (idempotentní)
       await prisma.project
         .update({
           where: { id: projectId },
@@ -152,21 +181,35 @@ export async function importExpensesCsv(
         .catch(() => {});
     }
 
-    const cat = get(r, ci.cat);
-    await prisma.expense.create({
-      data: {
-        projectId,
-        vendorId,
-        createdById: user.id,
-        title: get(r, ci.desc) || "Výdaj",
-        amount,
-        currency: get(r, ci.currency) || "CZK",
-        category: "other",
-        date: parseCzDate(get(r, ci.date)),
-        description: cat ? `Kategorie: ${cat}` : undefined,
-      },
-    });
-    created++;
+    const categoryKey = await resolveCategory(get(r, ci.cat));
+    const data = {
+      projectId,
+      vendorId,
+      title: get(r, ci.desc) || "Výdaj",
+      amount,
+      currency: get(r, ci.currency) || "CZK",
+      category: categoryKey,
+      date: parseCzDate(get(r, ci.date)),
+    };
+
+    // Reimport: pokud řádek nese ID existujícího výdaje uživatele → update
+    const rowId = get(r, ci.id);
+    let didUpdate = false;
+    if (rowId) {
+      const existing = await prisma.expense.findFirst({
+        where: { id: rowId, project: { ownerId: user.id } },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.expense.update({ where: { id: existing.id }, data });
+        updated++;
+        didUpdate = true;
+      }
+    }
+    if (!didUpdate) {
+      await prisma.expense.create({ data: { ...data, createdById: user.id } });
+      created++;
+    }
   }
 
   revalidatePath("/projects");
@@ -174,5 +217,7 @@ export async function importExpensesCsv(
   revalidatePath("/dashboard");
   revalidatePath("/reports");
 
-  return { summary: { created, skipped, newProjects, newVendors } };
+  return {
+    summary: { created, updated, skipped, newProjects, newVendors, newCategories },
+  };
 }

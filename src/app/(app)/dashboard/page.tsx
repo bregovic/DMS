@@ -4,12 +4,12 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { categoryLabel } from "@/lib/constants";
+import { getExpenseCategoryMap } from "@/server/expense-categories";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [projectCount, expenseAgg, recentExpenses, projects] =
+  const [projectCount, expenseAgg, recentExpenses, projects, catMap] =
     await Promise.all([
       prisma.project.count({ where: { ownerId: user.id } }),
       prisma.expense.aggregate({
@@ -29,6 +29,7 @@ export default async function DashboardPage() {
         orderBy: { updatedAt: "desc" },
         take: 5,
       }),
+      getExpenseCategoryMap(),
     ]);
 
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
                       {e.title}
                     </p>
                     <p className="kicker mt-0.5">
-                      {e.project.name} · {categoryLabel(e.category)} ·{" "}
+                      {e.project.name} · {catMap.get(e.category) ?? e.category} ·{" "}
                       {formatDate(e.date)}
                     </p>
                   </div>

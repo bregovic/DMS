@@ -7,20 +7,23 @@ import {
   ProjectPieChart,
 } from "@/components/reports/charts";
 import { formatCurrency } from "@/lib/utils";
-import { categoryLabel } from "@/lib/constants";
+import { getExpenseCategoryMap } from "@/server/expense-categories";
 
 export default async function ReportsPage() {
   const user = await requireUser();
 
-  const expenses = await prisma.expense.findMany({
-    where: { project: { ownerId: user.id } },
-    select: {
-      amount: true,
-      category: true,
-      date: true,
-      project: { select: { name: true } },
-    },
-  });
+  const [expenses, catMap] = await Promise.all([
+    prisma.expense.findMany({
+      where: { project: { ownerId: user.id } },
+      select: {
+        amount: true,
+        category: true,
+        date: true,
+        project: { select: { name: true } },
+      },
+    }),
+    getExpenseCategoryMap(),
+  ]);
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -43,7 +46,7 @@ export default async function ReportsPage() {
     );
   }
   const byCategory = [...byCategoryMap.entries()]
-    .map(([cat, total]) => ({ name: categoryLabel(cat), total }))
+    .map(([cat, total]) => ({ name: catMap.get(cat) ?? cat, total }))
     .sort((a, b) => b.total - a.total);
 
   const now = new Date();

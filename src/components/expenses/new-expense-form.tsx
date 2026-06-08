@@ -6,7 +6,6 @@ import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EXPENSE_CATEGORIES } from "@/lib/constants";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -14,9 +13,11 @@ const fieldClass =
 export function NewExpenseForm({
   projectId,
   vendors,
+  categories,
 }: {
   projectId: string;
   vendors: { id: string; name: string }[];
+  categories: { key: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -83,8 +84,8 @@ export function NewExpenseForm({
           <div className="space-y-1.5">
             <Label htmlFor="category">Kategorie</Label>
             <select id="category" name="category" defaultValue="materials" className={fieldClass}>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
+              {categories.map((c) => (
+                <option key={c.key} value={c.key}>
                   {c.label}
                 </option>
               ))}

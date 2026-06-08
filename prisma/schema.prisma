@@ -101,6 +101,14 @@ model ProjectType {
   createdAt DateTime @default(now())
 }
 
+// Sdílený číselník vlastních kategorií výdajů (vestavěné jsou v kódu).
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  createdAt DateTime @default(now())
+}
+
 model Project {
   id          String   @id @default(cuid())
   name        String
