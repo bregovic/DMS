@@ -9,6 +9,7 @@ const links = [
   { href: "/projects", label: "Projekty" },
   { href: "/vendors", label: "Dodavatelé" },
   { href: "/reports", label: "Reporty" },
+  { href: "/import", label: "Import" },
 ];
 
 export function Sidebar() {
