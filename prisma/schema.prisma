@@ -84,7 +84,9 @@ model Vendor {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner User @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner    User      @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+  projects Project[] @relation("ProjectVendors")
 
   @@unique([ownerId, email])
   @@index([ownerId])
@@ -112,6 +114,7 @@ model Project {
   owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   expenses  Expense[]
   documents Document[]
+  vendors   Vendor[]   @relation("ProjectVendors")
 
   @@index([ownerId])
 }
@@ -125,16 +128,19 @@ model Expense {
   currency    String   @default("CZK")
   category    String   @default("other")
   date        DateTime @default(now())
+  vendorId    String?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User       @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  vendor    Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   documents Document[]
 
   @@index([projectId])
   @@index([date])
+  @@index([vendorId])
 }
 
 model Document {

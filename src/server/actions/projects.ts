@@ -60,3 +60,46 @@ export async function deleteProject(formData: FormData) {
   revalidatePath("/projects");
   redirect("/projects");
 }
+
+export async function addVendorToProject(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const vendorId = String(formData.get("vendorId"));
+  if (!vendorId) return;
+
+  const [project, vendor] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: projectId, ownerId: user.id },
+      select: { id: true },
+    }),
+    prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId: user.id },
+      select: { id: true },
+    }),
+  ]);
+  if (!project || !vendor) throw new Error("Nenalezeno.");
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { vendors: { connect: { id: vendorId } } },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function removeVendorFromProject(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const vendorId = String(formData.get("vendorId"));
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ownerId: user.id },
+    select: { id: true },
+  });
+  if (!project) throw new Error("Nenalezeno.");
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { vendors: { disconnect: { id: vendorId } } },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}

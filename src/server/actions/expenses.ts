@@ -13,6 +13,7 @@ const expenseSchema = z.object({
   category: z.string().default("other"),
   date: z.coerce.date(),
   description: z.string().optional(),
+  vendorId: z.string().optional(),
 });
 
 /** Ověří, že projekt patří uživateli. */
@@ -34,12 +35,23 @@ export async function createExpense(formData: FormData) {
     category: formData.get("category") || "other",
     date: formData.get("date") || new Date(),
     description: formData.get("description") || undefined,
+    vendorId: formData.get("vendorId") || undefined,
   });
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Neplatné údaje.");
   }
 
   await assertOwnsProject(parsed.data.projectId, user.id);
+
+  // Ověř, že dodavatel patří uživateli; jinak vazbu ignoruj.
+  let vendorId = parsed.data.vendorId || null;
+  if (vendorId) {
+    const vendor = await prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId: user.id },
+      select: { id: true },
+    });
+    if (!vendor) vendorId = null;
+  }
 
   await prisma.expense.create({
     data: {
@@ -50,6 +62,7 @@ export async function createExpense(formData: FormData) {
       category: parsed.data.category,
       date: parsed.data.date,
       description: parsed.data.description,
+      vendorId,
       createdById: user.id,
     },
   });
@@ -57,6 +70,7 @@ export async function createExpense(formData: FormData) {
   revalidatePath(`/projects/${parsed.data.projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/reports");
+  revalidatePath("/vendors");
 }
 
 export async function deleteExpense(formData: FormData) {
@@ -70,4 +84,5 @@ export async function deleteExpense(formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/reports");
+  revalidatePath("/vendors");
 }

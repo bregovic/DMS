@@ -11,7 +11,13 @@ import { EXPENSE_CATEGORIES } from "@/lib/constants";
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
 
-export function NewExpenseForm({ projectId }: { projectId: string }) {
+export function NewExpenseForm({
+  projectId,
+  vendors,
+}: {
+  projectId: string;
+  vendors: { id: string; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const today = new Date().toISOString().slice(0, 10);
@@ -88,6 +94,17 @@ export function NewExpenseForm({ projectId }: { projectId: string }) {
             <Label htmlFor="date">Datum</Label>
             <Input id="date" name="date" type="date" defaultValue={today} required />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="vendorId">Dodavatel (volitelné)</Label>
+          <select id="vendorId" name="vendorId" defaultValue="" className={fieldClass}>
+            <option value="">— bez dodavatele —</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="description">Poznámka (volitelné)</Label>

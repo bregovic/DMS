@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
+import { ProjectVendors } from "@/components/projects/project-vendors";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
@@ -26,19 +27,36 @@ export default async function ProjectDetailPage({
   const user = await requireUser();
   const { id } = await params;
 
-  const project = await prisma.project.findFirst({
-    where: { id, ownerId: user.id },
-    include: {
-      expenses: { orderBy: { date: "desc" } },
-      documents: { orderBy: { createdAt: "desc" } },
-    },
-  });
+  const [project, accountVendors, typeMap] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id, ownerId: user.id },
+      include: {
+        expenses: {
+          orderBy: { date: "desc" },
+          include: { vendor: { select: { id: true, name: true } } },
+        },
+        documents: { orderBy: { createdAt: "desc" } },
+        vendors: {
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, email: true },
+        },
+      },
+    }),
+    prisma.vendor.findMany({
+      where: { ownerId: user.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true },
+    }),
+    getProjectTypeMap(),
+  ]);
 
   if (!project) notFound();
 
-  const typeMap = await getProjectTypeMap();
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  const assignedIds = new Set(project.vendors.map((v) => v.id));
+  const availableVendors = accountVendors.filter((v) => !assignedIds.has(v.id));
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -85,7 +103,10 @@ export default async function ProjectDetailPage({
         <section className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">Výdaje · {project.expenses.length}</h2>
-            <NewExpenseForm projectId={project.id} />
+            <NewExpenseForm
+              projectId={project.id}
+              vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+            />
           </div>
 
           {project.expenses.length === 0 ? (
@@ -105,6 +126,7 @@ export default async function ProjectDetailPage({
                     </p>
                     <p className="kicker mt-0.5">
                       {categoryLabel(e.category)} · {formatDate(e.date)}
+                      {e.vendor ? ` · ${e.vendor.name}` : ""}
                       {e.description ? ` · ${e.description}` : ""}
                     </p>
                   </div>
@@ -126,44 +148,57 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Dokumenty */}
-        <section className="lg:col-span-2">
-          <div className="mb-4 border-b border-stone-300/80 pb-2">
-            <h2 className="kicker">Dokumenty · {project.documents.length}</h2>
-          </div>
+        {/* Pravý sloupec: dodavatelé + dokumenty */}
+        <div className="space-y-10 lg:col-span-2">
+          <section>
+            <div className="mb-4 border-b border-stone-300/80 pb-2">
+              <h2 className="kicker">Dodavatelé · {project.vendors.length}</h2>
+            </div>
+            <ProjectVendors
+              projectId={project.id}
+              assigned={project.vendors}
+              available={availableVendors}
+            />
+          </section>
 
-          <UploadForm projectId={project.id} />
-
-          {project.documents.length > 0 && (
-            <ul className="mt-4">
-              {project.documents.map((d) => (
-                <li
-                  key={d.id}
-                  className="group flex items-center justify-between gap-2 border-b border-stone-200 py-3"
-                >
-                  <a
-                    href={`/api/documents/${d.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="min-w-0 flex-1"
+          <section>
+            <div className="mb-4 border-b border-stone-300/80 pb-2">
+              <h2 className="kicker">Dokumenty · {project.documents.length}</h2>
+            </div>
+            <UploadForm projectId={project.id} />
+            {project.documents.length > 0 && (
+              <ul className="mt-4">
+                {project.documents.map((d) => (
+                  <li
+                    key={d.id}
+                    className="group flex items-center justify-between gap-2 border-b border-stone-200 py-3"
                   >
-                    <span className="block truncate text-sm font-medium text-stone-950 underline-offset-4 group-hover:underline">
-                      {d.originalName}
+                    <a
+                      href={`/api/documents/${d.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1"
+                    >
+                      <span className="block truncate text-sm font-medium text-stone-950 underline-offset-4 group-hover:underline">
+                        {d.originalName}
+                      </span>
+                      <span className="kicker mt-0.5 block">
+                        {formatBytes(d.size)}
+                      </span>
+                    </a>
+                    <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                      <DeleteButton
+                        action={deleteDocument}
+                        fields={{ id: d.id }}
+                        confirm="Smazat tento dokument?"
+                      />
                     </span>
-                    <span className="kicker mt-0.5 block">{formatBytes(d.size)}</span>
-                  </a>
-                  <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                    <DeleteButton
-                      action={deleteDocument}
-                      fields={{ id: d.id }}
-                      confirm="Smazat tento dokument?"
-                    />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );
