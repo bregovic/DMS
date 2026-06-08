@@ -70,6 +70,15 @@ model VerificationToken {
 // Doménový model
 // ---------------------------------------------------------------------------
 
+// Sdílený číselník vlastních typů projektů (vestavěné typy jsou v kódu).
+model ProjectType {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  icon      String   @default("folder")
+  createdAt DateTime @default(now())
+}
+
 model Project {
   id          String   @id @default(cuid())
   name        String

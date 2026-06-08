@@ -5,19 +5,24 @@ import { prisma } from "@/lib/prisma";
 import { NewProjectForm } from "@/components/projects/new-project-form";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { formatCurrency } from "@/lib/utils";
-import { projectTypeLabel } from "@/lib/constants";
+import { getProjectTypes } from "@/server/project-types";
 
 export default async function ProjectsPage() {
   const user = await requireUser();
 
-  const projects = await prisma.project.findMany({
-    where: { ownerId: user.id },
-    include: {
-      _count: { select: { expenses: true, documents: true } },
-      expenses: { select: { amount: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const [projects, types] = await Promise.all([
+    prisma.project.findMany({
+      where: { ownerId: user.id },
+      include: {
+        _count: { select: { expenses: true, documents: true } },
+        expenses: { select: { amount: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    getProjectTypes(),
+  ]);
+
+  const typeMap = new Map(types.map((t) => [t.key, t.label]));
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -26,7 +31,7 @@ export default async function ProjectsPage() {
           <p className="kicker">Evidence</p>
           <h1 className="display mt-2 text-4xl text-stone-950">Projekty</h1>
         </div>
-        <NewProjectForm />
+        <NewProjectForm types={types} />
       </header>
 
       {projects.length === 0 ? (
@@ -48,7 +53,7 @@ export default async function ProjectsPage() {
                   <ArrowUpRight className="size-4 text-stone-300 transition-colors group-hover:text-stone-950" />
                 </div>
                 <p className="text-base font-medium text-stone-950">{p.name}</p>
-                <p className="kicker mt-1">{projectTypeLabel(p.type)}</p>
+                <p className="kicker mt-1">{typeMap.get(p.type) ?? "Ostatní"}</p>
                 {p.description && (
                   <p className="mt-3 line-clamp-2 text-sm text-stone-500">
                     {p.description}

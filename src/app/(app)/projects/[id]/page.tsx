@@ -11,7 +11,8 @@ import { deleteProject } from "@/server/actions/projects";
 import { deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { categoryLabel, projectTypeLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/constants";
+import { getProjectTypeMap } from "@/server/project-types";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -35,6 +36,8 @@ export default async function ProjectDetailPage({
 
   if (!project) notFound();
 
+  const typeMap = await getProjectTypeMap();
+  const typeLabel = typeMap.get(project.type) ?? "Ostatní";
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
 
   return (
@@ -52,7 +55,7 @@ export default async function ProjectDetailPage({
         <div className="flex items-start gap-4">
           <ProjectIcon type={project.type} className="mt-1 size-7 text-stone-800" />
           <div>
-            <p className="kicker">{projectTypeLabel(project.type)}</p>
+            <p className="kicker">{typeLabel}</p>
             <h1 className="display mt-1 text-4xl text-stone-950">
               {project.name}
             </h1>

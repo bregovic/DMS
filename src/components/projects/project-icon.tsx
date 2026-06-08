@@ -1,20 +1,25 @@
 import {
-  Building2,
+  Briefcase,
   Car,
+  Gamepad2,
   House,
-  Package,
+  Laptop,
+  Sofa,
+  Tag,
   Trees,
-  Wrench,
   type LucideProps,
 } from "lucide-react";
 
+// Mapování vestavěných typů na ikony. Vlastní (DB) typy mají obecnou ikonu.
 const ICONS: Record<string, React.ComponentType<LucideProps>> = {
-  house: House,
-  apartment: Building2,
-  car: Car,
-  garage: Wrench,
+  realEstate: House,
+  vehicles: Car,
+  electronics: Laptop,
+  household: Sofa,
   garden: Trees,
-  other: Package,
+  business: Briefcase,
+  leisure: Gamepad2,
+  other: Tag,
 };
 
 export function ProjectIcon({
@@ -24,6 +29,6 @@ export function ProjectIcon({
   type: string;
   className?: string;
 }) {
-  const Icon = ICONS[type] ?? Package;
+  const Icon = ICONS[type] ?? Tag;
   return <Icon className={className} strokeWidth={1.5} />;
 }
