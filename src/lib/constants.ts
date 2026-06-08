@@ -1,10 +1,10 @@
 export const PROJECT_TYPES = [
-  { value: "house", label: "Dům", emoji: "🏠" },
-  { value: "apartment", label: "Byt", emoji: "🏢" },
-  { value: "car", label: "Auto", emoji: "🚗" },
-  { value: "garage", label: "Garáž", emoji: "🧰" },
-  { value: "garden", label: "Zahrada", emoji: "🌳" },
-  { value: "other", label: "Jiné", emoji: "📦" },
+  { value: "house", label: "Dům" },
+  { value: "apartment", label: "Byt" },
+  { value: "car", label: "Auto" },
+  { value: "garage", label: "Garáž" },
+  { value: "garden", label: "Zahrada" },
+  { value: "other", label: "Jiné" },
 ] as const;
 
 export const EXPENSE_CATEGORIES = [
@@ -19,7 +19,7 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export function projectTypeLabel(value: string) {
-  return PROJECT_TYPES.find((t) => t.value === value) ?? PROJECT_TYPES[5];
+  return PROJECT_TYPES.find((t) => t.value === value)?.label ?? "Jiné";
 }
 
 export function categoryLabel(value: string) {

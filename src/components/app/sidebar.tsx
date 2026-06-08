@@ -2,33 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FolderKanban, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/dashboard", label: "Přehled", icon: LayoutDashboard },
-  { href: "/projects", label: "Projekty", icon: FolderKanban },
-  { href: "/reports", label: "Reporty", icon: BarChart3 },
+  { href: "/dashboard", label: "Přehled" },
+  { href: "/projects", label: "Projekty" },
+  { href: "/reports", label: "Reporty" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-1">
-      {links.map(({ href, label, icon: Icon }) => {
+    <nav className="flex flex-col">
+      {links.map(({ href, label }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm transition-colors",
               active
-                ? "bg-indigo-50 text-indigo-700"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                ? "border-stone-950 font-medium text-stone-950"
+                : "border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-950",
             )}
           >
-            <Icon className="size-4" />
+            <span
+              className={cn(
+                "size-1.5 rounded-full transition-colors",
+                active ? "bg-stone-950" : "bg-stone-300 group-hover:bg-stone-500",
+              )}
+            />
             {label}
           </Link>
         );

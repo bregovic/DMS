@@ -7,10 +7,10 @@ export default async function LoginPage() {
   if (session?.user) redirect("/dashboard");
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-1 text-center">
-        <h2 className="text-lg font-semibold text-slate-900">Vítej zpět</h2>
-        <p className="text-sm text-slate-500">Přihlas se do svého účtu</p>
+    <div>
+      <div className="mb-6">
+        <h2 className="display text-2xl text-stone-950">Vítej zpět</h2>
+        <p className="mt-1 text-sm text-stone-500">Přihlas se do svého účtu</p>
       </div>
       <LoginForm />
     </div>

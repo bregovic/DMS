@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ArrowRight, FolderKanban, Receipt, Wallet } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent } from "@/components/ui/card";
+import { ProjectIcon } from "@/components/projects/project-icon";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { categoryLabel, projectTypeLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/constants";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -20,153 +20,128 @@ export default async function DashboardPage() {
       prisma.expense.findMany({
         where: { project: { ownerId: user.id } },
         orderBy: { date: "desc" },
-        take: 5,
+        take: 6,
         include: { project: true },
       }),
       prisma.project.findMany({
         where: { ownerId: user.id },
         include: { _count: { select: { expenses: true, documents: true } } },
         orderBy: { updatedAt: "desc" },
-        take: 4,
+        take: 5,
       }),
     ]);
 
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
 
   const stats = [
-    {
-      label: "Projektů",
-      value: String(projectCount),
-      icon: FolderKanban,
-      color: "bg-indigo-50 text-indigo-600",
-    },
-    {
-      label: "Celkové výdaje",
-      value: formatCurrency(totalSpent),
-      icon: Wallet,
-      color: "bg-emerald-50 text-emerald-600",
-    },
-    {
-      label: "Záznamů výdajů",
-      value: String(expenseAgg._count),
-      icon: Receipt,
-      color: "bg-amber-50 text-amber-600",
-    },
+    { label: "Projekty", value: String(projectCount) },
+    { label: "Celkové výdaje", value: formatCurrency(totalSpent) },
+    { label: "Záznamů", value: String(expenseAgg._count) },
   ];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Ahoj, {user.name?.split(" ")[0] ?? "vítej"} 👋
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-10">
+        <p className="kicker">Přehled</p>
+        <h1 className="display mt-2 text-4xl text-stone-950">
+          Ahoj, {user.name?.split(" ")[0] ?? "vítej"}.
         </h1>
-        <p className="text-slate-500">Přehled tvých projektů a výdajů</p>
-      </div>
+      </header>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="flex items-center gap-4 p-5">
-              <div
-                className={`flex size-11 items-center justify-center rounded-lg ${s.color}`}
-              >
-                <s.icon className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">{s.label}</p>
-                <p className="text-xl font-semibold text-slate-900">
-                  {s.value}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Statistiky – řádek s hairline oddělovači */}
+      <div className="mb-12 grid grid-cols-1 border-y border-stone-300/80 sm:grid-cols-3">
+        {stats.map((s, i) => (
+          <div
+            key={s.label}
+            className={`py-6 sm:px-6 ${
+              i > 0 ? "border-t border-stone-200 sm:border-t-0 sm:border-l" : ""
+            } ${i === 0 ? "sm:pl-0" : ""}`}
+          >
+            <p className="kicker">{s.label}</p>
+            <p className="display mt-2 text-3xl text-stone-950">{s.value}</p>
+          </div>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-12 lg:grid-cols-2">
         {/* Projekty */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Projekty</h2>
+        <section>
+          <div className="mb-4 flex items-baseline justify-between border-b border-stone-300/80 pb-2">
+            <h2 className="kicker">Projekty</h2>
             <Link
               href="/projects"
-              className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+              className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
             >
-              Vše <ArrowRight className="size-3.5" />
+              Všechny
             </Link>
           </div>
           {projects.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center text-sm text-slate-500">
-                Zatím nemáš žádné projekty.{" "}
-                <Link href="/projects" className="text-indigo-600 hover:underline">
-                  Vytvoř první
-                </Link>
-                .
-              </CardContent>
-            </Card>
+            <p className="py-6 text-sm text-stone-500">
+              Zatím nemáš žádné projekty.{" "}
+              <Link href="/projects" className="text-stone-950 underline underline-offset-4">
+                Vytvoř první
+              </Link>
+              .
+            </p>
           ) : (
-            <div className="space-y-2">
-              {projects.map((p) => {
-                const t = projectTypeLabel(p.type);
-                return (
-                  <Link key={p.id} href={`/projects/${p.id}`}>
-                    <Card className="transition-colors hover:border-indigo-300">
-                      <CardContent className="flex items-center gap-3 p-4">
-                        <span className="text-2xl">{t.emoji}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-slate-900">
-                            {p.name}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {p._count.expenses} výdajů · {p._count.documents}{" "}
-                            dokumentů
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Poslední výdaje */}
-        <div className="space-y-3">
-          <h2 className="font-semibold text-slate-900">Poslední výdaje</h2>
-          {recentExpenses.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center text-sm text-slate-500">
-                Zatím žádné výdaje.
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="divide-y divide-slate-100 p-0">
-                {recentExpenses.map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex items-center justify-between px-4 py-3"
+            <ul>
+              {projects.map((p) => (
+                <li key={p.id} className="border-b border-stone-200">
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="group flex items-center gap-4 py-3.5"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">
-                        {e.title}
+                    <ProjectIcon
+                      type={p.type}
+                      className="size-5 shrink-0 text-stone-700"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-stone-950">
+                        {p.name}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {e.project.name} · {categoryLabel(e.category)} ·{" "}
-                        {formatDate(e.date)}
+                      <p className="kicker mt-0.5">
+                        {p._count.expenses} výdajů · {p._count.documents} dok.
                       </p>
                     </div>
-                    <span className="ml-3 shrink-0 text-sm font-semibold text-slate-900">
-                      {formatCurrency(Number(e.amount), e.currency)}
-                    </span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+                    <ArrowUpRight className="size-4 text-stone-300 transition-colors group-hover:text-stone-950" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+        </section>
+
+        {/* Poslední výdaje */}
+        <section>
+          <div className="mb-4 border-b border-stone-300/80 pb-2">
+            <h2 className="kicker">Poslední výdaje</h2>
+          </div>
+          {recentExpenses.length === 0 ? (
+            <p className="py-6 text-sm text-stone-500">Zatím žádné výdaje.</p>
+          ) : (
+            <ul>
+              {recentExpenses.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-stone-950">
+                      {e.title}
+                    </p>
+                    <p className="kicker mt-0.5">
+                      {e.project.name} · {categoryLabel(e.category)} ·{" "}
+                      {formatDate(e.date)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-sm text-stone-950">
+                    {formatCurrency(Number(e.amount), e.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );

@@ -7,10 +7,10 @@ export default async function RegisterPage() {
   if (session?.user) redirect("/dashboard");
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-1 text-center">
-        <h2 className="text-lg font-semibold text-slate-900">Vytvoř si účet</h2>
-        <p className="text-sm text-slate-500">Začni spravovat své projekty</p>
+    <div>
+      <div className="mb-6">
+        <h2 className="display text-2xl text-stone-950">Vytvoř si účet</h2>
+        <p className="mt-1 text-sm text-stone-500">Začni spravovat své projekty</p>
       </div>
       <RegisterForm />
     </div>

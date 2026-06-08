@@ -24,7 +24,6 @@ export default async function ReportsPage() {
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
-  // Podle projektu
   const byProjectMap = new Map<string, number>();
   for (const e of expenses) {
     byProjectMap.set(
@@ -36,7 +35,6 @@ export default async function ReportsPage() {
     .map(([name, total]) => ({ name, total }))
     .sort((a, b) => b.total - a.total);
 
-  // Podle kategorie
   const byCategoryMap = new Map<string, number>();
   for (const e of expenses) {
     byCategoryMap.set(
@@ -48,7 +46,6 @@ export default async function ReportsPage() {
     .map(([cat, total]) => ({ name: categoryLabel(cat), total }))
     .sort((a, b) => b.total - a.total);
 
-  // Posledních 12 měsíců
   const now = new Date();
   const monthly: { label: string; total: number }[] = [];
   const monthIndex = new Map<string, number>();
@@ -68,33 +65,36 @@ export default async function ReportsPage() {
 
   if (expenses.length === 0) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Reporty</h1>
-        <Card>
-          <CardContent className="p-10 text-center text-slate-500">
-            Zatím nejsou žádná data. Přidej výdaje do projektů a uvidíš tu
-            grafy.
-          </CardContent>
-        </Card>
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-8 border-b border-stone-300/80 pb-6">
+          <p className="kicker">Analýza</p>
+          <h1 className="display mt-2 text-4xl text-stone-950">Reporty</h1>
+        </header>
+        <p className="py-16 text-center text-sm text-stone-500">
+          Zatím nejsou žádná data. Přidej výdaje do projektů a uvidíš tu grafy.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Reporty</h1>
-        <p className="text-slate-500">
-          Celkové výdaje:{" "}
-          <span className="font-semibold text-slate-900">
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-8 flex items-end justify-between border-b border-stone-300/80 pb-6">
+        <div>
+          <p className="kicker">Analýza</p>
+          <h1 className="display mt-2 text-4xl text-stone-950">Reporty</h1>
+        </div>
+        <div className="text-right">
+          <p className="kicker">Celkové výdaje</p>
+          <p className="display mt-1 text-2xl text-stone-950">
             {formatCurrency(total)}
-          </span>
-        </p>
-      </div>
+          </p>
+        </div>
+      </header>
 
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Výdaje v čase (posledních 12 měsíců)</CardTitle>
+          <CardTitle>Výdaje v čase · 12 měsíců</CardTitle>
         </CardHeader>
         <CardContent>
           <MonthlyBarChart data={monthly} />
@@ -106,7 +106,7 @@ export default async function ReportsPage() {
           <CardHeader>
             <CardTitle>Podle projektu</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <ProjectPieChart data={byProject} />
             <ChartLegend data={byProject} />
           </CardContent>
@@ -117,20 +117,20 @@ export default async function ReportsPage() {
             <CardTitle>Podle kategorie</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {byCategory.map((c) => {
                 const pct = total > 0 ? (c.total / total) * 100 : 0;
                 return (
-                  <li key={c.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-600">{c.name}</span>
-                      <span className="font-medium text-slate-900">
+                  <li key={c.name} className="space-y-1.5">
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="text-stone-600">{c.name}</span>
+                      <span className="font-mono text-stone-950">
                         {formatCurrency(c.total)}
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-1.5 overflow-hidden bg-stone-200">
                       <div
-                        className="h-full rounded-full bg-indigo-500"
+                        className="h-full bg-stone-950"
                         style={{ width: `${pct}%` }}
                       />
                     </div>

@@ -13,16 +13,24 @@ import {
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 
-const COLORS = [
-  "#6366f1",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
+// odstíny šedi – monochrom
+const GRAYS = [
+  "#0a0a0a",
+  "#404040",
+  "#737373",
+  "#a3a3a3",
+  "#c4c4c4",
+  "#525252",
+  "#8a8a8a",
+  "#d6d3ce",
 ];
+
+const tooltipStyle = {
+  border: "1px solid #0a0a0a",
+  borderRadius: 0,
+  fontSize: 12,
+  background: "#ffffff",
+} as const;
 
 export function MonthlyBarChart({
   data,
@@ -34,12 +42,12 @@ export function MonthlyBarChart({
       <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 12, fill: "#64748b" }}
-          axisLine={false}
+          tick={{ fontSize: 11, fill: "#78716c" }}
+          axisLine={{ stroke: "#d6d3d1" }}
           tickLine={false}
         />
         <YAxis
-          tick={{ fontSize: 12, fill: "#64748b" }}
+          tick={{ fontSize: 11, fill: "#78716c" }}
           axisLine={false}
           tickLine={false}
           width={48}
@@ -47,9 +55,10 @@ export function MonthlyBarChart({
         />
         <Tooltip
           formatter={(value) => [formatCurrency(Number(value)), "Výdaje"]}
-          cursor={{ fill: "#f1f5f9" }}
+          cursor={{ fill: "#ebe9e4" }}
+          contentStyle={tooltipStyle}
         />
-        <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="total" fill="#0a0a0a" />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -69,15 +78,20 @@ export function ProjectPieChart({
           nameKey="name"
           cx="50%"
           cy="50%"
-          innerRadius={55}
-          outerRadius={95}
-          paddingAngle={2}
+          innerRadius={56}
+          outerRadius={96}
+          paddingAngle={1}
+          stroke="#ffffff"
+          strokeWidth={2}
         >
           {data.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            <Cell key={i} fill={GRAYS[i % GRAYS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+        <Tooltip
+          formatter={(value) => formatCurrency(Number(value))}
+          contentStyle={tooltipStyle}
+        />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -91,15 +105,18 @@ export function ChartLegend({
   return (
     <ul className="space-y-2">
       {data.map((d, i) => (
-        <li key={d.name} className="flex items-center justify-between text-sm">
-          <span className="flex items-center gap-2 text-slate-600">
+        <li
+          key={d.name}
+          className="flex items-center justify-between border-b border-stone-100 pb-2 text-sm last:border-0"
+        >
+          <span className="flex items-center gap-2 text-stone-600">
             <span
-              className="size-3 rounded-full"
-              style={{ backgroundColor: COLORS[i % COLORS.length] }}
+              className="size-2.5"
+              style={{ backgroundColor: GRAYS[i % GRAYS.length] }}
             />
             {d.name}
           </span>
-          <span className="font-medium text-slate-900">
+          <span className="font-mono text-stone-950">
             {formatCurrency(d.total)}
           </span>
         </li>

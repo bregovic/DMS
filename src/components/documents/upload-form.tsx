@@ -32,7 +32,7 @@ export function UploadForm({ projectId }: { projectId: string }) {
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm font-medium text-slate-600 transition-colors hover:border-indigo-400 hover:bg-indigo-50/50 hover:text-indigo-600 disabled:opacity-60 cursor-pointer"
+        className="flex w-full items-center justify-center gap-2 border border-dashed border-stone-400 bg-transparent px-4 py-6 text-sm text-stone-600 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white disabled:opacity-60 cursor-pointer"
       >
         <Upload className="size-4" />
         {isPending ? "Nahrávám…" : "Nahrát dokument / sken"}
@@ -44,7 +44,7 @@ export function UploadForm({ projectId }: { projectId: string }) {
         accept="image/*,application/pdf,capture=camera"
         onChange={onChange}
       />
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-stone-700">{error}</p>}
     </div>
   );
 }

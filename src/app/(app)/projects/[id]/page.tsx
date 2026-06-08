@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Wallet } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/ui/delete-button";
+import { ProjectIcon } from "@/components/projects/project-icon";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
@@ -35,146 +35,132 @@ export default async function ProjectDetailPage({
 
   if (!project) notFound();
 
-  const t = projectTypeLabel(project.type);
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-5xl">
       <Link
         href="/projects"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900"
+        className="inline-flex items-center gap-1.5 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
       >
-        <ArrowLeft className="size-4" />
-        Zpět na projekty
+        <ArrowLeft className="size-3.5" />
+        Projekty
       </Link>
 
-      {/* Hlavička projektu */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <span
-            className="flex size-14 items-center justify-center rounded-xl text-3xl"
-            style={{ backgroundColor: `${project.color}1a` }}
-          >
-            {t.emoji}
-          </span>
+      {/* Hlavička */}
+      <div className="mt-6 flex flex-wrap items-start justify-between gap-6 border-b border-stone-300/80 pb-8">
+        <div className="flex items-start gap-4">
+          <ProjectIcon type={project.type} className="mt-1 size-7 text-stone-800" />
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
+            <p className="kicker">{projectTypeLabel(project.type)}</p>
+            <h1 className="display mt-1 text-4xl text-stone-950">
               {project.name}
             </h1>
-            <p className="text-slate-500">
-              {t.label}
-              {project.description ? ` · ${project.description}` : ""}
-            </p>
+            {project.description && (
+              <p className="mt-2 max-w-md text-sm text-stone-500">
+                {project.description}
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-slate-900 px-5 py-3 text-right text-white">
-            <p className="text-xs text-slate-300">Celkem</p>
-            <p className="text-xl font-semibold">{formatCurrency(total)}</p>
+        <div className="flex items-stretch gap-3">
+          <div className="bg-stone-950 px-6 py-4 text-right text-white">
+            <p className="kicker !text-stone-400">Celkem</p>
+            <p className="display mt-1 text-2xl">{formatCurrency(total)}</p>
           </div>
           <DeleteButton
             action={deleteProject}
             fields={{ id: project.id }}
             confirm={`Smazat projekt „${project.name}" včetně všech výdajů a dokumentů?`}
+            className="flex w-10 items-center justify-center border border-stone-300 text-stone-400 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
           />
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="mt-8 grid gap-12 lg:grid-cols-5">
         {/* Výdaje */}
-        <div className="space-y-4 lg:col-span-3">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-              <Wallet className="size-4 text-slate-400" />
-              Výdaje ({project.expenses.length})
-            </h2>
+        <section className="lg:col-span-3">
+          <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+            <h2 className="kicker">Výdaje · {project.expenses.length}</h2>
             <NewExpenseForm projectId={project.id} />
           </div>
 
           {project.expenses.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center text-sm text-slate-500">
-                Zatím žádné výdaje. Přidej první tlačítkem výše.
-              </CardContent>
-            </Card>
+            <p className="py-8 text-sm text-stone-500">
+              Zatím žádné výdaje. Přidej první tlačítkem výše.
+            </p>
           ) : (
-            <Card>
-              <CardContent className="divide-y divide-slate-100 p-0">
-                {project.expenses.map((e) => (
-                  <div
-                    key={e.id}
-                    className="group flex items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">
-                        {e.title}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {categoryLabel(e.category)} · {formatDate(e.date)}
-                        {e.description ? ` · ${e.description}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 font-semibold text-slate-900">
-                        {formatCurrency(Number(e.amount), e.currency)}
-                      </span>
+            <ul>
+              {project.expenses.map((e) => (
+                <li
+                  key={e.id}
+                  className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-stone-950">
+                      {e.title}
+                    </p>
+                    <p className="kicker mt-0.5">
+                      {categoryLabel(e.category)} · {formatDate(e.date)}
+                      {e.description ? ` · ${e.description}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="font-mono text-sm text-stone-950">
+                      {formatCurrency(Number(e.amount), e.currency)}
+                    </span>
+                    <span className="opacity-0 transition-opacity group-hover:opacity-100">
                       <DeleteButton
                         action={deleteExpense}
                         fields={{ id: e.id, projectId: project.id }}
                         confirm="Smazat tento výdaj?"
                       />
-                    </div>
+                    </span>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+        </section>
 
         {/* Dokumenty */}
-        <div className="space-y-4 lg:col-span-2">
-          <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-            <FileText className="size-4 text-slate-400" />
-            Dokumenty ({project.documents.length})
-          </h2>
+        <section className="lg:col-span-2">
+          <div className="mb-4 border-b border-stone-300/80 pb-2">
+            <h2 className="kicker">Dokumenty · {project.documents.length}</h2>
+          </div>
 
           <UploadForm projectId={project.id} />
 
           {project.documents.length > 0 && (
-            <Card>
-              <CardContent className="divide-y divide-slate-100 p-0">
-                {project.documents.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex items-center justify-between gap-2 px-4 py-3"
+            <ul className="mt-4">
+              {project.documents.map((d) => (
+                <li
+                  key={d.id}
+                  className="group flex items-center justify-between gap-2 border-b border-stone-200 py-3"
+                >
+                  <a
+                    href={`/api/documents/${d.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-w-0 flex-1"
                   >
-                    <a
-                      href={`/api/documents/${d.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 flex-1 items-center gap-2 text-sm hover:text-indigo-600"
-                    >
-                      <FileText className="size-4 shrink-0 text-slate-400" />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">
-                          {d.originalName}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {formatBytes(d.size)}
-                        </span>
-                      </span>
-                    </a>
+                    <span className="block truncate text-sm font-medium text-stone-950 underline-offset-4 group-hover:underline">
+                      {d.originalName}
+                    </span>
+                    <span className="kicker mt-0.5 block">{formatBytes(d.size)}</span>
+                  </a>
+                  <span className="opacity-0 transition-opacity group-hover:opacity-100">
                     <DeleteButton
                       action={deleteDocument}
                       fields={{ id: d.id }}
                       confirm="Smazat tento dokument?"
                     />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

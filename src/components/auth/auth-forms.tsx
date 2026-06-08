@@ -2,7 +2,6 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { Mail } from "lucide-react";
 import {
   type AuthFormState,
   googleSignInAction,
@@ -17,7 +16,6 @@ function GoogleButton() {
   return (
     <form action={googleSignInAction}>
       <Button type="submit" variant="outline" className="w-full">
-        <Mail className="size-4" />
         Pokračovat přes Google
       </Button>
     </form>
@@ -26,12 +24,12 @@ function GoogleButton() {
 
 function Divider() {
   return (
-    <div className="relative my-5">
+    <div className="relative my-6">
       <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t border-slate-200" />
+        <span className="w-full border-t border-stone-200" />
       </div>
-      <div className="relative flex justify-center text-xs">
-        <span className="bg-white px-2 text-slate-400">nebo</span>
+      <div className="relative flex justify-center">
+        <span className="bg-white px-3 kicker">nebo</span>
       </div>
     </div>
   );
@@ -40,7 +38,7 @@ function Divider() {
 function ErrorMsg({ state }: { state: AuthFormState }) {
   if (!state?.error) return null;
   return (
-    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+    <p className="border-l-2 border-stone-950 bg-stone-100 px-3 py-2 text-sm text-stone-700">
       {state.error}
     </p>
   );
@@ -49,7 +47,7 @@ function ErrorMsg({ state }: { state: AuthFormState }) {
 export function LoginForm() {
   const [state, action, pending] = useActionState(loginAction, undefined);
   return (
-    <div className="space-y-4">
+    <div>
       <GoogleButton />
       <Divider />
       <form action={action} className="space-y-4">
@@ -72,9 +70,9 @@ export function LoginForm() {
           {pending ? "Přihlašuji…" : "Přihlásit se"}
         </Button>
       </form>
-      <p className="text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-stone-500">
         Nemáš účet?{" "}
-        <Link href="/register" className="font-medium text-indigo-600 hover:underline">
+        <Link href="/register" className="font-medium text-stone-950 underline underline-offset-4">
           Zaregistruj se
         </Link>
       </p>
@@ -85,7 +83,7 @@ export function LoginForm() {
 export function RegisterForm() {
   const [state, action, pending] = useActionState(registerAction, undefined);
   return (
-    <div className="space-y-4">
+    <div>
       <GoogleButton />
       <Divider />
       <form action={action} className="space-y-4">
@@ -107,16 +105,16 @@ export function RegisterForm() {
             minLength={8}
             autoComplete="new-password"
           />
-          <p className="text-xs text-slate-400">Alespoň 8 znaků.</p>
+          <p className="text-xs text-stone-400">Alespoň 8 znaků.</p>
         </div>
         <ErrorMsg state={state} />
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? "Vytvářím účet…" : "Vytvořit účet"}
         </Button>
       </form>
-      <p className="text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-stone-500">
         Už máš účet?{" "}
-        <Link href="/login" className="font-medium text-indigo-600 hover:underline">
+        <Link href="/login" className="font-medium text-stone-950 underline underline-offset-4">
           Přihlas se
         </Link>
       </p>

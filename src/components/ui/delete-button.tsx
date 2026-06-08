@@ -30,7 +30,7 @@ export function DeleteButton({
         title={label ?? "Smazat"}
         className={
           className ??
-          "flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
+          "flex size-8 items-center justify-center rounded-none text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer"
         }
       >
         <Trash2 className="size-4" />
