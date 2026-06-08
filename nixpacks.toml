@@ -1,0 +1,5 @@
+# Railway / Nixpacks build konfigurace.
+# Použij `npm install` místo `npm ci` – odolnější vůči drobnému rozdílu v lockfile
+# mezi npm verzemi (lokálně vs. v build kontejneru).
+[phases.install]
+cmds = ["npm install"]
