@@ -17,10 +17,7 @@ export default async function VendorsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-8 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
-        <div>
-          <p className="kicker">Účet</p>
-          <h1 className="display mt-2 text-4xl text-stone-950">Dodavatelé</h1>
-        </div>
+        <h1 className="display text-4xl text-stone-950">Dodavatelé</h1>
         <NewVendorForm />
       </header>
 

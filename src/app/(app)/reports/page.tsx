@@ -67,8 +67,7 @@ export default async function ReportsPage() {
     return (
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 border-b border-stone-300/80 pb-6">
-          <p className="kicker">Analýza</p>
-          <h1 className="display mt-2 text-4xl text-stone-950">Reporty</h1>
+          <h1 className="display text-4xl text-stone-950">Reporty</h1>
         </header>
         <p className="py-16 text-center text-sm text-stone-500">
           Zatím nejsou žádná data. Přidej výdaje do projektů a uvidíš tu grafy.
@@ -80,10 +79,7 @@ export default async function ReportsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-8 flex items-end justify-between border-b border-stone-300/80 pb-6">
-        <div>
-          <p className="kicker">Analýza</p>
-          <h1 className="display mt-2 text-4xl text-stone-950">Reporty</h1>
-        </div>
+        <h1 className="display text-4xl text-stone-950">Reporty</h1>
         <div className="text-right">
           <p className="kicker">Celkové výdaje</p>
           <p className="display mt-1 text-2xl text-stone-950">

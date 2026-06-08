@@ -41,13 +41,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-10">
-        <p className="kicker">Přehled</p>
-        <h1 className="display mt-2 text-4xl text-stone-950">
-          Ahoj, {user.name?.split(" ")[0] ?? "vítej"}.
-        </h1>
-      </header>
-
       {/* Statistiky – řádek s hairline oddělovači */}
       <div className="mb-12 grid grid-cols-1 border-y border-stone-300/80 sm:grid-cols-3">
         {stats.map((s, i) => (
