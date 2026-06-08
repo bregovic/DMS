@@ -3,7 +3,7 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-fraunces);
+  --font-display: var(--font-display);
   --color-ring: #0a0a0a;
 }
 
@@ -28,11 +28,11 @@ body {
   color: #78716c; /* stone-500 */
 }
 
-/* serifový display nadpis */
+/* moderní grotesk display nadpis */
 .display {
-  font-family: var(--font-serif), Georgia, serif;
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 ::selection {
