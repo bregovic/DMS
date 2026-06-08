@@ -42,3 +42,15 @@ export const VENDOR_CATEGORIES = [
 export function vendorCategoryLabel(value: string) {
   return VENDOR_CATEGORIES.find((c) => c.value === value)?.label ?? "Ostatní";
 }
+
+// Role přístupu k projektu. "vendor" = jen kontakt (bez přihlášení/přístupu).
+export const PROJECT_ROLES = [
+  { value: "vendor", label: "Dodavatel" },
+  { value: "active", label: "Aktivní dodavatel" },
+  { value: "reader", label: "Reader" },
+  { value: "owner", label: "Owner" },
+] as const;
+
+export function roleLabel(value: string) {
+  return PROJECT_ROLES.find((r) => r.value === value)?.label ?? value;
+}

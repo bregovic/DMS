@@ -13,8 +13,12 @@ export async function GET(
   }
 
   const { id } = await ctx.params;
+  const email = session.user.email?.toLowerCase();
+  const projectAccess = email
+    ? { OR: [{ ownerId: session.user.id }, { memberships: { some: { email } } }] }
+    : { ownerId: session.user.id };
   const doc = await prisma.document.findFirst({
-    where: { id, project: { ownerId: session.user.id } },
+    where: { id, project: projectAccess },
   });
   if (!doc) return new Response("Not found", { status: 404 });
 

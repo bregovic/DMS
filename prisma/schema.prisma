@@ -119,12 +119,29 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  expenses  Expense[]
-  documents Document[]
-  vendors   Vendor[]   @relation("ProjectVendors")
+  owner       User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses    Expense[]
+  documents   Document[]
+  vendors     Vendor[]            @relation("ProjectVendors")
+  memberships ProjectMembership[]
 
   @@index([ownerId])
+}
+
+// Přístup k projektu podle e-mailu + role (owner | active | reader).
+// Vendor s rolí "vendor" (jen kontakt) zde záznam nemá.
+model ProjectMembership {
+  id        String   @id @default(cuid())
+  projectId String
+  email     String // identifikátor člena (lowercase)
+  role      String   @default("active")
+  vendorId  String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, email])
+  @@index([email])
 }
 
 model Expense {

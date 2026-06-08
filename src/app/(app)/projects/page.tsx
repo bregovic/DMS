@@ -1,27 +1,20 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
-import { prisma } from "@/lib/prisma";
+import { listProjectsForUser } from "@/server/access";
 import { NewProjectForm } from "@/components/projects/new-project-form";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { formatCurrency } from "@/lib/utils";
 import { getProjectTypes } from "@/server/project-types";
+import { roleLabel } from "@/lib/constants";
 
 export default async function ProjectsPage() {
   const user = await requireUser();
 
-  const [projects, types] = await Promise.all([
-    prisma.project.findMany({
-      where: { ownerId: user.id },
-      include: {
-        _count: { select: { expenses: true, documents: true } },
-        expenses: { select: { amount: true } },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
+  const [items, types] = await Promise.all([
+    listProjectsForUser(user),
     getProjectTypes(),
   ]);
-
   const typeMap = new Map(types.map((t) => [t.key, t.label]));
 
   return (
@@ -31,13 +24,13 @@ export default async function ProjectsPage() {
         <NewProjectForm types={types} />
       </header>
 
-      {projects.length === 0 ? (
+      {items.length === 0 ? (
         <p className="py-16 text-center text-sm text-stone-500">
           Zatím tu nic není. Vytvoř svůj první projekt tlačítkem výše.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-px border border-stone-300/80 bg-stone-300/80 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => {
+          {items.map(({ project: p, role }) => {
             const total = p.expenses.reduce((s, e) => s + Number(e.amount), 0);
             return (
               <Link
@@ -50,7 +43,14 @@ export default async function ProjectsPage() {
                   <ArrowUpRight className="size-4 text-stone-300 transition-colors group-hover:text-stone-950" />
                 </div>
                 <p className="text-base font-medium text-stone-950">{p.name}</p>
-                <p className="kicker mt-1">{typeMap.get(p.type) ?? "Ostatní"}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="kicker">{typeMap.get(p.type) ?? "Ostatní"}</span>
+                  {role !== "owner" && (
+                    <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                      {roleLabel(role)}
+                    </span>
+                  )}
+                </div>
                 {p.description && (
                   <p className="mt-3 line-clamp-2 text-sm text-stone-500">
                     {p.description}
