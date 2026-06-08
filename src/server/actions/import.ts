@@ -45,7 +45,17 @@ export async function importExpensesCsv(
     return { error: "Vyber CSV soubor." };
   }
 
-  const rows = parseCsv(await file.text());
+  // Detekce kódování: zkus UTF-8, při nevalidních bajtech spadni na Windows-1250
+  // (české Excel CSV bývá ve Windows-1250).
+  const buf = Buffer.from(await file.arrayBuffer());
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    text = new TextDecoder("windows-1250").decode(buf);
+  }
+
+  const rows = parseCsv(text);
   if (rows.length < 2) {
     return { error: "Soubor je prázdný nebo neobsahuje data." };
   }
