@@ -181,6 +181,8 @@ export default async function ProjectDetailPage({
   const levelRequests = visRequests.filter(
     (r) => (r.subProjectId ?? null) === (sub ?? null),
   );
+  // Náklady přímo na této úrovni (mimo podsložky)
+  const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
   const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
   const docTypesPresent = docTypes.filter((t) =>
@@ -258,6 +260,11 @@ export default async function ProjectDetailPage({
           <div className="bg-stone-950 px-6 py-4 text-right text-white">
             <p className="kicker !text-stone-400">Celkem</p>
             <p className="display mt-1 text-2xl">{formatCurrency(total)}</p>
+            {folders.length > 0 && (
+              <p className="mt-1 text-xs text-stone-400">
+                přímo zde {formatCurrency(levelTotal)}
+              </p>
+            )}
           </div>
           {isOwner && (
             <DeleteButton
