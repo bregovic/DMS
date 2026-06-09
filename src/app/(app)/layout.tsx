@@ -14,7 +14,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen bg-[#f4f3f0]">
       {/* Sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-stone-300/80 bg-white px-4 py-6 md:flex">
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-stone-200 bg-white px-4 py-6 shadow-[8px_0_28px_-24px_rgba(41,37,36,0.45)] md:flex">
         <Link href="/dashboard" className="mb-10 block px-2">
           <span className="display text-2xl tracking-tight text-stone-950">
             DMS

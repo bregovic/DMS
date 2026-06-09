@@ -306,7 +306,7 @@ export default async function ProjectDetailPage({
           </div>
         </div>
         <div className="flex items-stretch gap-3">
-          <div className="bg-stone-950 px-6 py-4 text-right text-white">
+          <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
             <p className="kicker !text-stone-400">Celkem</p>
             <p className="display mt-1 text-2xl">{formatCurrency(total)}</p>
             {folders.length > 0 && (
@@ -392,7 +392,7 @@ export default async function ProjectDetailPage({
             Žádné subprojekty na této úrovni.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-px border border-stone-300/80 bg-stone-300/80 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {folders.map((s) => {
               const spent = spentBySub.get(s.id) ?? 0;
               const budget = s.budget != null ? Number(s.budget) : null;
@@ -400,7 +400,7 @@ export default async function ProjectDetailPage({
               return (
                 <div
                   key={s.id}
-                  className="group relative bg-white p-5 transition-colors hover:bg-stone-50"
+                  className="group relative border border-stone-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift"
                 >
                   <Link
                     href={`/projects/${project.id}?sub=${s.id}`}

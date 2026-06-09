@@ -24,10 +24,10 @@ export function Sidebar() {
             key={href}
             href={href}
             className={cn(
-              "group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm transition-colors",
+              "group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm transition-all",
               active
-                ? "border-stone-950 font-medium text-stone-950"
-                : "border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-950",
+                ? "border-stone-950 bg-stone-100 font-medium text-stone-950"
+                : "border-transparent text-stone-500 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-950",
             )}
           >
             <span

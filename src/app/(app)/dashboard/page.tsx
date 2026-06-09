@@ -42,14 +42,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      {/* Statistiky – řádek s hairline oddělovači */}
-      <div className="mb-12 grid grid-cols-1 border-y border-stone-300/80 sm:grid-cols-3">
-        {stats.map((s, i) => (
+      {/* Statistiky – karty s jemným stínem */}
+      <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {stats.map((s) => (
           <div
             key={s.label}
-            className={`py-6 sm:px-6 ${
-              i > 0 ? "border-t border-stone-200 sm:border-t-0 sm:border-l" : ""
-            } ${i === 0 ? "sm:pl-0" : ""}`}
+            className="border border-stone-200 bg-white px-6 py-6 shadow-soft"
           >
             <p className="kicker">{s.label}</p>
             <p className="display mt-2 text-3xl text-stone-950">{s.value}</p>

@@ -29,14 +29,14 @@ export default async function ProjectsPage() {
           Zatím tu nic není. Vytvoř svůj první projekt tlačítkem výše.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-px border border-stone-300/80 bg-stone-300/80 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map(({ project: p, role }) => {
             const total = p.expenses.reduce((s, e) => s + Number(e.amount), 0);
             return (
               <Link
                 key={p.id}
                 href={`/projects/${p.id}`}
-                className="group flex flex-col bg-white p-6 transition-colors hover:bg-stone-50"
+                className="group flex flex-col border border-stone-200 bg-white p-6 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift"
               >
                 <div className="mb-6 flex items-start justify-between">
                   <ProjectIcon type={p.type} className="size-6 text-stone-800" />
