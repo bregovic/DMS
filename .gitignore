@@ -47,3 +47,6 @@ next-env.d.ts
 
 # datové soubory (neukládat do repa)
 *.csv
+
+# poznamky
+2do.txt
