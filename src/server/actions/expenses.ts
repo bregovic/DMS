@@ -139,6 +139,101 @@ export async function createExpense(formData: FormData) {
   revalidatePath("/vendors");
 }
 
+export async function updateExpense(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Upravit výdaj může jen vlastník projektu.");
+  }
+
+  const existing = await prisma.expense.findFirst({
+    where: { id, projectId },
+    select: { id: true, project: { select: { ownerId: true } } },
+  });
+  if (!existing) throw new Error("Výdaj nenalezen.");
+  const ownerId = existing.project.ownerId;
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) throw new Error("Zadej název.");
+
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (vendorId) {
+    const v = await prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId },
+      select: { id: true },
+    });
+    if (!v) vendorId = null;
+  }
+
+  let subProjectId = String(formData.get("subProjectId") || "") || null;
+  if (subProjectId) {
+    const sub = await prisma.subProject.findFirst({
+      where: { id: subProjectId, projectId },
+      select: { id: true },
+    });
+    if (!sub) subProjectId = null;
+  }
+
+  const amountMode = String(formData.get("amountMode") || "fixed");
+  let amount: number | null;
+  let hours: number | null = null;
+  let rate: number | null = null;
+
+  if (amountMode === "hourly") {
+    hours = num(formData.get("hours"));
+    rate = num(formData.get("rate"));
+    if (!hours || hours <= 0 || !rate || rate <= 0) {
+      throw new Error("Zadej počet hodin a hodinovou sazbu.");
+    }
+    amount = Math.round(hours * rate * 100) / 100;
+    if (vendorId) {
+      await prisma.vendor
+        .update({ where: { id: vendorId }, data: { hourlyRate: rate } })
+        .catch(() => {});
+    }
+  } else {
+    amount = num(formData.get("amount"));
+    if (!amount || amount <= 0) throw new Error("Zadej částku.");
+  }
+
+  const dateStr = String(formData.get("date") || "");
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const paid =
+    formData.get("paid") === "on" || formData.get("paid") === "true";
+  const dueStr = String(formData.get("dueDate") || "");
+  const due = dueStr ? new Date(dueStr) : null;
+  const variableSymbol =
+    String(formData.get("variableSymbol") || "").trim() || null;
+
+  await prisma.expense.update({
+    where: { id },
+    data: {
+      title,
+      kind: String(formData.get("kind") || "expense"),
+      category: String(formData.get("category") || "other"),
+      currency: String(formData.get("currency") || "CZK"),
+      description: String(formData.get("description") || "").trim() || null,
+      amount,
+      hours,
+      rate,
+      date: isNaN(date.getTime()) ? new Date() : date,
+      paid,
+      dueDate: due && !isNaN(due.getTime()) ? due : null,
+      variableSymbol,
+      vendorId,
+      subProjectId,
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  revalidatePath("/payments");
+  revalidatePath("/vendors");
+}
+
 export async function approveExpense(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));

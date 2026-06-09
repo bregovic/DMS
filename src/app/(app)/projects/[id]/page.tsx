@@ -9,6 +9,7 @@ import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectVendors } from "@/components/projects/project-vendors";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
+import { EditExpenseForm } from "@/components/expenses/edit-expense-form";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { NewRequestForm } from "@/components/requests/new-request-form";
@@ -480,7 +481,36 @@ export default async function ProjectDetailPage({
                       </form>
                     )}
                     {isOwner && (
-                      <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <EditExpenseForm
+                          expense={{
+                            id: e.id,
+                            projectId: project.id,
+                            title: e.title,
+                            kind: e.kind,
+                            category: e.category,
+                            currency: e.currency,
+                            amount: Number(e.amount),
+                            hours: e.hours != null ? Number(e.hours) : null,
+                            rate: e.rate != null ? Number(e.rate) : null,
+                            date: e.date.toISOString().slice(0, 10),
+                            dueDate: e.dueDate
+                              ? e.dueDate.toISOString().slice(0, 10)
+                              : null,
+                            variableSymbol: e.variableSymbol,
+                            paid: e.paid,
+                            description: e.description,
+                            vendorId: e.vendorId,
+                            subProjectId: e.subProjectId,
+                          }}
+                          vendors={accountVendors.map((v) => ({
+                            id: v.id,
+                            name: v.name,
+                            hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+                          }))}
+                          categories={categories}
+                          subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+                        />
                         <DeleteButton
                           action={deleteExpense}
                           fields={{ id: e.id, projectId: project.id }}
