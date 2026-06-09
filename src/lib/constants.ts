@@ -98,6 +98,17 @@ export function requestStatusLabel(value: string) {
   return REQUEST_STATUSES.find((s) => s.value === value)?.label ?? value;
 }
 
+export const OFFER_STATUSES = [
+  { value: "nova", label: "Nová" },
+  { value: "vyhovuje", label: "Vyhovuje" },
+  { value: "odmitnuta", label: "Odmítnuta" },
+  { value: "vybrana", label: "Vybraná" },
+] as const;
+
+export function offerStatusLabel(value: string) {
+  return OFFER_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
 export const DOCUMENT_TYPES = [
   { value: "receipt", label: "Účtenka" },
   { value: "invoice", label: "Faktura" },

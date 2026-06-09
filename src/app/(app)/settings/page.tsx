@@ -6,24 +6,35 @@ import { CodelistManager } from "@/components/account/codelist-manager";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [dbUser, projTypes, expCats, docTypes] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: user.id },
-      select: { passwordHash: true },
-    }),
-    prisma.projectType.findMany({
-      orderBy: { label: "asc" },
-      select: { id: true, label: true },
-    }),
-    prisma.expenseCategory.findMany({
-      orderBy: { label: "asc" },
-      select: { id: true, label: true },
-    }),
-    prisma.documentType.findMany({
-      orderBy: { label: "asc" },
-      select: { id: true, label: true },
-    }),
-  ]);
+  const [dbUser, projTypes, expCats, docTypes, reqStatuses, offerStatuses] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: user.id },
+        select: { passwordHash: true },
+      }),
+      prisma.projectType.findMany({
+        orderBy: { label: "asc" },
+        select: { id: true, label: true },
+      }),
+      prisma.expenseCategory.findMany({
+        orderBy: { label: "asc" },
+        select: { id: true, label: true },
+      }),
+      prisma.documentType.findMany({
+        orderBy: { label: "asc" },
+        select: { id: true, label: true },
+      }),
+      prisma.statusOption.findMany({
+        where: { scope: "request" },
+        orderBy: [{ sort: "asc" }, { label: "asc" }],
+        select: { id: true, label: true },
+      }),
+      prisma.statusOption.findMany({
+        where: { scope: "offer" },
+        orderBy: [{ sort: "asc" }, { label: "asc" }],
+        select: { id: true, label: true },
+      }),
+    ]);
   const hasPassword = Boolean(dbUser?.passwordHash);
 
   return (
@@ -54,8 +65,9 @@ export default async function SettingsPage() {
       <section className="mt-12">
         <h2 className="kicker mb-2">Číselníky (vlastní položky)</h2>
         <p className="mb-5 max-w-lg text-sm text-stone-500">
-          Přejmenuj nebo smaž vlastní typy a kategorie. Vestavěné jsou pevné.
-          Smazat lze jen položku, která se nikde nepoužívá.
+          Přidej, přejmenuj nebo smaž vlastní typy, kategorie a stavy. Vestavěné
+          jsou pevné a v seznamu se nezobrazují. Smazat lze jen položku, která se
+          nikde nepoužívá.
         </p>
         <CodelistManager
           groups={[
@@ -66,6 +78,12 @@ export default async function SettingsPage() {
               items: expCats,
             },
             { kind: "documentType", title: "Typy dokumentů", items: docTypes },
+            {
+              kind: "requestStatus",
+              title: "Stavy žádanek",
+              items: reqStatuses,
+            },
+            { kind: "offerStatus", title: "Stavy nabídek", items: offerStatuses },
           ]}
         />
       </section>

@@ -30,6 +30,7 @@ model User {
   documentsUploaded Document[] @relation("DocumentUploadedBy")
   vendors           Vendor[]     @relation("VendorOwner")
   requestsCreated   Request[]    @relation("RequestCreatedBy")
+  offersCreated     Offer[]      @relation("OfferCreatedBy")
   subProjectsCreated SubProject[] @relation("SubProjectCreatedBy")
 }
 
@@ -95,6 +96,7 @@ model Vendor {
   expenses Expense[]
   projects Project[] @relation("ProjectVendors")
   requests Request[]
+  offers   Offer[]
 
   @@unique([ownerId, email])
   @@index([ownerId])
@@ -122,10 +124,47 @@ model Request {
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
   createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
+  offers     Offer[]
 
   @@index([projectId])
   @@index([vendorId])
   @@index([subProjectId])
+}
+
+// Nabídka k žádance (výběrové řízení). Dodavatel z evidence nebo volný název;
+// cenu, termín a poznámku lze doplnit dodatečně. Vybraná předvyplní žádanku.
+model Offer {
+  id           String    @id @default(cuid())
+  requestId    String
+  vendorId     String?
+  vendorName   String?
+  price        Decimal?  @db.Decimal(12, 2)
+  deliveryDate DateTime?
+  note         String?
+  status       String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
+  selected     Boolean   @default(false)
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  vendor    Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdBy User    @relation("OfferCreatedBy", fields: [createdById], references: [id])
+
+  @@index([requestId])
+  @@index([vendorId])
+}
+
+// Editovatelný číselník stavů (vestavěné jsou v kódu). scope = request | offer.
+model StatusOption {
+  id        String   @id @default(cuid())
+  scope     String
+  key       String
+  label     String
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([scope, key])
 }
 
 // Sdílený číselník vlastních typů projektů (vestavěné typy jsou v kódu).

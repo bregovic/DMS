@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
+  addCodelistItem,
   deleteCodelistItem,
   renameCodelistItem,
 } from "@/server/actions/codelists";
@@ -70,6 +71,49 @@ function Row({ kind, item }: { kind: string; item: Item }) {
   );
 }
 
+function AddRow({ kind }: { kind: string }) {
+  const [label, setLabel] = useState("");
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <div className="mt-2 flex max-w-md items-center gap-2">
+      <Input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="Přidat položku…"
+        className="h-8 flex-1"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.preventDefault();
+        }}
+      />
+      <button
+        type="button"
+        disabled={pending || !label.trim()}
+        onClick={() =>
+          start(async () => {
+            setErr(null);
+            const fd = new FormData();
+            fd.set("kind", kind);
+            fd.set("label", label);
+            try {
+              await addCodelistItem(fd);
+              setLabel("");
+            } catch {
+              setErr("Přidání selhalo.");
+            }
+          })
+        }
+        className="flex items-center gap-1 text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline disabled:opacity-40 cursor-pointer"
+      >
+        <Plus className="size-3.5" />
+        Přidat
+      </button>
+      {err && <span className="text-xs text-red-600">{err}</span>}
+    </div>
+  );
+}
+
 export function CodelistManager({ groups }: { groups: Group[] }) {
   return (
     <div className="space-y-8">
@@ -85,6 +129,7 @@ export function CodelistManager({ groups }: { groups: Group[] }) {
               ))}
             </ul>
           )}
+          <AddRow kind={g.kind} />
         </div>
       ))}
     </div>

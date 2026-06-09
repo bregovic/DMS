@@ -13,6 +13,7 @@ import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
+import { OffersPanel } from "@/components/requests/offers-panel";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
@@ -31,6 +32,7 @@ import {
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
+import { getStatuses } from "@/server/statuses";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -84,6 +86,10 @@ export default async function ProjectDetailPage({
           include: {
             vendor: { select: { name: true } },
             createdBy: { select: { name: true, email: true } },
+            offers: {
+              orderBy: [{ selected: "desc" }, { price: "asc" }, { createdAt: "asc" }],
+              include: { vendor: { select: { name: true } } },
+            },
           },
         },
       },
@@ -207,6 +213,13 @@ export default async function ProjectDetailPage({
     : [];
   const assignedIds = new Set(project.vendors.map((v) => v.id));
   const availableVendors = accountVendors.filter((v) => !assignedIds.has(v.id));
+
+  const [reqStatuses, offerStatuses] = await Promise.all([
+    getStatuses("request"),
+    getStatuses("offer"),
+  ]);
+  const reqStatusMap = new Map(reqStatuses.map((s) => [s.key, s.label]));
+  const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -590,56 +603,83 @@ export default async function ProjectDetailPage({
             {levelRequests.map((r) => (
               <li
                 key={r.id}
-                className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+                className="group border-b border-stone-200 py-3.5"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-stone-950">{r.title}</p>
-                  <p className="kicker mt-0.5">
-                    {r.quantity != null
-                      ? `${Number(r.quantity)} ${unitLabel(r.unit)} · `
-                      : ""}
-                    {catMap.get(r.category) ?? r.category}
-                    {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
-                    {r.price != null ? ` · ${formatCurrency(Number(r.price))}` : ""}
-                    {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
-                    {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {isOwner ? (
-                    <RequestStatusSelect
-                      projectId={project.id}
-                      id={r.id}
-                      status={r.status}
-                    />
-                  ) : (
-                    <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
-                      {requestStatusLabel(r.status)}
-                    </span>
-                  )}
-                  {isOwner && r.vendorId && r.price != null && (
-                    <form action={createExpenseFromRequest}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <input type="hidden" name="projectId" value={project.id} />
-                      <button
-                        type="submit"
-                        title="Založit výdaj ze žádanky"
-                        className="whitespace-nowrap border border-stone-300 px-2 py-1 text-[11px] text-stone-600 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
-                      >
-                        → Výdaj
-                      </button>
-                    </form>
-                  )}
-                  {isOwner && (
-                    <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                      <DeleteButton
-                        action={deleteRequest}
-                        fields={{ id: r.id, projectId: project.id }}
-                        confirm="Smazat tuto žádanku?"
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-950">{r.title}</p>
+                    <p className="kicker mt-0.5">
+                      {r.quantity != null
+                        ? `${Number(r.quantity)} ${unitLabel(r.unit)} · `
+                        : ""}
+                      {catMap.get(r.category) ?? r.category}
+                      {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
+                      {r.price != null ? ` · ${formatCurrency(Number(r.price))}` : ""}
+                      {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
+                      {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isOwner ? (
+                      <RequestStatusSelect
+                        projectId={project.id}
+                        id={r.id}
+                        status={r.status}
+                        statuses={reqStatuses}
                       />
-                    </span>
-                  )}
+                    ) : (
+                      <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                        {reqStatusMap.get(r.status) ?? requestStatusLabel(r.status)}
+                      </span>
+                    )}
+                    {isOwner && r.vendorId && r.price != null && (
+                      <form action={createExpenseFromRequest}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <button
+                          type="submit"
+                          title="Založit výdaj ze žádanky"
+                          className="whitespace-nowrap border border-stone-300 px-2 py-1 text-[11px] text-stone-600 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
+                        >
+                          → Výdaj
+                        </button>
+                      </form>
+                    )}
+                    {isOwner && (
+                      <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                        <DeleteButton
+                          action={deleteRequest}
+                          fields={{ id: r.id, projectId: project.id }}
+                          confirm="Smazat tuto žádanku?"
+                        />
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                <OffersPanel
+                  requestId={r.id}
+                  isOwner={isOwner}
+                  canAdd={canAdd}
+                  vendors={offerVendorItems}
+                  statuses={offerStatuses}
+                  offers={r.offers.map((o) => ({
+                    id: o.id,
+                    vendorId: o.vendorId,
+                    vendorName: o.vendorName,
+                    vendorLabel:
+                      o.vendor?.name ?? o.vendorName ?? "Dodavatel neurčen",
+                    price: o.price != null ? Number(o.price) : null,
+                    deliveryDate: o.deliveryDate
+                      ? o.deliveryDate.toISOString().slice(0, 10)
+                      : null,
+                    note: o.note,
+                    status: o.status,
+                    selected: o.selected,
+                    canEdit:
+                      isOwner || (role === "active" && o.createdById === user.id),
+                  }))}
+                />
               </li>
             ))}
           </ul>
