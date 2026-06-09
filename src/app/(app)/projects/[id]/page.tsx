@@ -42,12 +42,15 @@ export default async function ProjectDetailPage({
   if (!role) notFound();
   const isOwner = role === "owner";
   const canAdd = role === "owner" || role === "active";
+  // Aktivní dodavatel vidí jen své vlastní záznamy
+  const onlyMine = role === "active";
 
   const [project, typeMap, categories] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
         expenses: {
+          where: onlyMine ? { createdById: user.id } : undefined,
           orderBy: [{ status: "desc" }, { date: "desc" }],
           include: {
             vendor: { select: { id: true, name: true } },
@@ -55,13 +58,17 @@ export default async function ProjectDetailPage({
             _count: { select: { documents: true } },
           },
         },
-        documents: { orderBy: { createdAt: "desc" } },
+        documents: {
+          where: onlyMine ? { uploadedById: user.id } : undefined,
+          orderBy: { createdAt: "desc" },
+        },
         vendors: {
           orderBy: { name: "asc" },
           select: { id: true, name: true, email: true },
         },
         memberships: true,
         requests: {
+          where: onlyMine ? { createdById: user.id } : undefined,
           orderBy: [{ status: "asc" }, { createdAt: "desc" }],
           include: {
             vendor: { select: { name: true } },
@@ -150,7 +157,10 @@ export default async function ProjectDetailPage({
         {/* Výdaje */}
         <section className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
-            <h2 className="kicker">Výdaje · {project.expenses.length}</h2>
+            <h2 className="kicker">
+              Výdaje · {project.expenses.length}
+              {onlyMine ? " · jen tvoje" : ""}
+            </h2>
             {canAdd && (
               <NewExpenseForm
                 projectId={project.id}
@@ -243,7 +253,10 @@ export default async function ProjectDetailPage({
 
           <section>
             <div className="mb-4 border-b border-stone-300/80 pb-2">
-              <h2 className="kicker">Dokumenty · {project.documents.length}</h2>
+              <h2 className="kicker">
+                Dokumenty · {project.documents.length}
+                {onlyMine ? " · jen tvoje" : ""}
+              </h2>
             </div>
             {isOwner && <UploadForm projectId={project.id} />}
             {project.documents.length > 0 && (
@@ -286,7 +299,10 @@ export default async function ProjectDetailPage({
       {/* Poptávky */}
       <section className="mt-12">
         <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
-          <h2 className="kicker">Poptávky · {project.requests.length}</h2>
+          <h2 className="kicker">
+            Poptávky · {project.requests.length}
+            {onlyMine ? " · jen tvoje" : ""}
+          </h2>
           {canAdd && (
             <NewRequestForm
               projectId={project.id}
