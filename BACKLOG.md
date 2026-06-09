@@ -10,7 +10,6 @@ _(nic – další na řadě dle dohody)_
 ## 📋 Backlog
 
 ### Práva a účet
-- [ ] Aktivní dodavatel uvidí v projektu **jen svoje výdaje**
 - [ ] **Změna hesla** v nastavení uživatele
 - [ ] Přidávání účastníků do projektu podle e-mailu (rozšíření rolí)
 
@@ -38,6 +37,8 @@ _(nic – další na řadě dle dohody)_
 
 ## ✅ Hotovo
 
+- [x] **Aktivní dodavatel vidí v projektu jen svoje záznamy** (výdaje/poptávky/dokumenty dle createdById)
+- [x] **R2 úložiště po složkách** `<účet>/<projekt>/…`
 - [x] **Cloudflare R2 úložiště** – privátní bucket `dms` přes S3 API, soubory servírované přes `/api/documents` (soubory přežijí redeploy)
 - [x] Favicon (logo složky) v záložce prohlížeče
 - [x] Moderní monochromatický design + font (Bricolage Grotesque)
