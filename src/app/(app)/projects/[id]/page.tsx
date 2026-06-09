@@ -8,6 +8,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectVendors } from "@/components/projects/project-vendors";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
+import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { UploadForm } from "@/components/documents/upload-form";
@@ -55,7 +56,10 @@ export default async function ProjectDetailPage({
           include: {
             vendor: { select: { id: true, name: true } },
             createdBy: { select: { name: true, email: true } },
-            _count: { select: { documents: true } },
+            documents: {
+              select: { id: true, originalName: true },
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
         documents: {
@@ -186,7 +190,7 @@ export default async function ProjectDetailPage({
                   <div className="min-w-0">
                     <p className="flex items-center gap-2 truncate text-sm font-medium text-stone-950">
                       {e.title}
-                      {e._count.documents > 0 && (
+                      {e.documents.length > 0 && (
                         <Paperclip className="size-3 shrink-0 text-stone-400" />
                       )}
                       {e.status === "for_approval" && (
@@ -202,6 +206,12 @@ export default async function ProjectDetailPage({
                       {e.hours ? ` · ${Number(e.hours)} h × ${Number(e.rate)}` : ""}
                       {` · zadal ${e.createdBy.name ?? e.createdBy.email ?? "?"}`}
                     </p>
+                    <ExpenseScan
+                      projectId={project.id}
+                      expenseId={e.id}
+                      docs={e.documents}
+                      canAttach={canAdd}
+                    />
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="font-mono text-sm text-stone-950">
