@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { NewVendorForm } from "@/components/vendors/new-vendor-form";
+import { EditVendorForm } from "@/components/vendors/edit-vendor-form";
 import { deleteVendor } from "@/server/actions/vendors";
 import { vendorCategoryLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -88,7 +89,19 @@ export default async function VendorsPage() {
                       {v._count.expenses} výdajů · {v._count.projects} proj.
                     </p>
                   </div>
-                  <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <EditVendorForm
+                      vendor={{
+                        id: v.id,
+                        name: v.name,
+                        email: v.email,
+                        category: v.category,
+                        phone: v.phone,
+                        description: v.description,
+                        bankAccount: v.bankAccount,
+                        hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+                      }}
+                    />
                     <DeleteButton
                       action={deleteVendor}
                       fields={{ id: v.id }}
