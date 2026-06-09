@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
-import { EXPENSE_KINDS } from "@/lib/constants";
+import { DOCUMENT_TYPES, EXPENSE_KINDS } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
 const fieldClass =
@@ -226,6 +226,11 @@ export function NewExpenseForm({
             <div className="space-y-1.5">
               <Label htmlFor="file">Sken / účtenka</Label>
               <input id="file" name="file" type="file" accept="image/*,application/pdf,capture=camera" className="block w-full text-xs text-stone-600 file:mr-2 file:border-0 file:bg-stone-100 file:px-2 file:py-2.5 file:text-stone-950" />
+              <select name="scanType" defaultValue="receipt" className="h-7 w-full rounded-none border border-stone-300 bg-white px-1.5 text-xs text-stone-600 focus-visible:outline-none focus-visible:border-stone-950">
+                {DOCUMENT_TYPES.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 

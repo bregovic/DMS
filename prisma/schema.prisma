@@ -208,6 +208,7 @@ model Document {
   originalName String
   mimeType     String
   size         Int
+  type         String   @default("other") // receipt | invoice | contract | revision | insurance | other
   uploadedById String
   createdAt    DateTime @default(now())
 

@@ -18,6 +18,8 @@ import { deleteDocument } from "@/server/actions/documents";
 import { deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
+  DOCUMENT_TYPES,
+  docTypeLabel,
   kindLabel,
   requestStatusLabel,
   roleLabel,
@@ -35,9 +37,12 @@ function formatBytes(bytes: number) {
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: PageProps<"/projects/[id]">) {
   const user = await requireUser();
   const { id } = await params;
+  const sp = await searchParams;
+  const docFilter = typeof sp?.docType === "string" ? sp.docType : null;
 
   const role = await getProjectRole(id, user);
   if (!role) notFound();
@@ -89,6 +94,19 @@ export default async function ProjectDetailPage({
   const catMap = new Map(categories.map((c) => [c.key, c.label]));
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  const docTypesPresent = DOCUMENT_TYPES.filter((t) =>
+    project.documents.some((d) => d.type === t.value),
+  );
+  const shownDocs = docFilter
+    ? project.documents.filter((d) => d.type === docFilter)
+    : project.documents;
+  const chipClass = (active: boolean) =>
+    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
+      active
+        ? "border-stone-950 bg-stone-950 text-white"
+        : "border-stone-300 text-stone-500 hover:border-stone-950"
+    }`;
 
   const memByEmail = new Map(
     project.memberships.map((m) => [m.email.toLowerCase(), m.role]),
@@ -269,9 +287,27 @@ export default async function ProjectDetailPage({
               </h2>
             </div>
             {isOwner && <UploadForm projectId={project.id} />}
-            {project.documents.length > 0 && (
-              <ul className={isOwner ? "mt-4" : ""}>
-                {project.documents.map((d) => (
+
+            {docTypesPresent.length > 1 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <Link href={`/projects/${project.id}`} className={chipClass(!docFilter)}>
+                  Vše
+                </Link>
+                {docTypesPresent.map((t) => (
+                  <Link
+                    key={t.value}
+                    href={`/projects/${project.id}?docType=${t.value}`}
+                    className={chipClass(docFilter === t.value)}
+                  >
+                    {t.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {shownDocs.length > 0 ? (
+              <ul className="mt-3">
+                {shownDocs.map((d) => (
                   <li
                     key={d.id}
                     className="group flex items-center justify-between gap-2 border-b border-stone-200 py-3"
@@ -286,7 +322,7 @@ export default async function ProjectDetailPage({
                         {d.originalName}
                       </span>
                       <span className="kicker mt-0.5 block">
-                        {formatBytes(d.size)}
+                        {docTypeLabel(d.type)} · {formatBytes(d.size)}
                       </span>
                     </a>
                     {isOwner && (
@@ -301,6 +337,12 @@ export default async function ProjectDetailPage({
                   </li>
                 ))}
               </ul>
+            ) : (
+              project.documents.length > 0 && (
+                <p className="mt-3 text-sm text-stone-500">
+                  Žádné dokumenty tohoto typu.
+                </p>
+              )
             )}
           </section>
         </div>

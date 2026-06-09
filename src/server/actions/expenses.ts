@@ -89,11 +89,12 @@ export async function createExpense(formData: FormData) {
   // Volitelný sken přímo k položce
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
+    const docType = String(formData.get("scanType") || "receipt");
     const buffer = Buffer.from(await file.arrayBuffer());
     const key = await storage.save(
       buffer,
       file.name,
-      `${project.ownerId}/${projectId}`,
+      `${project.ownerId}/${projectId}/${docType}`,
     );
     await prisma.document.create({
       data: {
@@ -103,6 +104,7 @@ export async function createExpense(formData: FormData) {
         originalName: file.name,
         mimeType: file.type || "application/octet-stream",
         size: file.size,
+        type: docType,
         uploadedById: user.id,
       },
     });

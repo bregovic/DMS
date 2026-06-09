@@ -3,11 +3,13 @@
 import { useRef, useState, useTransition } from "react";
 import { Upload } from "lucide-react";
 import { uploadDocument } from "@/server/actions/documents";
+import { DOCUMENT_TYPES } from "@/lib/constants";
 
 export function UploadForm({ projectId }: { projectId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [type, setType] = useState("other");
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -15,6 +17,7 @@ export function UploadForm({ projectId }: { projectId: string }) {
     setError(null);
     const fd = new FormData();
     fd.set("projectId", projectId);
+    fd.set("type", type);
     fd.set("file", file);
     startTransition(async () => {
       try {
@@ -28,6 +31,17 @@ export function UploadForm({ projectId }: { projectId: string }) {
 
   return (
     <div>
+      <select
+        value={type}
+        onChange={(e) => setType(e.target.value)}
+        className="mb-2 h-9 w-full rounded-none border border-stone-300 bg-white px-2 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950"
+      >
+        {DOCUMENT_TYPES.map((d) => (
+          <option key={d.value} value={d.value}>
+            {d.label}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={() => inputRef.current?.click()}

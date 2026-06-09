@@ -37,11 +37,12 @@ export async function attachExpenseScan(formData: FormData) {
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
+  const docType = String(formData.get("type") || "receipt");
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
     buffer,
     file.name,
-    `${project.ownerId}/${projectId}`,
+    `${project.ownerId}/${projectId}/${docType}`,
   );
   await prisma.document.create({
     data: {
@@ -51,6 +52,7 @@ export async function attachExpenseScan(formData: FormData) {
       originalName: file.name,
       mimeType: file.type || "application/octet-stream",
       size: file.size,
+      type: docType,
       uploadedById: user.id,
     },
   });
@@ -75,8 +77,13 @@ export async function uploadDocument(formData: FormData) {
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
+  const docType = String(formData.get("type") || "other");
   const buffer = Buffer.from(await file.arrayBuffer());
-  const key = await storage.save(buffer, file.name, `${project.ownerId}/${projectId}`);
+  const key = await storage.save(
+    buffer,
+    file.name,
+    `${project.ownerId}/${projectId}/${docType}`,
+  );
 
   await prisma.document.create({
     data: {
@@ -86,6 +93,7 @@ export async function uploadDocument(formData: FormData) {
       originalName: file.name,
       mimeType: file.type || "application/octet-stream",
       size: file.size,
+      type: docType,
       uploadedById: user.id,
     },
   });

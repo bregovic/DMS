@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Paperclip, Plus } from "lucide-react";
 import { attachExpenseScan } from "@/server/actions/documents";
+import { DOCUMENT_TYPES } from "@/lib/constants";
 
 type Doc = { id: string; originalName: string };
 
@@ -20,6 +21,7 @@ export function ExpenseScan({
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [type, setType] = useState("receipt");
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -28,6 +30,7 @@ export function ExpenseScan({
     const fd = new FormData();
     fd.set("projectId", projectId);
     fd.set("expenseId", expenseId);
+    fd.set("type", type);
     fd.set("file", file);
     start(async () => {
       try {
@@ -57,6 +60,17 @@ export function ExpenseScan({
       ))}
       {canAttach && (
         <>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="h-6 rounded-none border border-stone-300 bg-white px-1 text-[11px] text-stone-600 focus-visible:outline-none focus-visible:border-stone-950"
+          >
+            {DOCUMENT_TYPES.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
