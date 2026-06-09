@@ -12,10 +12,17 @@ AUTH_TRUST_HOST="true"
 AUTH_URL="https://dokumenty.up.railway.app"
 AUTH_GOOGLE_ID=""
 AUTH_GOOGLE_SECRET=""
-STORAGE_DRIVER="local"
-STORAGE_LOCAL_DIR="./.uploads"
+STORAGE_DRIVER="r2"
+R2_ENDPOINT="https://07724355d8be453e4d66b85e64811ae3.r2.cloudflarestorage.com"
+R2_BUCKET="dms"
+R2_ACCESS_KEY_ID="<R2 Access Key ID>"
+R2_SECRET_ACCESS_KEY="<R2 Secret Access Key>"
 PORT="8080"
 ```
+
+> Soubory (scany/dokumenty) se ukládají do privátního R2 bucketu `dms` a servírují
+> se přes přihlášený endpoint `/api/documents/...`. Klíče `R2_*` drž jen v Railway
+> Variables (ne v repu). Lokální vývoj může zůstat na `STORAGE_DRIVER=local`.
 
 > **Proč public DATABASE_URL a PORT=8080 (poučení z reálného nasazení):**
 > - Postgres DB je v **jiném Railway environmentu** než služba DMS, takže interní

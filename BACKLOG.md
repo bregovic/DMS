@@ -5,7 +5,7 @@ Zdroj: původně `2do.txt`.
 
 ## 🔨 Probíhá
 
-- [ ] **Cloudflare R2 úložiště** – privátní bucket `dms`, soubory servírovat přes `/api/documents` (řeší dočasnost souborů na Railway). *Čeká na S3 Access Key + Secret.*
+_(nic – další na řadě dle dohody)_
 
 ## 📋 Backlog
 
@@ -38,6 +38,7 @@ Zdroj: původně `2do.txt`.
 
 ## ✅ Hotovo
 
+- [x] **Cloudflare R2 úložiště** – privátní bucket `dms` přes S3 API, soubory servírované přes `/api/documents` (soubory přežijí redeploy)
 - [x] Favicon (logo složky) v záložce prohlížeče
 - [x] Moderní monochromatický design + font (Bricolage Grotesque)
 - [x] Typy projektů (Nemovitosti, Vozidla, Elektronika…) + editovatelný číselník
