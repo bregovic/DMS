@@ -15,9 +15,23 @@ import {
  * Zbytek aplikace pracuje jen s tímto rozhraním.
  */
 export interface StorageProvider {
-  save(file: Buffer, originalName: string): Promise<string>; // vrací storage key
+  // prefix = složka (např. "<ownerId>/<projectId>"); vrací plný storage key
+  save(file: Buffer, originalName: string, prefix?: string): Promise<string>;
   read(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
+}
+
+/** Sestaví bezpečný klíč: <prefix>/<uuid><ext>. */
+function buildKey(originalName: string, prefix?: string): string {
+  const ext = path.extname(originalName);
+  const name = `${randomUUID()}${ext}`;
+  if (!prefix) return name;
+  const safe = prefix
+    .split("/")
+    .map((seg) => seg.replace(/[^a-zA-Z0-9_-]/g, "_"))
+    .filter(Boolean)
+    .join("/");
+  return safe ? `${safe}/${name}` : name;
 }
 
 class LocalStorage implements StorageProvider {
@@ -31,11 +45,15 @@ class LocalStorage implements StorageProvider {
     return path.join(this.dir, key);
   }
 
-  async save(file: Buffer, originalName: string): Promise<string> {
-    await mkdir(this.dir, { recursive: true });
-    const ext = path.extname(originalName);
-    const key = `${randomUUID()}${ext}`;
-    await writeFile(this.full(key), file);
+  async save(
+    file: Buffer,
+    originalName: string,
+    prefix?: string,
+  ): Promise<string> {
+    const key = buildKey(originalName, prefix);
+    const full = this.full(key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, file);
     return key;
   }
 
@@ -65,9 +83,12 @@ class S3Storage implements StorageProvider {
     });
   }
 
-  async save(file: Buffer, originalName: string): Promise<string> {
-    const ext = path.extname(originalName);
-    const key = `${randomUUID()}${ext}`;
+  async save(
+    file: Buffer,
+    originalName: string,
+    prefix?: string,
+  ): Promise<string> {
+    const key = buildKey(originalName, prefix);
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,

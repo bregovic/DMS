@@ -18,12 +18,12 @@ export async function uploadDocument(formData: FormData) {
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, ownerId: user.id },
-    select: { id: true },
+    select: { id: true, ownerId: true },
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const key = await storage.save(buffer, file.name);
+  const key = await storage.save(buffer, file.name, `${project.ownerId}/${projectId}`);
 
   await prisma.document.create({
     data: {

@@ -90,7 +90,11 @@ export async function createExpense(formData: FormData) {
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const key = await storage.save(buffer, file.name);
+    const key = await storage.save(
+      buffer,
+      file.name,
+      `${project.ownerId}/${projectId}`,
+    );
     await prisma.document.create({
       data: {
         projectId,
