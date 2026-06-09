@@ -28,8 +28,9 @@ model User {
   projects          Project[]  @relation("ProjectOwner")
   expensesCreated   Expense[]  @relation("ExpenseCreatedBy")
   documentsUploaded Document[] @relation("DocumentUploadedBy")
-  vendors           Vendor[]   @relation("VendorOwner")
-  requestsCreated   Request[]  @relation("RequestCreatedBy")
+  vendors           Vendor[]     @relation("VendorOwner")
+  requestsCreated   Request[]    @relation("RequestCreatedBy")
+  subProjectsCreated SubProject[] @relation("SubProjectCreatedBy")
 }
 
 model Account {
@@ -105,18 +106,21 @@ model Request {
   unit         String    @default("ks")
   category     String    @default("other")
   vendorId     String?
+  subProjectId String?
   requiredDate DateTime?
   status       String    @default("new") // new | approved | selected | bought
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vendor    Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  createdBy User    @relation("RequestCreatedBy", fields: [createdById], references: [id])
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
 
   @@index([projectId])
   @@index([vendorId])
+  @@index([subProjectId])
 }
 
 // Sdílený číselník vlastních typů projektů (vestavěné typy jsou v kódu).
@@ -160,8 +164,33 @@ model Project {
   vendors     Vendor[]            @relation("ProjectVendors")
   memberships ProjectMembership[]
   requests    Request[]
+  subProjects SubProject[]
 
   @@index([ownerId])
+}
+
+// Sub-projekt (etapa/složka) – hierarchické seskupení uvnitř projektu.
+model SubProject {
+  id          String    @id @default(cuid())
+  projectId   String
+  parentId    String?
+  name        String
+  description String?
+  budget      Decimal?  @db.Decimal(12, 2)
+  deadline    DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    SubProject?  @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  SubProject[] @relation("SubTree")
+  createdBy User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
+  expenses  Expense[]
+  requests  Request[]
+
+  @@index([projectId])
+  @@index([parentId])
 }
 
 // Přístup k projektu podle e-mailu + role (owner | active | reader).
@@ -194,18 +223,21 @@ model Expense {
   rate        Decimal? @db.Decimal(12, 2)
   date        DateTime @default(now())
   vendorId    String?
+  subProjectId String?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User       @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
-  vendor    Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  documents Document[]
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy  User        @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  documents  Document[]
 
   @@index([projectId])
   @@index([date])
   @@index([vendorId])
+  @@index([subProjectId])
 }
 
 model Document {

@@ -38,6 +38,15 @@ export async function createRequest(formData: FormData) {
     if (!v) vendorId = null;
   }
 
+  let subProjectId = String(formData.get("subProjectId") || "") || null;
+  if (subProjectId) {
+    const sub = await prisma.subProject.findFirst({
+      where: { id: subProjectId, projectId },
+      select: { id: true },
+    });
+    if (!sub) subProjectId = null;
+  }
+
   const reqDateStr = String(formData.get("requiredDate") || "");
   const requiredDate = reqDateStr ? new Date(reqDateStr) : null;
 
@@ -50,6 +59,7 @@ export async function createRequest(formData: FormData) {
       unit: String(formData.get("unit") || "ks"),
       category: String(formData.get("category") || "other"),
       vendorId,
+      subProjectId,
       requiredDate:
         requiredDate && !isNaN(requiredDate.getTime()) ? requiredDate : null,
       status: "new",

@@ -40,6 +40,15 @@ export async function createExpense(formData: FormData) {
     if (!v) vendorId = null;
   }
 
+  let subProjectId = String(formData.get("subProjectId") || "") || null;
+  if (subProjectId) {
+    const sub = await prisma.subProject.findFirst({
+      where: { id: subProjectId, projectId },
+      select: { id: true },
+    });
+    if (!sub) subProjectId = null;
+  }
+
   const amountMode = String(formData.get("amountMode") || "fixed");
   let amount: number | null;
   let hours: number | null = null;
@@ -80,6 +89,7 @@ export async function createExpense(formData: FormData) {
       rate,
       date: isNaN(date.getTime()) ? new Date() : date,
       vendorId,
+      subProjectId,
       status,
       createdById: user.id,
     },

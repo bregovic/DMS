@@ -29,11 +29,13 @@ function loadDefaults(): Record<string, string> {
 
 export function NewExpenseForm({
   projectId,
+  subProjectId,
   vendors,
   categories,
   docTypes,
 }: {
   projectId: string;
+  subProjectId?: string;
   vendors: Vendor[];
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
@@ -109,6 +111,7 @@ export function NewExpenseForm({
           className="space-y-5 p-5"
         >
           <input type="hidden" name="projectId" value={projectId} />
+          <input type="hidden" name="subProjectId" value={subProjectId ?? ""} />
           <input type="hidden" name="amountMode" value={amountMode} />
 
           {/* Typ záznamu */}

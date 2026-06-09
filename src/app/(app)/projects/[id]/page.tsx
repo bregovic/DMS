@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, Folder, Paperclip } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectRole } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -12,8 +12,10 @@ import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
+import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
+import { deleteSubProject } from "@/server/actions/subprojects";
 import { approveExpense, deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
 import { deleteRequest } from "@/server/actions/requests";
@@ -56,7 +58,6 @@ export default async function ProjectDetailPage({
       where: { id },
       include: {
         expenses: {
-          where: onlyMine ? { createdById: user.id } : undefined,
           orderBy: [{ status: "desc" }, { date: "desc" }],
           include: {
             vendor: { select: { id: true, name: true } },
@@ -76,8 +77,8 @@ export default async function ProjectDetailPage({
           select: { id: true, name: true, email: true },
         },
         memberships: true,
+        subProjects: { orderBy: { createdAt: "asc" } },
         requests: {
-          where: onlyMine ? { createdById: user.id } : undefined,
           orderBy: [{ status: "asc" }, { createdAt: "desc" }],
           include: {
             vendor: { select: { name: true } },
@@ -94,7 +95,83 @@ export default async function ProjectDetailPage({
 
   const catMap = new Map(categories.map((c) => [c.key, c.label]));
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
-  const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  // --- Subprojekty (drill-down) ---
+  const sub = typeof sp?.sub === "string" ? sp.sub : null;
+  const subs = project.subProjects;
+  const subById = new Map(subs.map((s) => [s.id, s]));
+  const ancestorsOf = (sid: string) => {
+    const out: string[] = [];
+    let cur = subById.get(sid);
+    while (cur?.parentId) {
+      out.push(cur.parentId);
+      cur = subById.get(cur.parentId);
+    }
+    return out;
+  };
+
+  // Viditelné položky (aktivní dodavatel jen svoje)
+  const visExpenses = onlyMine
+    ? project.expenses.filter((e) => e.createdById === user.id)
+    : project.expenses;
+  const visRequests = onlyMine
+    ? project.requests.filter((r) => r.createdById === user.id)
+    : project.requests;
+
+  const total = visExpenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  // Útrata po subprojektech (rollup i do nadřazených)
+  const spentBySub = new Map<string, number>();
+  for (const e of visExpenses) {
+    if (!e.subProjectId) continue;
+    const amt = Number(e.amount);
+    for (const sid of [e.subProjectId, ...ancestorsOf(e.subProjectId)]) {
+      spentBySub.set(sid, (spentBySub.get(sid) ?? 0) + amt);
+    }
+  }
+
+  // Aktivní dodavatel: viditelné jen složky, které založil nebo se ho týkají
+  let visibleSubIds: Set<string> | null = null;
+  if (onlyMine) {
+    const set = new Set<string>();
+    for (const s of subs) if (s.createdById === user.id) set.add(s.id);
+    for (const e of visExpenses)
+      if (e.subProjectId) {
+        set.add(e.subProjectId);
+        ancestorsOf(e.subProjectId).forEach((a) => set.add(a));
+      }
+    for (const r of visRequests)
+      if (r.subProjectId) {
+        set.add(r.subProjectId);
+        ancestorsOf(r.subProjectId).forEach((a) => set.add(a));
+      }
+    visibleSubIds = set;
+  }
+
+  const currentSub = sub ? subById.get(sub) ?? null : null;
+  if (sub && !currentSub) notFound();
+
+  const crumb: typeof subs = [];
+  {
+    let cur = currentSub;
+    while (cur) {
+      crumb.unshift(cur);
+      cur = cur.parentId ? subById.get(cur.parentId) ?? null : null;
+    }
+  }
+
+  let folders = subs.filter((s) => (s.parentId ?? null) === (sub ?? null));
+  const visIds = visibleSubIds;
+  if (visIds) folders = folders.filter((s) => visIds.has(s.id));
+  const childCount = (sid: string) =>
+    subs.filter((s) => s.parentId === sid).length;
+
+  const levelExpenses = visExpenses.filter(
+    (e) => (e.subProjectId ?? null) === (sub ?? null),
+  );
+  const levelRequests = visRequests.filter(
+    (r) => (r.subProjectId ?? null) === (sub ?? null),
+  );
 
   const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
   const docTypesPresent = docTypes.filter((t) =>
@@ -177,17 +254,133 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
+      {/* Breadcrumb subprojektů */}
+      <nav className="mt-4 flex flex-wrap items-center gap-1.5 text-sm">
+        <Link
+          href={`/projects/${project.id}`}
+          className={
+            sub
+              ? "text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
+              : "font-medium text-stone-950"
+          }
+        >
+          {project.name}
+        </Link>
+        {crumb.map((cs, i) => (
+          <span key={cs.id} className="flex items-center gap-1.5">
+            <span className="text-stone-300">/</span>
+            <Link
+              href={`/projects/${project.id}?sub=${cs.id}`}
+              className={
+                i === crumb.length - 1
+                  ? "font-medium text-stone-950"
+                  : "text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
+              }
+            >
+              {cs.name}
+            </Link>
+          </span>
+        ))}
+      </nav>
+
+      {/* Subprojekty (složky) */}
+      <section className="mt-6">
+        <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+          <h2 className="kicker">Subprojekty · {folders.length}</h2>
+          {canAdd && (
+            <NewSubProjectForm projectId={project.id} parentId={sub ?? undefined} />
+          )}
+        </div>
+
+        {currentSub && (
+          <div className="mb-4 flex flex-wrap gap-x-8 gap-y-1 text-sm text-stone-600">
+            {currentSub.description && <span>{currentSub.description}</span>}
+            {currentSub.deadline && (
+              <span>
+                Termín:{" "}
+                <span className="text-stone-950">
+                  {formatDate(currentSub.deadline)}
+                </span>
+              </span>
+            )}
+            <span>
+              Útrata:{" "}
+              <span className="font-mono text-stone-950">
+                {formatCurrency(spentBySub.get(currentSub.id) ?? 0)}
+              </span>
+              {currentSub.budget != null && (
+                <> / rozpočet {formatCurrency(Number(currentSub.budget))}</>
+              )}
+            </span>
+          </div>
+        )}
+
+        {folders.length === 0 ? (
+          <p className="py-3 text-sm text-stone-500">
+            Žádné subprojekty na této úrovni.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-px border border-stone-300/80 bg-stone-300/80 sm:grid-cols-2 lg:grid-cols-3">
+            {folders.map((s) => {
+              const spent = spentBySub.get(s.id) ?? 0;
+              const budget = s.budget != null ? Number(s.budget) : null;
+              const over = budget != null && spent > budget;
+              return (
+                <div
+                  key={s.id}
+                  className="group relative bg-white p-5 transition-colors hover:bg-stone-50"
+                >
+                  <Link
+                    href={`/projects/${project.id}?sub=${s.id}`}
+                    className="block"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Folder className="size-5 shrink-0 text-stone-700" />
+                      <span className="min-w-0 flex-1 truncate font-medium text-stone-950">
+                        {s.name}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-baseline justify-between border-t border-stone-100 pt-2">
+                      <span className="kicker">
+                        {childCount(s.id)} pod ·{" "}
+                        {s.deadline ? formatDate(s.deadline) : "—"}
+                      </span>
+                      <span
+                        className={`font-mono text-sm ${over ? "text-red-600" : "text-stone-950"}`}
+                      >
+                        {formatCurrency(spent)}
+                        {budget != null ? ` / ${formatCurrency(budget)}` : ""}
+                      </span>
+                    </div>
+                  </Link>
+                  {(isOwner || s.createdById === user.id) && (
+                    <span className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                      <DeleteButton
+                        action={deleteSubProject}
+                        fields={{ id: s.id, projectId: project.id }}
+                        confirm={`Smazat subprojekt „${s.name}"? (vnořené se smažou, položky se odpojí)`}
+                      />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <div className="mt-8 flex flex-col gap-10">
         {/* Výdaje */}
         <section className="order-2">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">
-              Výdaje · {project.expenses.length}
+              Výdaje · {levelExpenses.length}
               {onlyMine ? " · jen tvoje" : ""}
             </h2>
             {canAdd && (
               <NewExpenseForm
                 projectId={project.id}
+                subProjectId={sub ?? undefined}
                 vendors={accountVendors.map((v) => ({
                   id: v.id,
                   name: v.name,
@@ -199,11 +392,11 @@ export default async function ProjectDetailPage({
             )}
           </div>
 
-          {project.expenses.length === 0 ? (
+          {levelExpenses.length === 0 ? (
             <p className="py-8 text-sm text-stone-500">Zatím žádné výdaje.</p>
           ) : (
             <ul>
-              {project.expenses.map((e) => (
+              {levelExpenses.map((e) => (
                 <li
                   key={e.id}
                   className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
@@ -268,7 +461,8 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Dodavatelé + dokumenty – schované pod tlačítkem (#14) */}
+        {/* Dodavatelé + dokumenty – jen v rootu projektu, pod tlačítkem (#14) */}
+        {sub === null && (
         <div className="order-1">
           <Collapsible
             title={`Dodavatelé & dokumenty · ${project.vendors.length} / ${project.documents.length}`}
@@ -356,28 +550,30 @@ export default async function ProjectDetailPage({
             </div>
           </Collapsible>
         </div>
+        )}
       </div>
 
       {/* Poptávky */}
       <section className="mt-12">
         <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
           <h2 className="kicker">
-            Poptávky · {project.requests.length}
+            Poptávky · {levelRequests.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
           {canAdd && (
             <NewRequestForm
               projectId={project.id}
+              subProjectId={sub ?? undefined}
               vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
               categories={categories}
             />
           )}
         </div>
-        {project.requests.length === 0 ? (
+        {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné poptávky.</p>
         ) : (
           <ul>
-            {project.requests.map((r) => (
+            {levelRequests.map((r) => (
               <li
                 key={r.id}
                 className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"

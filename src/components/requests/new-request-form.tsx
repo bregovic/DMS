@@ -14,10 +14,12 @@ const fieldClass =
 
 export function NewRequestForm({
   projectId,
+  subProjectId,
   vendors,
   categories,
 }: {
   projectId: string;
+  subProjectId?: string;
   vendors: { id: string; name: string }[];
   categories: { key: string; label: string }[];
 }) {
@@ -56,6 +58,7 @@ export function NewRequestForm({
           className="space-y-5 p-5"
         >
           <input type="hidden" name="projectId" value={projectId} />
+          <input type="hidden" name="subProjectId" value={subProjectId ?? ""} />
 
           <div className="space-y-1.5">
             <Label htmlFor="title">Co se poptává</Label>
