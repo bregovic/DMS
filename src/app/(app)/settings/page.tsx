@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/account/change-password-form";
+import { InstallButton } from "@/components/app/install-button";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -28,6 +29,11 @@ export default async function SettingsPage() {
           </p>
         )}
         <ChangePasswordForm hasPassword={hasPassword} />
+      </section>
+
+      <section className="mt-12">
+        <h2 className="kicker mb-4">Mobilní aplikace</h2>
+        <InstallButton />
       </section>
     </div>
   );

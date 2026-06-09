@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/app/service-worker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,6 +22,13 @@ export const metadata: Metadata = {
   title: "DMS – Správa výdajů a dokumentů",
   description:
     "Evidence projektů, výdajů a dokumentů s reporty. Dům, auto, garáž – vše na jednom místě.",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "DMS" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -33,7 +41,10 @@ export default function RootLayout({
       lang="cs"
       className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }

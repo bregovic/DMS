@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { Sidebar } from "@/components/app/sidebar";
 import { UserMenu } from "@/components/app/user-menu";
+import { MobileNav } from "@/components/app/mobile-nav";
 
 export default async function AppLayout({
   children,
@@ -28,9 +29,12 @@ export default async function AppLayout({
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center justify-between border-b border-stone-300/80 px-4 sm:px-8">
-          <Link href="/dashboard" className="md:hidden">
-            <span className="display text-xl text-stone-950">DMS</span>
-          </Link>
+          <div className="flex items-center gap-2 md:hidden">
+            <MobileNav />
+            <Link href="/dashboard">
+              <span className="display text-xl text-stone-950">DMS</span>
+            </Link>
+          </div>
           <div className="flex-1" />
           <UserMenu name={user.name} email={user.email} />
         </header>
