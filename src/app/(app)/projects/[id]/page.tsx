@@ -624,17 +624,13 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Dodavatelé + dokumenty – jen v rootu projektu, pod tlačítkem (#14) */}
+        {/* Dodavatelé (přístup) + dokumenty – jen v rootu projektu */}
         {sub === null && (
-        <div className="order-1">
+        <div className="order-1 space-y-4">
           <Collapsible
-            title={`Dodavatelé & dokumenty · ${project.vendors.length} / ${project.documents.length}`}
+            title={`Dodavatelé & přístup · ${project.vendors.length}`}
+            defaultOpen
           >
-            <div className="grid gap-8 md:grid-cols-2">
-          <section>
-            <div className="mb-4 border-b border-stone-300/80 pb-2">
-              <h2 className="kicker">Dodavatelé · {project.vendors.length}</h2>
-            </div>
             <ProjectVendors
               projectId={project.id}
               assigned={project.vendors}
@@ -642,15 +638,12 @@ export default async function ProjectDetailPage({
               rolesByVendor={rolesByVendor}
               canManage={isOwner}
             />
-          </section>
+          </Collapsible>
 
+          <Collapsible
+            title={`Dokumenty · ${project.documents.length}`}
+          >
           <section>
-            <div className="mb-4 border-b border-stone-300/80 pb-2">
-              <h2 className="kicker">
-                Dokumenty · {project.documents.length}
-                {onlyMine ? " · jen tvoje" : ""}
-              </h2>
-            </div>
             {isOwner && <UploadForm projectId={project.id} types={docTypes} />}
 
             {docTypesPresent.length > 1 && (
@@ -710,7 +703,6 @@ export default async function ProjectDetailPage({
               )
             )}
           </section>
-            </div>
           </Collapsible>
         </div>
         )}

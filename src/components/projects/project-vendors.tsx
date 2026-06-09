@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { X } from "lucide-react";
 import {
   addVendorToProject,
@@ -24,6 +25,15 @@ export function ProjectVendors({
 }) {
   return (
     <div>
+      {canManage && (
+        <p className="mb-3 text-xs text-stone-500">
+          Přiřaď dodavatele z evidence a nastav roli:{" "}
+          <span className="text-stone-800">Aktivní dodavatel</span> se přihlásí
+          (e‑mailem) a může přidávat záznamy,{" "}
+          <span className="text-stone-800">Reader</span> jen čte. Přístup platí
+          pro celý projekt včetně subprojektů.
+        </p>
+      )}
       {assigned.length === 0 ? (
         <p className="py-2 text-sm text-stone-500">Zatím nikdo není přiřazen.</p>
       ) : (
@@ -93,6 +103,19 @@ export function ProjectVendors({
             Přiřadit
           </Button>
         </form>
+      )}
+
+      {canManage && available.length === 0 && (
+        <p className="mt-3 text-xs text-stone-500">
+          Žádný další dodavatel k přiřazení.{" "}
+          <Link
+            href="/vendors"
+            className="text-stone-950 underline underline-offset-4"
+          >
+            Přidej dodavatele v evidenci
+          </Link>{" "}
+          a pak ho tu přiřadíš.
+        </p>
       )}
     </div>
   );
