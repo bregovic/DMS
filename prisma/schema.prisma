@@ -81,6 +81,7 @@ model Vendor {
   category    String   @default("other")
   phone       String?
   description String?
+  hourlyRate  Decimal? @db.Decimal(12, 2)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -152,6 +153,10 @@ model Expense {
   amount      Decimal  @db.Decimal(12, 2)
   currency    String   @default("CZK")
   category    String   @default("other")
+  kind        String   @default("expense") // expense | work | purchase
+  status      String   @default("approved") // approved | for_approval
+  hours       Decimal? @db.Decimal(10, 2)
+  rate        Decimal? @db.Decimal(12, 2)
   date        DateTime @default(now())
   vendorId    String?
   createdById String

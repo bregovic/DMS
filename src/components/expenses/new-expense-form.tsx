@@ -6,9 +6,25 @@ import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
+import { EXPENSE_KINDS } from "@/lib/constants";
+import { formatCurrency } from "@/lib/utils";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
+
+const DEFAULTS_KEY = "dms-expense-defaults";
+
+type Vendor = { id: string; name: string; hourlyRate?: number | null };
+
+function loadDefaults(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(DEFAULTS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
 
 export function NewExpenseForm({
   projectId,
@@ -16,113 +32,216 @@ export function NewExpenseForm({
   categories,
 }: {
   projectId: string;
-  vendors: { id: string; name: string }[];
+  vendors: Vendor[];
   categories: { key: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const today = new Date().toISOString().slice(0, 10);
 
+  const [d] = useState(loadDefaults);
+  const [kind, setKind] = useState(d.kind || "expense");
+  const [category, setCategory] = useState(d.category || "materials");
+  const [currency, setCurrency] = useState(d.currency || "CZK");
+  const [amountMode, setAmountMode] = useState(d.amountMode || "fixed");
+  const [rate, setRate] = useState("");
+  const [hours, setHours] = useState("");
+
   if (!open) {
     return (
       <Button size="sm" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
-        Přidat výdaj
+        Přidat
       </Button>
     );
   }
 
+  const total =
+    Number(hours.replace(",", ".")) * Number(rate.replace(",", ".")) || 0;
+
   return (
-    <div className="border border-stone-300 bg-white">
-      <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-        <h3 className="kicker">Nový výdaj</h3>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="text-stone-400 hover:text-stone-950 cursor-pointer"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
+      <div className="w-full max-w-lg border border-stone-300 bg-white">
+        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
+          <h3 className="kicker">Nový záznam</h3>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="text-stone-400 hover:text-stone-950 cursor-pointer"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <form
+          ref={formRef}
+          action={async (fd) => {
+            await createExpense(fd);
+            try {
+              localStorage.setItem(
+                DEFAULTS_KEY,
+                JSON.stringify({
+                  kind: String(fd.get("kind") || ""),
+                  category: String(fd.get("category") || ""),
+                  currency: String(fd.get("currency") || ""),
+                  amountMode: String(fd.get("amountMode") || ""),
+                }),
+              );
+            } catch {}
+            formRef.current?.reset();
+            setHours("");
+            setRate("");
+            setOpen(false);
+          }}
+          className="space-y-5 p-5"
         >
-          <X className="size-4" />
-        </button>
-      </div>
-      <form
-        ref={formRef}
-        action={async (fd) => {
-          await createExpense(fd);
-          formRef.current?.reset();
-          setOpen(false);
-        }}
-        className="space-y-5 p-5"
-      >
-        <input type="hidden" name="projectId" value={projectId} />
-        <div className="space-y-1.5">
-          <Label htmlFor="title">Název</Label>
-          <Input id="title" name="title" placeholder="Např. Nové dveře" required autoFocus />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="amount">Částka</Label>
-            <Input
-              id="amount"
-              name="amount"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0"
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="currency">Měna</Label>
-            <select id="currency" name="currency" defaultValue="CZK" className={fieldClass}>
-              <option value="CZK">CZK</option>
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-            </select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="category">Kategorie</Label>
-            <select id="category" name="category" defaultValue="materials" className={fieldClass}>
-              {categories.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="date">Datum</Label>
-            <Input id="date" name="date" type="date" defaultValue={today} required />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="vendorId">Dodavatel (volitelné)</Label>
-          <select id="vendorId" name="vendorId" defaultValue="" className={fieldClass}>
-            <option value="">— bez dodavatele —</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
+          <input type="hidden" name="projectId" value={projectId} />
+          <input type="hidden" name="amountMode" value={amountMode} />
+
+          {/* Typ záznamu */}
+          <div className="flex gap-2">
+            {EXPENSE_KINDS.map((k) => (
+              <button
+                key={k.value}
+                type="button"
+                onClick={() => setKind(k.value)}
+                className={`h-8 flex-1 border text-xs font-medium transition-colors cursor-pointer ${
+                  kind === k.value
+                    ? "border-stone-950 bg-stone-950 text-white"
+                    : "border-stone-300 text-stone-600 hover:border-stone-950"
+                }`}
+              >
+                {k.label}
+              </button>
             ))}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="description">Poznámka (volitelné)</Label>
-          <textarea
-            id="description"
-            name="description"
-            rows={2}
-            className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
-          />
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Zrušit
-          </Button>
-          <Button type="submit">Uložit výdaj</Button>
-        </div>
-      </form>
+            <input type="hidden" name="kind" value={kind} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="title">Název / popis činnosti</Label>
+            <Input id="title" name="title" placeholder="Např. Zdění příčky" required autoFocus />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Dodavatel</Label>
+              <Combobox
+                name="vendorId"
+                items={vendors.map((v) => ({
+                  id: v.id,
+                  label: v.name,
+                  hourlyRate: v.hourlyRate,
+                }))}
+                defaultId={d.vendorId}
+                placeholder="Hledat dodavatele…"
+                onSelect={(item) => {
+                  if (item?.hourlyRate != null) setRate(String(item.hourlyRate));
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="category">Kategorie</Label>
+              <select
+                id="category"
+                name="category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className={fieldClass}
+              >
+                {categories.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Režim částky */}
+          <div className="flex gap-2">
+            {[
+              { v: "fixed", l: "Částka" },
+              { v: "hourly", l: "Hodiny × sazba" },
+            ].map((m) => (
+              <button
+                key={m.v}
+                type="button"
+                onClick={() => setAmountMode(m.v)}
+                className={`h-8 flex-1 border text-xs font-medium transition-colors cursor-pointer ${
+                  amountMode === m.v
+                    ? "border-stone-950 bg-stone-950 text-white"
+                    : "border-stone-300 text-stone-600 hover:border-stone-950"
+                }`}
+              >
+                {m.l}
+              </button>
+            ))}
+          </div>
+
+          {amountMode === "fixed" ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="amount">Částka</Label>
+                <Input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0" required />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="currency">Měna</Label>
+                <select id="currency" name="currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className={fieldClass}>
+                  <option value="CZK">CZK</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="hours">Hodiny</Label>
+                  <Input id="hours" name="hours" type="number" step="0.25" min="0" placeholder="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rate">Sazba / h</Label>
+                  <Input id="rate" name="rate" type="number" step="0.01" min="0" placeholder="0" value={rate} onChange={(e) => setRate(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="currency">Měna</Label>
+                  <select id="currency" name="currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className={fieldClass}>
+                    <option value="CZK">CZK</option>
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-stone-500">
+                Celkem: <span className="font-mono text-stone-950">{formatCurrency(total, currency)}</span>
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="date">Datum</Label>
+              <Input id="date" name="date" type="date" defaultValue={today} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="file">Sken / účtenka</Label>
+              <input id="file" name="file" type="file" accept="image/*,application/pdf,capture=camera" className="block w-full text-xs text-stone-600 file:mr-2 file:border-0 file:bg-stone-100 file:px-2 file:py-2.5 file:text-stone-950" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="description">Poznámka (volitelné)</Label>
+            <textarea id="description" name="description" rows={2} className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950" />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Zrušit
+            </Button>
+            <Button type="submit">Uložit</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

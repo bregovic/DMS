@@ -54,3 +54,17 @@ export const PROJECT_ROLES = [
 export function roleLabel(value: string) {
   return PROJECT_ROLES.find((r) => r.value === value)?.label ?? value;
 }
+
+export const EXPENSE_KINDS = [
+  { value: "expense", label: "Výdaj" },
+  { value: "work", label: "Práce" },
+  { value: "purchase", label: "Nákup" },
+] as const;
+
+export function kindLabel(value: string) {
+  return EXPENSE_KINDS.find((k) => k.value === value)?.label ?? "Výdaj";
+}
+
+export function statusLabel(value: string) {
+  return value === "for_approval" ? "Ke schválení" : "Schváleno";
+}

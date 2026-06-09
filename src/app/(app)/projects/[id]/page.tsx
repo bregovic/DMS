@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectRole } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -10,10 +10,10 @@ import { ProjectVendors } from "@/components/projects/project-vendors";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
-import { deleteExpense } from "@/server/actions/expenses";
+import { approveExpense, deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { roleLabel } from "@/lib/constants";
+import { kindLabel, roleLabel, statusLabel } from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 
@@ -32,14 +32,19 @@ export default async function ProjectDetailPage({
   const role = await getProjectRole(id, user);
   if (!role) notFound();
   const isOwner = role === "owner";
+  const canAdd = role === "owner" || role === "active";
 
   const [project, typeMap, categories] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
         expenses: {
-          orderBy: { date: "desc" },
-          include: { vendor: { select: { id: true, name: true } } },
+          orderBy: [{ status: "desc" }, { date: "desc" }],
+          include: {
+            vendor: { select: { id: true, name: true } },
+            createdBy: { select: { name: true, email: true } },
+            _count: { select: { documents: true } },
+          },
         },
         documents: { orderBy: { createdAt: "desc" } },
         vendors: {
@@ -66,11 +71,11 @@ export default async function ProjectDetailPage({
     rolesByVendor[v.id] = memByEmail.get(v.email.toLowerCase()) ?? "vendor";
   }
 
-  const accountVendors = isOwner
+  const accountVendors = canAdd
     ? await prisma.vendor.findMany({
         where: { ownerId: project.ownerId },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, hourlyRate: true },
       })
     : [];
   const assignedIds = new Set(project.vendors.map((v) => v.id));
@@ -130,10 +135,14 @@ export default async function ProjectDetailPage({
         <section className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">Výdaje · {project.expenses.length}</h2>
-            {isOwner && (
+            {canAdd && (
               <NewExpenseForm
                 projectId={project.id}
-                vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+                vendors={accountVendors.map((v) => ({
+                  id: v.id,
+                  name: v.name,
+                  hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+                }))}
                 categories={categories}
               />
             )}
@@ -149,18 +158,42 @@ export default async function ProjectDetailPage({
                   className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-stone-950">
+                    <p className="flex items-center gap-2 truncate text-sm font-medium text-stone-950">
                       {e.title}
+                      {e._count.documents > 0 && (
+                        <Paperclip className="size-3 shrink-0 text-stone-400" />
+                      )}
+                      {e.status === "for_approval" && (
+                        <span className="shrink-0 border border-amber-500 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-700">
+                          {statusLabel(e.status)}
+                        </span>
+                      )}
                     </p>
                     <p className="kicker mt-0.5">
-                      {catMap.get(e.category) ?? e.category} · {formatDate(e.date)}
+                      {kindLabel(e.kind)} · {catMap.get(e.category) ?? e.category} ·{" "}
+                      {formatDate(e.date)}
                       {e.vendor ? ` · ${e.vendor.name}` : ""}
+                      {e.hours ? ` · ${Number(e.hours)} h × ${Number(e.rate)}` : ""}
+                      {` · zadal ${e.createdBy.name ?? e.createdBy.email ?? "?"}`}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span className="font-mono text-sm text-stone-950">
                       {formatCurrency(Number(e.amount), e.currency)}
                     </span>
+                    {isOwner && e.status === "for_approval" && (
+                      <form action={approveExpense}>
+                        <input type="hidden" name="id" value={e.id} />
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <button
+                          type="submit"
+                          title="Schválit"
+                          className="flex size-8 items-center justify-center text-emerald-600 transition-colors hover:bg-emerald-600 hover:text-white cursor-pointer"
+                        >
+                          <Check className="size-4" />
+                        </button>
+                      </form>
+                    )}
                     {isOwner && (
                       <span className="opacity-0 transition-opacity group-hover:opacity-100">
                         <DeleteButton
