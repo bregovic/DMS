@@ -5,6 +5,9 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { getProjectRole } from "@/server/access";
+import { resolveDocTypeKey } from "@/server/document-types";
+
+const MAX_UPLOAD = 8 * 1024 * 1024; // 8 MB
 
 /** Připojí sken k existující položce (výdaji). Owner ke všem, aktivní dodavatel jen ke svým. */
 export async function attachExpenseScan(formData: FormData) {
@@ -14,6 +17,9 @@ export async function attachExpenseScan(formData: FormData) {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Vyber soubor.");
+  }
+  if (file.size > MAX_UPLOAD) {
+    throw new Error("Soubor je větší než 8 MB.");
   }
 
   const role = await getProjectRole(projectId, user);
@@ -71,13 +77,20 @@ export async function uploadDocument(formData: FormData) {
     throw new Error("Vyber soubor k nahrání.");
   }
 
+  if (file.size > MAX_UPLOAD) {
+    throw new Error("Soubor je větší než 8 MB.");
+  }
+
   const project = await prisma.project.findFirst({
     where: { id: projectId, ownerId: user.id },
     select: { id: true, ownerId: true },
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
-  const docType = String(formData.get("type") || "other");
+  let docType = String(formData.get("type") || "other");
+  if (docType === "__new__") {
+    docType = await resolveDocTypeKey(String(formData.get("newType") || ""));
+  }
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
     buffer,
@@ -105,10 +118,19 @@ export async function deleteDocument(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));
 
-  const doc = await prisma.document.findFirst({
-    where: { id, project: { ownerId: user.id } },
+  const doc = await prisma.document.findUnique({
+    where: { id },
+    include: { project: { select: { ownerId: true } } },
   });
   if (!doc) return;
+
+  // Owner smaže cokoliv; aktivní dodavatel jen to, co sám nahrál.
+  let allowed = doc.project.ownerId === user.id;
+  if (!allowed && doc.uploadedById === user.id) {
+    const role = await getProjectRole(doc.projectId, user);
+    allowed = role === "active" || role === "owner";
+  }
+  if (!allowed) return;
 
   await storage.delete(doc.fileName);
   await prisma.document.delete({ where: { id: doc.id } });

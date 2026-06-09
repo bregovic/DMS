@@ -89,6 +89,9 @@ export async function createExpense(formData: FormData) {
   // Volitelný sken přímo k položce
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error("Sken je větší než 8 MB.");
+    }
     const docType = String(formData.get("scanType") || "receipt");
     const buffer = Buffer.from(await file.arrayBuffer());
     const key = await storage.save(

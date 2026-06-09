@@ -136,6 +136,14 @@ model ExpenseCategory {
   createdAt DateTime @default(now())
 }
 
+// Sdílený číselník vlastních typů dokumentů (vestavěné jsou v kódu).
+model DocumentType {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  createdAt DateTime @default(now())
+}
+
 model Project {
   id          String   @id @default(cuid())
   name        String

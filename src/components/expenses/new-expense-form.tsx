@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
-import { DOCUMENT_TYPES, EXPENSE_KINDS } from "@/lib/constants";
+import { EXPENSE_KINDS } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { prepareUpload } from "@/lib/client-upload";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -30,10 +31,12 @@ export function NewExpenseForm({
   projectId,
   vendors,
   categories,
+  docTypes,
 }: {
   projectId: string;
   vendors: Vendor[];
   categories: { key: string; label: string }[];
+  docTypes: { value: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -75,7 +78,18 @@ export function NewExpenseForm({
         <form
           ref={formRef}
           action={async (fd) => {
-            await createExpense(fd);
+            try {
+              const f = fd.get("file");
+              if (f instanceof File && f.size > 0) {
+                fd.set("file", await prepareUpload(f));
+              }
+              await createExpense(fd);
+            } catch (err) {
+              window.alert(
+                err instanceof Error ? err.message : "Uložení selhalo.",
+              );
+              return;
+            }
             try {
               localStorage.setItem(
                 DEFAULTS_KEY,
@@ -227,7 +241,7 @@ export function NewExpenseForm({
               <Label htmlFor="file">Sken / účtenka</Label>
               <input id="file" name="file" type="file" accept="image/*,application/pdf,capture=camera" className="block w-full text-xs text-stone-600 file:mr-2 file:border-0 file:bg-stone-100 file:px-2 file:py-2.5 file:text-stone-950" />
               <select name="scanType" defaultValue="receipt" className="h-7 w-full rounded-none border border-stone-300 bg-white px-1.5 text-xs text-stone-600 focus-visible:outline-none focus-visible:border-stone-950">
-                {DOCUMENT_TYPES.map((d) => (
+                {docTypes.map((d) => (
                   <option key={d.value} value={d.value}>{d.label}</option>
                 ))}
               </select>

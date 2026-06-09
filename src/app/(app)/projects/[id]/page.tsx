@@ -19,8 +19,6 @@ import { deleteDocument } from "@/server/actions/documents";
 import { deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
-  DOCUMENT_TYPES,
-  docTypeLabel,
   kindLabel,
   requestStatusLabel,
   roleLabel,
@@ -29,6 +27,7 @@ import {
 } from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
+import { getDocumentTypes } from "@/server/document-types";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -52,7 +51,7 @@ export default async function ProjectDetailPage({
   // Aktivní dodavatel vidí jen své vlastní záznamy
   const onlyMine = role === "active";
 
-  const [project, typeMap, categories] = await Promise.all([
+  const [project, typeMap, categories, docTypes] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -89,6 +88,7 @@ export default async function ProjectDetailPage({
     }),
     getProjectTypeMap(),
     getExpenseCategories(),
+    getDocumentTypes(),
   ]);
   if (!project) notFound();
 
@@ -96,7 +96,8 @@ export default async function ProjectDetailPage({
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
   const total = project.expenses.reduce((s, e) => s + Number(e.amount), 0);
 
-  const docTypesPresent = DOCUMENT_TYPES.filter((t) =>
+  const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
+  const docTypesPresent = docTypes.filter((t) =>
     project.documents.some((d) => d.type === t.value),
   );
   const shownDocs = docFilter
@@ -193,6 +194,7 @@ export default async function ProjectDetailPage({
                   hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
                 }))}
                 categories={categories}
+                docTypes={docTypes}
               />
             )}
           </div>
@@ -230,6 +232,7 @@ export default async function ProjectDetailPage({
                       expenseId={e.id}
                       docs={e.documents}
                       canAttach={canAdd}
+                      types={docTypes}
                     />
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -291,7 +294,7 @@ export default async function ProjectDetailPage({
                 {onlyMine ? " · jen tvoje" : ""}
               </h2>
             </div>
-            {isOwner && <UploadForm projectId={project.id} />}
+            {isOwner && <UploadForm projectId={project.id} types={docTypes} />}
 
             {docTypesPresent.length > 1 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -327,7 +330,7 @@ export default async function ProjectDetailPage({
                         {d.originalName}
                       </span>
                       <span className="kicker mt-0.5 block">
-                        {docTypeLabel(d.type)} · {formatBytes(d.size)}
+                        {docTypeMap.get(d.type) ?? d.type} · {formatBytes(d.size)}
                       </span>
                     </a>
                     {isOwner && (
