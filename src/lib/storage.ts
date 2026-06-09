@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 
 /**
- * Přepínatelná vrstva úložiště souborů.
- * Dnes: lokální disk (dev). Později stačí přidat R2/S3 driver
- * implementující stejné rozhraní – zbytek aplikace se nemění.
+ * Přepínatelná vrstva úložiště souborů (STORAGE_DRIVER):
+ *  - "local" = lokální disk (dev)
+ *  - "r2" / "s3" = Cloudflare R2 nebo jiné S3-kompatibilní úložiště
+ * Zbytek aplikace pracuje jen s tímto rozhraním.
  */
 export interface StorageProvider {
   save(file: Buffer, originalName: string): Promise<string>; // vrací storage key
@@ -41,13 +48,60 @@ class LocalStorage implements StorageProvider {
   }
 }
 
+class S3Storage implements StorageProvider {
+  private client: S3Client;
+  private bucket: string;
+
+  constructor() {
+    this.bucket = process.env.R2_BUCKET ?? "dms";
+    this.client = new S3Client({
+      region: process.env.R2_REGION ?? "auto",
+      endpoint: process.env.R2_ENDPOINT,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
+      },
+    });
+  }
+
+  async save(file: Buffer, originalName: string): Promise<string> {
+    const ext = path.extname(originalName);
+    const key = `${randomUUID()}${ext}`;
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file,
+      }),
+    );
+    return key;
+  }
+
+  async read(key: string): Promise<Buffer> {
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    const bytes = await res.Body!.transformToByteArray();
+    return Buffer.from(bytes);
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client
+      .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+      .catch(() => {});
+  }
+}
+
 function createStorage(): StorageProvider {
   const driver = process.env.STORAGE_DRIVER ?? "local";
   switch (driver) {
+    case "r2":
+    case "s3":
+      return new S3Storage();
     case "local":
     default:
       return new LocalStorage(process.env.STORAGE_LOCAL_DIR ?? "./.uploads");
-    // case "r2": return new R2Storage(...)  // budoucí rozšíření
   }
 }
 
