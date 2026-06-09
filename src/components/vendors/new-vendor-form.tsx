@@ -6,6 +6,7 @@ import { createVendor } from "@/server/actions/vendors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AresLookup } from "@/components/vendors/ares-lookup";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 
 const fieldClass =
@@ -33,7 +34,7 @@ export function NewVendorForm() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/30 p-4 pt-20">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
       <div className="w-full max-w-md border border-stone-300 bg-white">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">Nový dodavatel</h3>
@@ -46,10 +47,7 @@ export function NewVendorForm() {
           </button>
         </div>
         <form ref={formRef} action={action} className="space-y-5 p-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="name">Název dodavatele</Label>
-            <Input id="name" name="name" placeholder="Např. Novák stavby s.r.o." required autoFocus />
-          </div>
+          <AresLookup autoFocus />
           <div className="space-y-1.5">
             <Label htmlFor="email">E-mail (identifikátor)</Label>
             <Input id="email" name="email" type="email" placeholder="dodavatel@firma.cz" required />

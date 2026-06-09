@@ -6,6 +6,7 @@ import { updateVendor } from "@/server/actions/vendors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AresLookup } from "@/components/vendors/ares-lookup";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 
 const fieldClass =
@@ -18,6 +19,9 @@ type Vendor = {
   category: string;
   phone: string | null;
   description: string | null;
+  ico: string | null;
+  dic: string | null;
+  address: string | null;
   bankAccount: string | null;
   hourlyRate: number | null;
 };
@@ -58,10 +62,9 @@ export function EditVendorForm({ vendor }: { vendor: Vendor }) {
         </div>
         <form action={action} className="space-y-5 p-5">
           <input type="hidden" name="id" value={vendor.id} />
-          <div className="space-y-1.5">
-            <Label htmlFor="ev-name">Název dodavatele</Label>
-            <Input id="ev-name" name="name" defaultValue={vendor.name} required />
-          </div>
+          <AresLookup
+            initial={{ ico: vendor.ico, name: vendor.name, dic: vendor.dic, address: vendor.address }}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="ev-email">E-mail (identifikátor)</Label>
             <Input id="ev-email" name="email" type="email" defaultValue={vendor.email} required />

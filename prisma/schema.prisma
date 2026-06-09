@@ -83,6 +83,9 @@ model Vendor {
   category    String   @default("other")
   phone       String?
   description String?
+  ico         String?
+  dic         String?
+  address     String?
   hourlyRate  Decimal? @db.Decimal(12, 2)
   bankAccount String?
   createdAt   DateTime @default(now())

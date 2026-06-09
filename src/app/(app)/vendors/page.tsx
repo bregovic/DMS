@@ -72,7 +72,12 @@ export default async function VendorsPage() {
                         {v.phone}
                       </a>
                     )}
+                    {v.ico && <span>IČO {v.ico}</span>}
+                    {v.dic && <span>{v.dic}</span>}
                   </div>
+                  {v.address && (
+                    <p className="mt-1 text-sm text-stone-400">{v.address}</p>
+                  )}
                   {v.description && (
                     <p className="mt-2 max-w-xl text-sm text-stone-500">
                       {v.description}
@@ -98,6 +103,9 @@ export default async function VendorsPage() {
                         category: v.category,
                         phone: v.phone,
                         description: v.description,
+                        ico: v.ico,
+                        dic: v.dic,
+                        address: v.address,
                         bankAccount: v.bankAccount,
                         hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
                       }}
