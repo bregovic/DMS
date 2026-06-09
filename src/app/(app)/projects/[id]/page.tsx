@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, Folder, Paperclip } from "lucide-react";
+import { ArrowLeft, Folder } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectRole } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -9,11 +9,9 @@ import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectVendors } from "@/components/projects/project-vendors";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
-import { EditExpenseForm } from "@/components/expenses/edit-expense-form";
-import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
+import { ExpenseList } from "@/components/expenses/expense-list";
 import { ListFilters } from "@/components/ui/list-filters";
-import { ExpenseScan } from "@/components/expenses/expense-scan";
-import { PaymentInfo } from "@/components/expenses/payment-info";
+import { EscBack } from "@/components/app/esc-back";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { OffersPanel } from "@/components/requests/offers-panel";
@@ -22,15 +20,12 @@ import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-for
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
-import { approveExpense, deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
 import { createExpenseFromRequest, deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
-  kindLabel,
   requestStatusLabel,
   roleLabel,
-  statusLabel,
   unitLabel,
 } from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
@@ -210,6 +205,46 @@ export default async function ProjectDetailPage({
   );
   const expenseFilterActive = Boolean(eq || efrom || etoRaw);
 
+  const expenseItems = shownExpenses.map((e) => ({
+    id: e.id,
+    title: e.title,
+    kind: e.kind,
+    categoryLabel: catMap.get(e.category) ?? e.category,
+    dateLabel: formatDate(e.date),
+    vendorName: e.vendor?.name ?? null,
+    hours: e.hours != null ? Number(e.hours) : null,
+    rate: e.rate != null ? Number(e.rate) : null,
+    amount: Number(e.amount),
+    currency: e.currency,
+    stage: e.stage,
+    status: e.status,
+    paid: e.paid,
+    dueLabel: e.dueDate ? formatDate(e.dueDate) : null,
+    overdue: !e.paid && !!e.dueDate && new Date(e.dueDate) < todayStart,
+    hasBank: Boolean(e.vendor?.bankAccount),
+    docs: e.documents.map((d) => ({ id: d.id, originalName: d.originalName })),
+    createdByLabel: e.createdBy.name ?? e.createdBy.email ?? "?",
+    edit: {
+      id: e.id,
+      projectId: project.id,
+      title: e.title,
+      kind: e.kind,
+      category: e.category,
+      currency: e.currency,
+      amount: Number(e.amount),
+      hours: e.hours != null ? Number(e.hours) : null,
+      rate: e.rate != null ? Number(e.rate) : null,
+      date: e.date.toISOString().slice(0, 10),
+      dueDate: e.dueDate ? e.dueDate.toISOString().slice(0, 10) : null,
+      variableSymbol: e.variableSymbol,
+      paid: e.paid,
+      description: e.description,
+      vendorId: e.vendorId,
+      subProjectId: e.subProjectId,
+      stage: e.stage,
+    },
+  }));
+
   // Filtrace + řazení žádanek (název, datum vytvoření; řazení dle data / ceny)
   const rq = (typeof sp?.rq === "string" ? sp.rq : "").trim().toLowerCase();
   const rfrom = typeof sp?.rfrom === "string" && sp.rfrom ? new Date(sp.rfrom) : null;
@@ -270,11 +305,19 @@ export default async function ProjectDetailPage({
     getStatuses("expense"),
   ]);
   const reqStatusMap = new Map(reqStatuses.map((s) => [s.key, s.label]));
-  const expStageMap = new Map(expenseStatuses.map((s) => [s.key, s.label]));
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
     <div className="mx-auto max-w-5xl">
+      {currentSub && (
+        <EscBack
+          href={
+            currentSub.parentId
+              ? `/projects/${project.id}?sub=${currentSub.parentId}`
+              : `/projects/${project.id}`
+          }
+        />
+      )}
       <Link
         href="/projects"
         className="inline-flex items-center gap-1.5 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
@@ -500,132 +543,27 @@ export default async function ProjectDetailPage({
                 Nic neodpovídá filtru.
               </p>
             ) : (
-            <ul>
-              {shownExpenses.map((e) => (
-                <li
-                  key={e.id}
-                  className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
-                >
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate text-sm font-medium text-stone-950">
-                      {e.title}
-                      {e.documents.length > 0 && (
-                        <Paperclip className="size-3 shrink-0 text-stone-400" />
-                      )}
-                      {e.status === "for_approval" && (
-                        <span className="shrink-0 border border-amber-500 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-700">
-                          {statusLabel(e.status)}
-                        </span>
-                      )}
-                    </p>
-                    <p className="kicker mt-0.5">
-                      {kindLabel(e.kind)} · {catMap.get(e.category) ?? e.category} ·{" "}
-                      {formatDate(e.date)}
-                      {e.vendor ? ` · ${e.vendor.name}` : ""}
-                      {e.hours ? ` · ${Number(e.hours)} h × ${Number(e.rate)}` : ""}
-                      {` · zadal ${e.createdBy.name ?? e.createdBy.email ?? "?"}`}
-                    </p>
-                    <PaymentInfo
-                      expenseId={e.id}
-                      projectId={project.id}
-                      paid={e.paid}
-                      dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
-                      overdue={
-                        !e.paid && !!e.dueDate && new Date(e.dueDate) < todayStart
-                      }
-                      hasBank={Boolean(e.vendor?.bankAccount)}
-                      canManage={isOwner}
-                    />
-                    <ExpenseScan
-                      projectId={project.id}
-                      expenseId={e.id}
-                      docs={e.documents}
-                      canAttach={canAdd}
-                      types={docTypes}
-                    />
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {isOwner ? (
-                      <ExpenseStageSelect
-                        projectId={project.id}
-                        id={e.id}
-                        stage={e.stage}
-                        statuses={expenseStatuses}
-                      />
-                    ) : (
-                      e.stage && (
-                        <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
-                          {expStageMap.get(e.stage) ?? e.stage}
-                        </span>
-                      )
-                    )}
-                    <span className="font-mono text-sm text-stone-950">
-                      {formatCurrency(Number(e.amount), e.currency)}
-                    </span>
-                    {isOwner && e.status === "for_approval" && (
-                      <form action={approveExpense}>
-                        <input type="hidden" name="id" value={e.id} />
-                        <input type="hidden" name="projectId" value={project.id} />
-                        <button
-                          type="submit"
-                          title="Schválit"
-                          className="flex size-8 items-center justify-center text-emerald-600 transition-colors hover:bg-emerald-600 hover:text-white cursor-pointer"
-                        >
-                          <Check className="size-4" />
-                        </button>
-                      </form>
-                    )}
-                    {isOwner && (
-                      <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <EditExpenseForm
-                          expense={{
-                            id: e.id,
-                            projectId: project.id,
-                            title: e.title,
-                            kind: e.kind,
-                            category: e.category,
-                            currency: e.currency,
-                            amount: Number(e.amount),
-                            hours: e.hours != null ? Number(e.hours) : null,
-                            rate: e.rate != null ? Number(e.rate) : null,
-                            date: e.date.toISOString().slice(0, 10),
-                            dueDate: e.dueDate
-                              ? e.dueDate.toISOString().slice(0, 10)
-                              : null,
-                            variableSymbol: e.variableSymbol,
-                            paid: e.paid,
-                            description: e.description,
-                            vendorId: e.vendorId,
-                            subProjectId: e.subProjectId,
-                            stage: e.stage,
-                          }}
-                          vendors={accountVendors.map((v) => ({
-                            id: v.id,
-                            name: v.name,
-                            hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
-                          }))}
-                          categories={categories}
-                          subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
-                          statuses={expenseStatuses}
-                        />
-                        <DeleteButton
-                          action={deleteExpense}
-                          fields={{ id: e.id, projectId: project.id }}
-                          confirm="Smazat tento výdaj?"
-                        />
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <ExpenseList
+              projectId={project.id}
+              isOwner={isOwner}
+              canAdd={canAdd}
+              expenses={expenseItems}
+              statuses={expenseStatuses}
+              vendors={accountVendors.map((v) => ({
+                id: v.id,
+                name: v.name,
+                hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+              }))}
+              categories={categories}
+              subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+              docTypes={docTypes}
+            />
             )}
             </>
           )}
         </section>
 
-        {/* Dodavatelé (přístup) + dokumenty – jen v rootu projektu */}
-        {sub === null && (
+        {/* Dodavatelé & přístup (vždy) + dokumenty (jen v kořeni) */}
         <div className="order-1 space-y-4">
           <Collapsible
             title={`Dodavatelé & přístup · ${project.vendors.length}`}
@@ -640,6 +578,7 @@ export default async function ProjectDetailPage({
             />
           </Collapsible>
 
+          {sub === null && (
           <Collapsible
             title={`Dokumenty · ${project.documents.length}`}
           >
@@ -704,8 +643,8 @@ export default async function ProjectDetailPage({
             )}
           </section>
           </Collapsible>
+          )}
         </div>
-        )}
       </div>
 
       {/* Žádanky */}

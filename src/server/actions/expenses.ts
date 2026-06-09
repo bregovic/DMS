@@ -250,6 +250,41 @@ export async function setExpenseStage(formData: FormData) {
   revalidatePath("/payments");
 }
 
+// Hromadná akce nad vybranými výdaji (vlastník). op: stage | paid | unpaid | delete
+export async function bulkUpdateExpenses(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const op = String(formData.get("op") || "");
+  const ids = String(formData.get("ids") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Hromadnou změnu může provést jen vlastník projektu.");
+  }
+  if (ids.length === 0) return;
+
+  const where = { id: { in: ids }, projectId };
+  if (op === "delete") {
+    await prisma.expense.deleteMany({ where });
+  } else if (op === "paid") {
+    await prisma.expense.updateMany({ where, data: { paid: true } });
+  } else if (op === "unpaid") {
+    await prisma.expense.updateMany({ where, data: { paid: false } });
+  } else if (op === "stage") {
+    const stage = String(formData.get("stage") || "").trim() || null;
+    await prisma.expense.updateMany({ where, data: { stage } });
+  } else {
+    throw new Error("Neznámá operace.");
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  revalidatePath("/payments");
+}
+
 export async function approveExpense(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));
