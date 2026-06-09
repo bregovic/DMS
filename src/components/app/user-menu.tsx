@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings } from "lucide-react";
 import { signOutAction } from "@/server/actions/auth";
 
 export function UserMenu({
@@ -22,11 +23,18 @@ export function UserMenu({
         </p>
         <p className="text-xs text-stone-500 leading-tight">{email}</p>
       </div>
+      <Link
+        href="/settings"
+        title="Nastavení"
+        className="ml-1 flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
+      >
+        <Settings className="size-4" />
+      </Link>
       <form action={signOutAction}>
         <button
           type="submit"
           title="Odhlásit se"
-          className="ml-1 flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer"
+          className="flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer"
         >
           <LogOut className="size-4" />
         </button>
