@@ -10,6 +10,7 @@ import { ProjectVendors } from "@/components/projects/project-vendors";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
+import { PaymentInfo } from "@/components/expenses/payment-info";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
@@ -60,7 +61,7 @@ export default async function ProjectDetailPage({
         expenses: {
           orderBy: [{ status: "desc" }, { date: "desc" }],
           include: {
-            vendor: { select: { id: true, name: true } },
+            vendor: { select: { id: true, name: true, bankAccount: true } },
             createdBy: { select: { name: true, email: true } },
             documents: {
               select: { id: true, originalName: true },
@@ -95,6 +96,8 @@ export default async function ProjectDetailPage({
 
   const catMap = new Map(categories.map((c) => [c.key, c.label]));
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
   // --- Subprojekty (drill-down) ---
   const sub = typeof sp?.sub === "string" ? sp.sub : null;
@@ -420,6 +423,17 @@ export default async function ProjectDetailPage({
                       {e.hours ? ` · ${Number(e.hours)} h × ${Number(e.rate)}` : ""}
                       {` · zadal ${e.createdBy.name ?? e.createdBy.email ?? "?"}`}
                     </p>
+                    <PaymentInfo
+                      expenseId={e.id}
+                      projectId={project.id}
+                      paid={e.paid}
+                      dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
+                      overdue={
+                        !e.paid && !!e.dueDate && new Date(e.dueDate) < todayStart
+                      }
+                      hasBank={Boolean(e.vendor?.bankAccount)}
+                      canManage={isOwner}
+                    />
                     <ExpenseScan
                       projectId={project.id}
                       expenseId={e.id}

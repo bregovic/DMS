@@ -76,6 +76,13 @@ export async function createExpense(formData: FormData) {
   const date = dateStr ? new Date(dateStr) : new Date();
   const status = role === "owner" ? "approved" : "for_approval";
 
+  const paid =
+    formData.get("paid") === "on" || formData.get("paid") === "true";
+  const dueStr = String(formData.get("dueDate") || "");
+  const due = dueStr ? new Date(dueStr) : null;
+  const variableSymbol =
+    String(formData.get("variableSymbol") || "").trim() || null;
+
   const expense = await prisma.expense.create({
     data: {
       projectId,
@@ -88,6 +95,9 @@ export async function createExpense(formData: FormData) {
       hours,
       rate,
       date: isNaN(date.getTime()) ? new Date() : date,
+      paid,
+      dueDate: due && !isNaN(due.getTime()) ? due : null,
+      variableSymbol,
       vendorId,
       subProjectId,
       status,
@@ -142,6 +152,20 @@ export async function approveExpense(formData: FormData) {
     data: { status: "approved" },
   });
   revalidatePath(`/projects/${projectId}`);
+}
+
+export async function setExpensePaid(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+  const paid = String(formData.get("paid")) === "true";
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Stav úhrady mění jen vlastník projektu.");
+  }
+  await prisma.expense.updateMany({ where: { id, projectId }, data: { paid } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/payments");
 }
 
 export async function deleteExpense(formData: FormData) {

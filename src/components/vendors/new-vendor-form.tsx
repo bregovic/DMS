@@ -71,6 +71,15 @@ export function NewVendorForm() {
             </div>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="bankAccount">Bankovní účet / IBAN (volitelné)</Label>
+            <Input
+              id="bankAccount"
+              name="bankAccount"
+              placeholder="123-456789/0100 nebo CZ65…"
+            />
+            <p className="text-xs text-stone-400">Pro generování QR platby.</p>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="description">Popis (volitelné)</Label>
             <textarea
               id="description"

@@ -251,6 +251,23 @@ export function NewExpenseForm({
             </div>
           </div>
 
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="dueDate">Splatnost</Label>
+              <Input id="dueDate" name="dueDate" type="date" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="variableSymbol">VS</Label>
+              <Input id="variableSymbol" name="variableSymbol" inputMode="numeric" placeholder="—" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Stav</Label>
+              <label className="flex h-10 items-center gap-2 text-sm text-stone-700">
+                <input type="checkbox" name="paid" className="size-4 accent-stone-950" />
+                Uhrazeno
+              </label>
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Poznámka (volitelné)</Label>
             <textarea id="description" name="description" rows={2} className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950" />

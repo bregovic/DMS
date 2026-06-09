@@ -13,6 +13,7 @@ const vendorSchema = z.object({
   category: z.string().default("other"),
   phone: z.string().optional(),
   description: z.string().optional(),
+  bankAccount: z.string().optional(),
 });
 
 export async function createVendor(
@@ -27,6 +28,7 @@ export async function createVendor(
     category: formData.get("category") || "other",
     phone: formData.get("phone") || undefined,
     description: formData.get("description") || undefined,
+    bankAccount: formData.get("bankAccount") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
