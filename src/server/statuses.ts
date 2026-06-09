@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { REQUEST_STATUSES, OFFER_STATUSES } from "@/lib/constants";
+import { REQUEST_STATUSES, OFFER_STATUSES, EXPENSE_STATUSES } from "@/lib/constants";
 
-export type StatusScope = "request" | "offer";
+export type StatusScope = "request" | "offer" | "expense";
 export type StatusOption = { key: string; label: string };
 
 const BUILTIN: Record<StatusScope, readonly { value: string; label: string }[]> = {
   request: REQUEST_STATUSES,
   offer: OFFER_STATUSES,
+  expense: EXPENSE_STATUSES,
 };
 
 /** Vestavěné stavy + vlastní z DB (číselník StatusOption). */

@@ -32,6 +32,7 @@ export type ExpenseEdit = {
   description: string | null;
   vendorId: string | null;
   subProjectId: string | null;
+  stage: string | null;
 };
 
 export function EditExpenseForm({
@@ -39,11 +40,13 @@ export function EditExpenseForm({
   vendors,
   categories,
   subProjects,
+  statuses,
 }: {
   expense: ExpenseEdit;
   vendors: Vendor[];
   categories: { key: string; label: string }[];
   subProjects: { id: string; name: string }[];
+  statuses: { key: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState(expense.kind);
@@ -256,10 +259,26 @@ export function EditExpenseForm({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-stone-700">
-            <input type="checkbox" name="paid" defaultChecked={expense.paid} className="size-4 accent-stone-950" />
-            Uhrazeno
-          </label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="ee-stage">Stav</Label>
+              <select id="ee-stage" name="stage" defaultValue={expense.stage ?? ""} className={fieldClass}>
+                <option value="">— bez stavu —</option>
+                {statuses.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Úhrada</Label>
+              <label className="flex h-10 items-center gap-2 text-sm text-stone-700">
+                <input type="checkbox" name="paid" defaultChecked={expense.paid} className="size-4 accent-stone-950" />
+                Uhrazeno
+              </label>
+            </div>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="ee-desc">Poznámka (volitelné)</Label>

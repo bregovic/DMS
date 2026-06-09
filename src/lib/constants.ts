@@ -109,6 +109,19 @@ export function offerStatusLabel(value: string) {
   return OFFER_STATUSES.find((s) => s.value === value)?.label ?? value;
 }
 
+// Životní cyklus výdaje (vestavěné). Vlastní stavy se přidávají do číselníku
+// StatusOption scope "expense". Úhrada a schvalování jsou samostatné.
+export const EXPENSE_STATUSES = [
+  { value: "k_objednani", label: "K objednání" },
+  { value: "objednano", label: "Objednáno" },
+  { value: "k_uhrade", label: "K úhradě" },
+  { value: "uhrazeno", label: "Uhrazeno" },
+] as const;
+
+export function expenseStatusLabel(value: string) {
+  return EXPENSE_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
 export const DOCUMENT_TYPES = [
   { value: "receipt", label: "Účtenka" },
   { value: "invoice", label: "Faktura" },

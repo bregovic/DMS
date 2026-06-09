@@ -13,11 +13,13 @@ type Kind =
   | "expenseCategory"
   | "documentType"
   | "requestStatus"
-  | "offerStatus";
+  | "offerStatus"
+  | "expenseStatus";
 
-const STATUS_SCOPE: Partial<Record<Kind, "request" | "offer">> = {
+const STATUS_SCOPE: Partial<Record<Kind, "request" | "offer" | "expense">> = {
   requestStatus: "request",
   offerStatus: "offer",
+  expenseStatus: "expense",
 };
 
 async function getKey(kind: Kind, id: string): Promise<string | null> {
@@ -35,7 +37,8 @@ async function usedCount(kind: Kind, key: string): Promise<number> {
   if (kind === "expenseCategory") return prisma.expense.count({ where: { category: key } });
   if (kind === "documentType") return prisma.document.count({ where: { type: key } });
   if (kind === "requestStatus") return prisma.request.count({ where: { status: key } });
-  return prisma.offer.count({ where: { status: key } });
+  if (kind === "offerStatus") return prisma.offer.count({ where: { status: key } });
+  return prisma.expense.count({ where: { stage: key } });
 }
 
 export async function addCodelistItem(formData: FormData) {

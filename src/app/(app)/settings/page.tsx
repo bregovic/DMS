@@ -6,8 +6,15 @@ import { CodelistManager } from "@/components/account/codelist-manager";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [dbUser, projTypes, expCats, docTypes, reqStatuses, offerStatuses] =
-    await Promise.all([
+  const [
+    dbUser,
+    projTypes,
+    expCats,
+    docTypes,
+    reqStatuses,
+    offerStatuses,
+    expStatuses,
+  ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: user.id },
         select: { passwordHash: true },
@@ -31,6 +38,11 @@ export default async function SettingsPage() {
       }),
       prisma.statusOption.findMany({
         where: { scope: "offer" },
+        orderBy: [{ sort: "asc" }, { label: "asc" }],
+        select: { id: true, label: true },
+      }),
+      prisma.statusOption.findMany({
+        where: { scope: "expense" },
         orderBy: [{ sort: "asc" }, { label: "asc" }],
         select: { id: true, label: true },
       }),
@@ -84,6 +96,7 @@ export default async function SettingsPage() {
               items: reqStatuses,
             },
             { kind: "offerStatus", title: "Stavy nabídek", items: offerStatuses },
+            { kind: "expenseStatus", title: "Stavy výdajů", items: expStatuses },
           ]}
         />
       </section>

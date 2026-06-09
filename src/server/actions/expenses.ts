@@ -98,6 +98,7 @@ export async function createExpense(formData: FormData) {
       paid,
       dueDate: due && !isNaN(due.getTime()) ? due : null,
       variableSymbol,
+      stage: String(formData.get("stage") || "").trim() || null,
       vendorId,
       subProjectId,
       status,
@@ -222,6 +223,7 @@ export async function updateExpense(formData: FormData) {
       paid,
       dueDate: due && !isNaN(due.getTime()) ? due : null,
       variableSymbol,
+      stage: String(formData.get("stage") || "").trim() || null,
       vendorId,
       subProjectId,
     },
@@ -232,6 +234,20 @@ export async function updateExpense(formData: FormData) {
   revalidatePath("/reports");
   revalidatePath("/payments");
   revalidatePath("/vendors");
+}
+
+export async function setExpenseStage(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+  const stage = String(formData.get("stage") || "").trim() || null;
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Stav výdaje mění jen vlastník projektu.");
+  }
+  await prisma.expense.updateMany({ where: { id, projectId }, data: { stage } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/payments");
 }
 
 export async function approveExpense(formData: FormData) {

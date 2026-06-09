@@ -10,6 +10,8 @@ import { ProjectVendors } from "@/components/projects/project-vendors";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { EditExpenseForm } from "@/components/expenses/edit-expense-form";
+import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
+import { ExpenseFilters } from "@/components/expenses/expense-filters";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { NewRequestForm } from "@/components/requests/new-request-form";
@@ -185,6 +187,28 @@ export default async function ProjectDetailPage({
   // Náklady přímo na této úrovni (mimo podsložky)
   const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
+  // Filtrace (název, datum) + řazení (datum / částka) výdajů na této úrovni
+  const eq = (typeof sp?.eq === "string" ? sp.eq : "").trim().toLowerCase();
+  const efrom = typeof sp?.efrom === "string" && sp.efrom ? new Date(sp.efrom) : null;
+  const etoRaw = typeof sp?.eto === "string" && sp.eto ? new Date(sp.eto) : null;
+  if (etoRaw) etoRaw.setHours(23, 59, 59, 999);
+  const esort = sp?.esort === "amount" ? "amount" : "date";
+  const edir = sp?.edir === "asc" ? "asc" : "desc";
+
+  let shownExpenses = levelExpenses;
+  if (eq) shownExpenses = shownExpenses.filter((e) => e.title.toLowerCase().includes(eq));
+  if (efrom && !isNaN(efrom.getTime()))
+    shownExpenses = shownExpenses.filter((e) => e.date >= efrom);
+  if (etoRaw && !isNaN(etoRaw.getTime()))
+    shownExpenses = shownExpenses.filter((e) => e.date <= etoRaw);
+  const sign = edir === "asc" ? 1 : -1;
+  shownExpenses = [...shownExpenses].sort((a, b) =>
+    esort === "amount"
+      ? (Number(a.amount) - Number(b.amount)) * sign
+      : (a.date.getTime() - b.date.getTime()) * sign,
+  );
+  const expenseFilterActive = Boolean(eq || efrom || etoRaw);
+
   const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
   const docTypesPresent = docTypes.filter((t) =>
     project.documents.some((d) => d.type === t.value),
@@ -217,11 +241,13 @@ export default async function ProjectDetailPage({
   const assignedIds = new Set(project.vendors.map((v) => v.id));
   const availableVendors = accountVendors.filter((v) => !assignedIds.has(v.id));
 
-  const [reqStatuses, offerStatuses] = await Promise.all([
+  const [reqStatuses, offerStatuses, expenseStatuses] = await Promise.all([
     getStatuses("request"),
     getStatuses("offer"),
+    getStatuses("expense"),
   ]);
   const reqStatusMap = new Map(reqStatuses.map((s) => [s.key, s.label]));
+  const expStageMap = new Map(expenseStatuses.map((s) => [s.key, s.label]));
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
@@ -398,7 +424,8 @@ export default async function ProjectDetailPage({
         <section className="order-2">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">
-              Výdaje · {levelExpenses.length}
+              Výdaje · {shownExpenses.length}
+              {expenseFilterActive ? ` z ${levelExpenses.length}` : ""}
               {onlyMine ? " · jen tvoje" : ""}
             </h2>
             {canAdd && (
@@ -412,6 +439,7 @@ export default async function ProjectDetailPage({
                 }))}
                 categories={categories}
                 docTypes={docTypes}
+                statuses={expenseStatuses}
               />
             )}
           </div>
@@ -419,8 +447,15 @@ export default async function ProjectDetailPage({
           {levelExpenses.length === 0 ? (
             <p className="py-8 text-sm text-stone-500">Zatím žádné výdaje.</p>
           ) : (
+            <>
+            <ExpenseFilters />
+            {shownExpenses.length === 0 ? (
+              <p className="py-8 text-sm text-stone-500">
+                Nic neodpovídá filtru.
+              </p>
+            ) : (
             <ul>
-              {levelExpenses.map((e) => (
+              {shownExpenses.map((e) => (
                 <li
                   key={e.id}
                   className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
@@ -464,6 +499,20 @@ export default async function ProjectDetailPage({
                     />
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {isOwner ? (
+                      <ExpenseStageSelect
+                        projectId={project.id}
+                        id={e.id}
+                        stage={e.stage}
+                        statuses={expenseStatuses}
+                      />
+                    ) : (
+                      e.stage && (
+                        <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                          {expStageMap.get(e.stage) ?? e.stage}
+                        </span>
+                      )
+                    )}
                     <span className="font-mono text-sm text-stone-950">
                       {formatCurrency(Number(e.amount), e.currency)}
                     </span>
@@ -502,6 +551,7 @@ export default async function ProjectDetailPage({
                             description: e.description,
                             vendorId: e.vendorId,
                             subProjectId: e.subProjectId,
+                            stage: e.stage,
                           }}
                           vendors={accountVendors.map((v) => ({
                             id: v.id,
@@ -510,6 +560,7 @@ export default async function ProjectDetailPage({
                           }))}
                           categories={categories}
                           subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+                          statuses={expenseStatuses}
                         />
                         <DeleteButton
                           action={deleteExpense}
@@ -522,6 +573,8 @@ export default async function ProjectDetailPage({
                 </li>
               ))}
             </ul>
+            )}
+            </>
           )}
         </section>
 

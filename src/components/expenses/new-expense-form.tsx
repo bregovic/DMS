@@ -33,12 +33,14 @@ export function NewExpenseForm({
   vendors,
   categories,
   docTypes,
+  statuses,
 }: {
   projectId: string;
   subProjectId?: string;
   vendors: Vendor[];
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
+  statuses: { key: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -261,12 +263,23 @@ export function NewExpenseForm({
               <Input id="variableSymbol" name="variableSymbol" inputMode="numeric" placeholder="—" />
             </div>
             <div className="space-y-1.5">
-              <Label>Stav</Label>
+              <Label>Úhrada</Label>
               <label className="flex h-10 items-center gap-2 text-sm text-stone-700">
                 <input type="checkbox" name="paid" className="size-4 accent-stone-950" />
                 Uhrazeno
               </label>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="stage">Stav</Label>
+            <select id="stage" name="stage" defaultValue="" className={fieldClass}>
+              <option value="">— bez stavu —</option>
+              {statuses.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Poznámka (volitelné)</Label>
