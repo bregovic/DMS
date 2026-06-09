@@ -19,7 +19,7 @@ import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
 import { approveExpense, deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
-import { deleteRequest } from "@/server/actions/requests";
+import { createExpenseFromRequest, deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   kindLabel,
@@ -567,11 +567,11 @@ export default async function ProjectDetailPage({
         )}
       </div>
 
-      {/* Poptávky */}
+      {/* Žádanky */}
       <section className="mt-12">
         <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
           <h2 className="kicker">
-            Poptávky · {levelRequests.length}
+            Žádanky · {levelRequests.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
           {canAdd && (
@@ -584,7 +584,7 @@ export default async function ProjectDetailPage({
           )}
         </div>
         {levelRequests.length === 0 ? (
-          <p className="py-6 text-sm text-stone-500">Zatím žádné poptávky.</p>
+          <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
         ) : (
           <ul>
             {levelRequests.map((r) => (
@@ -600,6 +600,7 @@ export default async function ProjectDetailPage({
                       : ""}
                     {catMap.get(r.category) ?? r.category}
                     {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
+                    {r.price != null ? ` · ${formatCurrency(Number(r.price))}` : ""}
                     {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
                     {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
                   </p>
@@ -616,12 +617,25 @@ export default async function ProjectDetailPage({
                       {requestStatusLabel(r.status)}
                     </span>
                   )}
+                  {isOwner && r.vendorId && r.price != null && (
+                    <form action={createExpenseFromRequest}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <button
+                        type="submit"
+                        title="Založit výdaj ze žádanky"
+                        className="whitespace-nowrap border border-stone-300 px-2 py-1 text-[11px] text-stone-600 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
+                      >
+                        → Výdaj
+                      </button>
+                    </form>
+                  )}
                   {isOwner && (
                     <span className="opacity-0 transition-opacity group-hover:opacity-100">
                       <DeleteButton
                         action={deleteRequest}
                         fields={{ id: r.id, projectId: project.id }}
-                        confirm="Smazat tuto poptávku?"
+                        confirm="Smazat tuto žádanku?"
                       />
                     </span>
                   )}

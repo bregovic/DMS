@@ -58,11 +58,12 @@ export async function createRequest(formData: FormData) {
       quantity: num(formData.get("quantity")),
       unit: String(formData.get("unit") || "ks"),
       category: String(formData.get("category") || "other"),
+      price: num(formData.get("price")),
       vendorId,
       subProjectId,
       requiredDate:
         requiredDate && !isNaN(requiredDate.getTime()) ? requiredDate : null,
-      status: "new",
+      status: "poptavka",
       createdById: user.id,
     },
   });
@@ -81,6 +82,46 @@ export async function setRequestStatus(formData: FormData) {
   }
   await prisma.request.updateMany({ where: { id, projectId }, data: { status } });
   revalidatePath(`/projects/${projectId}`);
+}
+
+export async function createExpenseFromRequest(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Výdaj ze žádanky může založit jen vlastník projektu.");
+  }
+  const req = await prisma.request.findFirst({ where: { id, projectId } });
+  if (!req) throw new Error("Žádanka nenalezena.");
+  if (!req.vendorId || req.price == null) {
+    throw new Error("Žádanka musí mít vyplněného dodavatele a cenu.");
+  }
+
+  await prisma.expense.create({
+    data: {
+      projectId,
+      title: req.title,
+      description: req.description,
+      amount: req.price,
+      currency: "CZK",
+      category: req.category,
+      kind: "expense",
+      status: "approved",
+      date: new Date(),
+      vendorId: req.vendorId,
+      subProjectId: req.subProjectId,
+      createdById: user.id,
+    },
+  });
+  await prisma.request.update({
+    where: { id },
+    data: { status: "schvaleno" },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
 }
 
 export async function deleteRequest(formData: FormData) {

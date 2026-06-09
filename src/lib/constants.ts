@@ -58,7 +58,6 @@ export function roleLabel(value: string) {
 export const EXPENSE_KINDS = [
   { value: "expense", label: "Výdaj" },
   { value: "work", label: "Práce" },
-  { value: "purchase", label: "Nákup" },
 ] as const;
 
 export function kindLabel(value: string) {
@@ -88,10 +87,11 @@ export function unitLabel(value: string) {
 }
 
 export const REQUEST_STATUSES = [
-  { value: "new", label: "Nová" },
-  { value: "approved", label: "Schváleno" },
-  { value: "selected", label: "Vybráno" },
-  { value: "bought", label: "Koupeno" },
+  { value: "poptavka", label: "Poptávka" },
+  { value: "nabidka", label: "Nabídka" },
+  { value: "vyhovuje", label: "Vyhovuje" },
+  { value: "schvaleno", label: "Schváleno" },
+  { value: "zruseno", label: "Zrušeno" },
 ] as const;
 
 export function requestStatusLabel(value: string) {

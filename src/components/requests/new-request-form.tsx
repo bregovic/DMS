@@ -30,7 +30,7 @@ export function NewRequestForm({
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
-        Poptávka
+        Žádanka
       </Button>
     );
   }
@@ -39,7 +39,7 @@ export function NewRequestForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nová poptávka</h3>
+          <h3 className="kicker">Nová žádanka</h3>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -106,6 +106,14 @@ export function NewRequestForm({
               <Label htmlFor="requiredDate">Požadované datum</Label>
               <Input id="requiredDate" name="requiredDate" type="date" />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="price">Cena / nabídka (volitelné)</Label>
+            <Input id="price" name="price" type="number" step="0.01" min="0" placeholder="0" />
+            <p className="text-xs text-stone-400">
+              S dodavatelem + cenou lze ze žádanky založit výdaj.
+            </p>
           </div>
 
           <div className="space-y-1.5">
