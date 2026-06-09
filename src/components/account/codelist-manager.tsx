@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X, ChevronRight } from "lucide-react";
 import {
   addCodelistItem,
   deleteCodelistItem,
@@ -114,24 +114,67 @@ function AddRow({ kind }: { kind: string }) {
   );
 }
 
-export function CodelistManager({ groups }: { groups: Group[] }) {
+function CodelistDialog({ group, onClose }: { group: Group; onClose: () => void }) {
   return (
-    <div className="space-y-8">
-      {groups.map((g) => (
-        <div key={g.kind}>
-          <h3 className="kicker mb-2">{g.title}</h3>
-          {g.items.length === 0 ? (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
+      <div className="w-full max-w-md border border-stone-300 bg-white">
+        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
+          <h3 className="kicker">{group.title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-stone-400 hover:text-stone-950 cursor-pointer"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="p-5">
+          {group.items.length === 0 ? (
             <p className="text-sm text-stone-400">Žádné vlastní položky.</p>
           ) : (
-            <ul className="max-w-md border-t border-stone-200">
-              {g.items.map((it) => (
-                <Row key={it.id} kind={g.kind} item={it} />
+            <ul className="border-t border-stone-200">
+              {group.items.map((it) => (
+                <Row key={it.id} kind={group.kind} item={it} />
               ))}
             </ul>
           )}
-          <AddRow kind={g.kind} />
+          <AddRow kind={group.kind} />
         </div>
-      ))}
+      </div>
     </div>
+  );
+}
+
+export function CodelistManager({ groups }: { groups: Group[] }) {
+  const [openKind, setOpenKind] = useState<string | null>(null);
+  const openGroup = groups.find((g) => g.kind === openKind) ?? null;
+
+  return (
+    <>
+      <ul className="max-w-md border-t border-stone-200">
+        {groups.map((g) => (
+          <li key={g.kind}>
+            <button
+              type="button"
+              onClick={() => setOpenKind(g.kind)}
+              className="group flex w-full items-center justify-between border-b border-stone-200 py-2.5 text-left text-sm text-stone-800 hover:text-stone-950 cursor-pointer"
+            >
+              <span>
+                {g.title}
+                {g.items.length > 0 && (
+                  <span className="ml-2 text-xs text-stone-400">
+                    {g.items.length} vlastních
+                  </span>
+                )}
+              </span>
+              <ChevronRight className="size-4 text-stone-400 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {openGroup && (
+        <CodelistDialog group={openGroup} onClose={() => setOpenKind(null)} />
+      )}
+    </>
   );
 }
