@@ -11,7 +11,7 @@ import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { EditExpenseForm } from "@/components/expenses/edit-expense-form";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
-import { ExpenseFilters } from "@/components/expenses/expense-filters";
+import { ListFilters } from "@/components/ui/list-filters";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { NewRequestForm } from "@/components/requests/new-request-form";
@@ -208,6 +208,28 @@ export default async function ProjectDetailPage({
       : (a.date.getTime() - b.date.getTime()) * sign,
   );
   const expenseFilterActive = Boolean(eq || efrom || etoRaw);
+
+  // Filtrace + řazení žádanek (název, datum vytvoření; řazení dle data / ceny)
+  const rq = (typeof sp?.rq === "string" ? sp.rq : "").trim().toLowerCase();
+  const rfrom = typeof sp?.rfrom === "string" && sp.rfrom ? new Date(sp.rfrom) : null;
+  const rtoRaw = typeof sp?.rto === "string" && sp.rto ? new Date(sp.rto) : null;
+  if (rtoRaw) rtoRaw.setHours(23, 59, 59, 999);
+  const rsort = sp?.rsort === "price" ? "price" : "date";
+  const rdir = sp?.rdir === "asc" ? "asc" : "desc";
+
+  let shownRequests = levelRequests;
+  if (rq) shownRequests = shownRequests.filter((r) => r.title.toLowerCase().includes(rq));
+  if (rfrom && !isNaN(rfrom.getTime()))
+    shownRequests = shownRequests.filter((r) => r.createdAt >= rfrom);
+  if (rtoRaw && !isNaN(rtoRaw.getTime()))
+    shownRequests = shownRequests.filter((r) => r.createdAt <= rtoRaw);
+  const rsign = rdir === "asc" ? 1 : -1;
+  shownRequests = [...shownRequests].sort((a, b) =>
+    rsort === "price"
+      ? (Number(a.price ?? 0) - Number(b.price ?? 0)) * rsign
+      : (a.createdAt.getTime() - b.createdAt.getTime()) * rsign,
+  );
+  const requestFilterActive = Boolean(rq || rfrom || rtoRaw);
 
   const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
   const docTypesPresent = docTypes.filter((t) =>
@@ -448,7 +470,13 @@ export default async function ProjectDetailPage({
             <p className="py-8 text-sm text-stone-500">Zatím žádné výdaje.</p>
           ) : (
             <>
-            <ExpenseFilters />
+            <ListFilters
+              prefix="e"
+              sortOptions={[
+                { value: "date", label: "Datum" },
+                { value: "amount", label: "Částka" },
+              ]}
+            />
             {shownExpenses.length === 0 ? (
               <p className="py-8 text-sm text-stone-500">
                 Nic neodpovídá filtru.
@@ -674,7 +702,8 @@ export default async function ProjectDetailPage({
       <section className="mt-12">
         <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
           <h2 className="kicker">
-            Žádanky · {levelRequests.length}
+            Žádanky · {shownRequests.length}
+            {requestFilterActive ? ` z ${levelRequests.length}` : ""}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
           {canAdd && (
@@ -689,8 +718,19 @@ export default async function ProjectDetailPage({
         {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
         ) : (
+          <>
+          <ListFilters
+            prefix="r"
+            sortOptions={[
+              { value: "date", label: "Datum" },
+              { value: "price", label: "Cena" },
+            ]}
+          />
+          {shownRequests.length === 0 ? (
+            <p className="py-6 text-sm text-stone-500">Nic neodpovídá filtru.</p>
+          ) : (
           <ul>
-            {levelRequests.map((r) => (
+            {shownRequests.map((r) => (
               <li
                 key={r.id}
                 className="group border-b border-stone-200 py-3.5"
@@ -773,6 +813,8 @@ export default async function ProjectDetailPage({
               </li>
             ))}
           </ul>
+          )}
+          </>
         )}
       </section>
     </div>

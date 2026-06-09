@@ -4,30 +4,41 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowDownUp, X } from "lucide-react";
 
-// Filtrace (název, datum od–do) a řazení (datum / částka) výdajů.
-// Stav drží v URL (searchParams) – ostatní parametry (sub, docType) se zachovají.
-export function ExpenseFilters() {
+// Obecná lišta filtrace (název, datum od–do) a řazení. Stav drží v URL pod
+// daným prefixem (např. "e" pro výdaje, "r" pro žádanky), ostatní parametry
+// (sub, docType) se zachovají. Sdílí výdaje i žádanky.
+export function ListFilters({
+  prefix,
+  placeholder = "Hledat v názvu…",
+  sortOptions,
+}: {
+  prefix: string;
+  placeholder?: string;
+  sortOptions: { value: string; label: string }[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const k = (s: string) => `${prefix}${s}`;
 
-  const [q, setQ] = useState(sp.get("eq") ?? "");
-  const from = sp.get("efrom") ?? "";
-  const to = sp.get("eto") ?? "";
-  const sort = sp.get("esort") ?? "date";
-  const dir = sp.get("edir") ?? "desc";
+  const [q, setQ] = useState(sp.get(k("q")) ?? "");
+  const from = sp.get(k("from")) ?? "";
+  const to = sp.get(k("to")) ?? "";
+  const sort = sp.get(k("sort")) ?? sortOptions[0].value;
+  const dir = sp.get(k("dir")) ?? "desc";
 
   function setParam(updates: Record<string, string | null>) {
     const params = new URLSearchParams(sp.toString());
-    for (const [k, v] of Object.entries(updates)) {
-      if (v == null || v === "") params.delete(k);
-      else params.set(k, v);
+    for (const [key, v] of Object.entries(updates)) {
+      if (v == null || v === "") params.delete(key);
+      else params.set(key, v);
     }
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  const active = q || from || to || sp.get("esort") || sp.get("edir");
+  const active =
+    q || from || to || sp.get(k("sort")) || sp.get(k("dir"));
   const inputClass =
     "h-8 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950";
 
@@ -37,10 +48,10 @@ export function ExpenseFilters() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") setParam({ eq: q });
+          if (e.key === "Enter") setParam({ [k("q")]: q });
         }}
-        onBlur={() => setParam({ eq: q })}
-        placeholder="Hledat v názvu…"
+        onBlur={() => setParam({ [k("q")]: q })}
+        placeholder={placeholder}
         className={`${inputClass} w-44`}
       />
       <label className="flex items-center gap-1 text-xs text-stone-500">
@@ -48,7 +59,7 @@ export function ExpenseFilters() {
         <input
           type="date"
           value={from}
-          onChange={(e) => setParam({ efrom: e.target.value })}
+          onChange={(e) => setParam({ [k("from")]: e.target.value })}
           className={inputClass}
         />
       </label>
@@ -57,7 +68,7 @@ export function ExpenseFilters() {
         <input
           type="date"
           value={to}
-          onChange={(e) => setParam({ eto: e.target.value })}
+          onChange={(e) => setParam({ [k("to")]: e.target.value })}
           className={inputClass}
         />
       </label>
@@ -65,16 +76,19 @@ export function ExpenseFilters() {
       <div className="ml-auto flex items-center gap-1">
         <select
           value={sort}
-          onChange={(e) => setParam({ esort: e.target.value })}
+          onChange={(e) => setParam({ [k("sort")]: e.target.value })}
           className={inputClass}
         >
-          <option value="date">Datum</option>
-          <option value="amount">Částka</option>
+          {sortOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
         <button
           type="button"
           title={dir === "asc" ? "Vzestupně" : "Sestupně"}
-          onClick={() => setParam({ edir: dir === "asc" ? "desc" : "asc" })}
+          onClick={() => setParam({ [k("dir")]: dir === "asc" ? "desc" : "asc" })}
           className="flex h-8 items-center gap-1 border border-stone-300 px-2 text-xs text-stone-700 hover:border-stone-950 cursor-pointer"
         >
           <ArrowDownUp className="size-3.5" />
@@ -86,7 +100,13 @@ export function ExpenseFilters() {
             title="Zrušit filtr a řazení"
             onClick={() => {
               setQ("");
-              setParam({ eq: null, efrom: null, eto: null, esort: null, edir: null });
+              setParam({
+                [k("q")]: null,
+                [k("from")]: null,
+                [k("to")]: null,
+                [k("sort")]: null,
+                [k("dir")]: null,
+              });
             }}
             className="flex size-8 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer"
           >
