@@ -31,8 +31,12 @@ export async function createSubProject(formData: FormData) {
     if (!parent) parentId = null;
   }
 
-  const deadlineStr = String(formData.get("deadline") || "");
-  const deadline = deadlineStr ? new Date(deadlineStr) : null;
+  const toDate = (key: string) => {
+    const s = String(formData.get(key) || "");
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
 
   await prisma.subProject.create({
     data: {
@@ -41,12 +45,68 @@ export async function createSubProject(formData: FormData) {
       name,
       description: String(formData.get("description") || "").trim() || null,
       budget: num(formData.get("budget")),
-      deadline: deadline && !isNaN(deadline.getTime()) ? deadline : null,
+      startDate: toDate("startDate"),
+      deadline: toDate("deadline"),
       createdById: user.id,
     },
   });
 
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/planning");
+}
+
+export async function updateSubProject(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+
+  const role = await getProjectRole(projectId, user);
+  const sub = await prisma.subProject.findFirst({
+    where: { id, projectId },
+    select: { createdById: true },
+  });
+  if (!sub) throw new Error("Subprojekt nenalezen.");
+  if (role !== "owner" && sub.createdById !== user.id) {
+    throw new Error("Nemáš oprávnění upravit tento subprojekt.");
+  }
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Zadej název subprojektu.");
+
+  const toDate = (key: string) => {
+    const s = String(formData.get(key) || "");
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  // Návaznost – jen jiný subprojekt téhož projektu (a ne sám na sebe)
+  let dependsOnId = String(formData.get("dependsOnId") || "") || null;
+  if (dependsOnId) {
+    if (dependsOnId === id) dependsOnId = null;
+    else {
+      const dep = await prisma.subProject.findFirst({
+        where: { id: dependsOnId, projectId },
+        select: { id: true },
+      });
+      if (!dep) dependsOnId = null;
+    }
+  }
+
+  await prisma.subProject.update({
+    where: { id },
+    data: {
+      name,
+      description: String(formData.get("description") || "").trim() || null,
+      budget: num(formData.get("budget")),
+      startDate: toDate("startDate"),
+      deadline: toDate("deadline"),
+      dependsOnId,
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/planning");
 }
 
 export async function deleteSubProject(formData: FormData) {

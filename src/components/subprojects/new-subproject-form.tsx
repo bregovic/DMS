@@ -54,14 +54,18 @@ export function NewSubProjectForm({
             <Label htmlFor="name">Název</Label>
             <Input id="name" name="name" placeholder="Např. Střecha" required autoFocus />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="budget">Rozpočet (volitelné)</Label>
-              <Input id="budget" name="budget" type="number" step="0.01" min="0" placeholder="0" />
+              <Label htmlFor="startDate">Začátek</Label>
+              <Input id="startDate" name="startDate" type="date" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="deadline">Termín (volitelné)</Label>
+              <Label htmlFor="deadline">Termín</Label>
               <Input id="deadline" name="deadline" type="date" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="budget">Rozpočet</Label>
+              <Input id="budget" name="budget" type="number" step="0.01" min="0" placeholder="0" />
             </div>
           </div>
           <div className="space-y-1.5">

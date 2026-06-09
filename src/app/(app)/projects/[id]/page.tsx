@@ -18,6 +18,7 @@ import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
+import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
@@ -426,7 +427,24 @@ export default async function ProjectDetailPage({
                     </div>
                   </Link>
                   {(isOwner || s.createdById === user.id) && (
-                    <span className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <EditSubProjectForm
+                        sub={{
+                          id: s.id,
+                          projectId: project.id,
+                          name: s.name,
+                          description: s.description,
+                          budget: s.budget != null ? Number(s.budget) : null,
+                          startDate: s.startDate
+                            ? s.startDate.toISOString().slice(0, 10)
+                            : null,
+                          deadline: s.deadline
+                            ? s.deadline.toISOString().slice(0, 10)
+                            : null,
+                          dependsOnId: s.dependsOnId,
+                        }}
+                        siblings={subs.map((x) => ({ id: x.id, name: x.name }))}
+                      />
                       <DeleteButton
                         action={deleteSubProject}
                         fields={{ id: s.id, projectId: project.id }}

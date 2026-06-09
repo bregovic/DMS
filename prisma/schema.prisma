@@ -221,17 +221,21 @@ model SubProject {
   name        String
   description String?
   budget      Decimal?  @db.Decimal(12, 2)
+  startDate   DateTime?
   deadline    DateTime?
+  dependsOnId String?
   createdById String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent    SubProject?  @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  SubProject[] @relation("SubTree")
-  createdBy User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
-  expenses  Expense[]
-  requests  Request[]
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent     SubProject?  @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   SubProject[] @relation("SubTree")
+  dependsOn  SubProject?  @relation("SubDeps", fields: [dependsOnId], references: [id], onDelete: SetNull)
+  dependents SubProject[] @relation("SubDeps")
+  createdBy  User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
+  expenses   Expense[]
+  requests   Request[]
 
   @@index([projectId])
   @@index([parentId])
