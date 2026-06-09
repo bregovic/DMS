@@ -50,6 +50,12 @@ export function ImportForm() {
               </span>
             </li>
             <li>
+              Nových subprojektů:{" "}
+              <span className="font-mono text-stone-950">
+                {state.summary.newSubProjects}
+              </span>
+            </li>
+            <li>
               Nových dodavatelů:{" "}
               <span className="font-mono text-stone-950">
                 {state.summary.newVendors}

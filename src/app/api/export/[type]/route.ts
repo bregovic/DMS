@@ -13,6 +13,7 @@ const COLUMNS = [
   "Částka",
   "Měna",
   "Projekt",
+  "Subprojekt",
 ];
 
 function csvField(value: string): string {
@@ -66,6 +67,7 @@ export async function GET(
       "1000",
       "CZK",
       "Můj projekt",
+      "Etapa 1",
     ]);
     return csvResponse([header, example], "dms-sablona.csv");
   }
@@ -77,6 +79,7 @@ export async function GET(
         orderBy: { date: "desc" },
         include: {
           project: { select: { name: true } },
+          subProject: { select: { name: true } },
           vendor: { select: { name: true, email: true } },
         },
       }),
@@ -96,6 +99,7 @@ export async function GET(
           String(Number(e.amount)),
           e.currency,
           e.project.name,
+          e.subProject?.name ?? "",
         ]),
       );
     }

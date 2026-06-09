@@ -14,6 +14,7 @@ export type ImportSummary = {
   updated: number;
   skipped: number;
   newProjects: number;
+  newSubProjects: number;
   newVendors: number;
   newCategories: number;
 };
@@ -76,6 +77,7 @@ export async function importExpensesCsv(
     amount: col("Částka"),
     currency: col("Měna"),
     project: col("Projekt"),
+    subproject: col("Subprojekt"),
   };
 
   if (ci.project < 0 || ci.amount < 0) {
@@ -92,11 +94,13 @@ export async function importExpensesCsv(
   }
 
   const projectCache = new Map<string, string>();
+  const subProjectCache = new Map<string, string>();
   const vendorCache = new Map<string, string>();
   let created = 0;
   let updated = 0;
   let skipped = 0;
   let newProjects = 0;
+  let newSubProjects = 0;
   let newVendors = 0;
   let newCategories = 0;
 
@@ -145,6 +149,31 @@ export async function importExpensesCsv(
       projectCache.set(pKey, projectId);
     }
 
+    // Subprojekt (volitelně) – najdi nebo vytvoř pod projektem
+    let subProjectId: string | null = null;
+    const subName = get(r, ci.subproject);
+    if (subName) {
+      const sKey = `${projectId}::${subName.toLowerCase()}`;
+      subProjectId = subProjectCache.get(sKey) ?? null;
+      if (!subProjectId) {
+        const existing = await prisma.subProject.findFirst({
+          where: { projectId, name: subName },
+          select: { id: true },
+        });
+        if (existing) {
+          subProjectId = existing.id;
+        } else {
+          const s = await prisma.subProject.create({
+            data: { projectId, name: subName, createdById: user.id },
+            select: { id: true },
+          });
+          subProjectId = s.id;
+          newSubProjects++;
+        }
+        subProjectCache.set(sKey, subProjectId);
+      }
+    }
+
     // Dodavatel (volitelně)
     let vendorId: string | null = null;
     const email = get(r, ci.email);
@@ -184,6 +213,7 @@ export async function importExpensesCsv(
     const categoryKey = await resolveCategory(get(r, ci.cat));
     const data = {
       projectId,
+      subProjectId,
       vendorId,
       title: get(r, ci.desc) || "Výdaj",
       amount,
@@ -218,6 +248,14 @@ export async function importExpensesCsv(
   revalidatePath("/reports");
 
   return {
-    summary: { created, updated, skipped, newProjects, newVendors, newCategories },
+    summary: {
+      created,
+      updated,
+      skipped,
+      newProjects,
+      newSubProjects,
+      newVendors,
+      newCategories,
+    },
   };
 }

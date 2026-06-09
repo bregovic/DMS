@@ -10,7 +10,8 @@ export default async function ImportPage() {
       <header className="mb-8 border-b border-stone-300/80 pb-6">
         <h1 className="display text-4xl text-stone-950">Import &amp; export</h1>
         <p className="mt-2 text-sm text-stone-500">
-          Hromadně naimportuje výdaje včetně projektů, dodavatelů a kategorií.
+          Hromadně naimportuje výdaje včetně projektů, subprojektů, dodavatelů a
+          kategorií.
         </p>
       </header>
 
@@ -41,8 +42,10 @@ export default async function ImportPage() {
         <p>
           Necháš-li u řádku vyplněné <span className="font-mono">ID</span> z
           exportu, výdaj se při importu <span className="text-stone-950">aktualizuje</span>{" "}
-          (jinak vznikne nový). Projekty, dodavatele i kategorie import založí
-          podle názvu.
+          (jinak vznikne nový). Projekty, subprojekty, dodavatele i kategorie
+          import založí podle názvu. Sloupec{" "}
+          <span className="font-mono">Subprojekt</span> je volitelný – pokud je
+          vyplněn, výdaj se zařadí do dané složky projektu.
         </p>
       </div>
 
