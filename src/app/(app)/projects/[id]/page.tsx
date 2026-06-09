@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectVendors } from "@/components/projects/project-vendors";
+import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { NewRequestForm } from "@/components/requests/new-request-form";
@@ -175,9 +176,9 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      <div className="mt-8 grid gap-12 lg:grid-cols-5">
+      <div className="mt-8 flex flex-col gap-10">
         {/* Výdaje */}
-        <section className="lg:col-span-3">
+        <section className="order-2">
           <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">
               Výdaje · {project.expenses.length}
@@ -264,8 +265,12 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Pravý sloupec */}
-        <div className="space-y-10 lg:col-span-2">
+        {/* Dodavatelé + dokumenty – schované pod tlačítkem (#14) */}
+        <div className="order-1">
+          <Collapsible
+            title={`Dodavatelé & dokumenty · ${project.vendors.length} / ${project.documents.length}`}
+          >
+            <div className="grid gap-8 md:grid-cols-2">
           <section>
             <div className="mb-4 border-b border-stone-300/80 pb-2">
               <h2 className="kicker">Dodavatelé · {project.vendors.length}</h2>
@@ -345,6 +350,8 @@ export default async function ProjectDetailPage({
               )
             )}
           </section>
+            </div>
+          </Collapsible>
         </div>
       </div>
 
