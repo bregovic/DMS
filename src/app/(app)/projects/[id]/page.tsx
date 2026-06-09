@@ -8,12 +8,21 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectVendors } from "@/components/projects/project-vendors";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
+import { NewRequestForm } from "@/components/requests/new-request-form";
+import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
 import { approveExpense, deleteExpense } from "@/server/actions/expenses";
 import { deleteDocument } from "@/server/actions/documents";
+import { deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { kindLabel, roleLabel, statusLabel } from "@/lib/constants";
+import {
+  kindLabel,
+  requestStatusLabel,
+  roleLabel,
+  statusLabel,
+  unitLabel,
+} from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 
@@ -52,6 +61,13 @@ export default async function ProjectDetailPage({
           select: { id: true, name: true, email: true },
         },
         memberships: true,
+        requests: {
+          orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+          include: {
+            vendor: { select: { name: true } },
+            createdBy: { select: { name: true, email: true } },
+          },
+        },
       },
     }),
     getProjectTypeMap(),
@@ -266,6 +282,67 @@ export default async function ProjectDetailPage({
           </section>
         </div>
       </div>
+
+      {/* Poptávky */}
+      <section className="mt-12">
+        <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+          <h2 className="kicker">Poptávky · {project.requests.length}</h2>
+          {canAdd && (
+            <NewRequestForm
+              projectId={project.id}
+              vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+              categories={categories}
+            />
+          )}
+        </div>
+        {project.requests.length === 0 ? (
+          <p className="py-6 text-sm text-stone-500">Zatím žádné poptávky.</p>
+        ) : (
+          <ul>
+            {project.requests.map((r) => (
+              <li
+                key={r.id}
+                className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-stone-950">{r.title}</p>
+                  <p className="kicker mt-0.5">
+                    {r.quantity != null
+                      ? `${Number(r.quantity)} ${unitLabel(r.unit)} · `
+                      : ""}
+                    {catMap.get(r.category) ?? r.category}
+                    {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
+                    {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
+                    {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {isOwner ? (
+                    <RequestStatusSelect
+                      projectId={project.id}
+                      id={r.id}
+                      status={r.status}
+                    />
+                  ) : (
+                    <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                      {requestStatusLabel(r.status)}
+                    </span>
+                  )}
+                  {isOwner && (
+                    <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                      <DeleteButton
+                        action={deleteRequest}
+                        fields={{ id: r.id, projectId: project.id }}
+                        confirm="Smazat tuto poptávku?"
+                      />
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

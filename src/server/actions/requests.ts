@@ -1,0 +1,86 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireUser } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
+import { getProjectRole } from "@/server/access";
+
+function num(v: FormDataEntryValue | null): number | null {
+  if (v == null || String(v).trim() === "") return null;
+  const n = parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
+export async function createRequest(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+
+  const role = await getProjectRole(projectId, user);
+  if (role !== "owner" && role !== "active") {
+    throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
+  }
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) throw new Error("Zadej, co se poptává.");
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+  if (!project) throw new Error("Projekt nenalezen.");
+
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (vendorId) {
+    const v = await prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId: project.ownerId },
+      select: { id: true },
+    });
+    if (!v) vendorId = null;
+  }
+
+  const reqDateStr = String(formData.get("requiredDate") || "");
+  const requiredDate = reqDateStr ? new Date(reqDateStr) : null;
+
+  await prisma.request.create({
+    data: {
+      projectId,
+      title,
+      description: String(formData.get("description") || "").trim() || null,
+      quantity: num(formData.get("quantity")),
+      unit: String(formData.get("unit") || "ks"),
+      category: String(formData.get("category") || "other"),
+      vendorId,
+      requiredDate:
+        requiredDate && !isNaN(requiredDate.getTime()) ? requiredDate : null,
+      status: "new",
+      createdById: user.id,
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function setRequestStatus(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+  const status = String(formData.get("status") || "new");
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Měnit stav může jen vlastník projektu.");
+  }
+  await prisma.request.updateMany({ where: { id, projectId }, data: { status } });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function deleteRequest(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+
+  if ((await getProjectRole(projectId, user)) !== "owner") {
+    throw new Error("Mazat může jen vlastník projektu.");
+  }
+  await prisma.request.deleteMany({ where: { id, projectId } });
+  revalidatePath(`/projects/${projectId}`);
+}

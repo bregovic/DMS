@@ -68,3 +68,32 @@ export function kindLabel(value: string) {
 export function statusLabel(value: string) {
   return value === "for_approval" ? "Ke schválení" : "Schváleno";
 }
+
+export const REQUEST_UNITS = [
+  { value: "ks", label: "ks" },
+  { value: "bal", label: "bal" },
+  { value: "pal", label: "pal" },
+  { value: "sada", label: "sada" },
+  { value: "kg", label: "kg" },
+  { value: "t", label: "t" },
+  { value: "m", label: "m" },
+  { value: "m2", label: "m²" },
+  { value: "m3", label: "m³" },
+  { value: "l", label: "l" },
+  { value: "hod", label: "hod" },
+] as const;
+
+export function unitLabel(value: string) {
+  return REQUEST_UNITS.find((u) => u.value === value)?.label ?? value;
+}
+
+export const REQUEST_STATUSES = [
+  { value: "new", label: "Nová" },
+  { value: "approved", label: "Schváleno" },
+  { value: "selected", label: "Vybráno" },
+  { value: "bought", label: "Koupeno" },
+] as const;
+
+export function requestStatusLabel(value: string) {
+  return REQUEST_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
