@@ -6,7 +6,7 @@ import { getProjectAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
-import { ProjectVendors } from "@/components/projects/project-vendors";
+import { ProjectAccess } from "@/components/projects/project-access";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
@@ -318,23 +318,6 @@ export default async function ProjectDetailPage({
         : "border-stone-300 text-stone-500 hover:border-stone-950"
     }`;
 
-  const memByEmail = new Map(
-    project.memberships.map((m) => [m.email.toLowerCase(), m.role]),
-  );
-  const rolesByVendor: Record<string, string> = {};
-  for (const v of project.vendors) {
-    rolesByVendor[v.id] = memByEmail.get(v.email.toLowerCase()) ?? "vendor";
-  }
-
-  // Role pro aktuální subprojekt (per-subprojekt přístup)
-  const subMemByEmail = new Map(
-    (currentSub?.memberships ?? []).map((m) => [m.email.toLowerCase(), m.role]),
-  );
-  const subRolesByVendor: Record<string, string> = {};
-  for (const v of project.vendors) {
-    subRolesByVendor[v.id] = subMemByEmail.get(v.email.toLowerCase()) ?? "vendor";
-  }
-
   const accountVendors = canAdd
     ? await prisma.vendor.findMany({
         where: { ownerId: project.ownerId },
@@ -342,8 +325,6 @@ export default async function ProjectDetailPage({
         select: { id: true, name: true, email: true, hourlyRate: true },
       })
     : [];
-  const assignedIds = new Set(project.vendors.map((v) => v.id));
-  const availableVendors = accountVendors.filter((v) => !assignedIds.has(v.id));
 
   const [reqStatuses, offerStatuses, expenseStatuses] = await Promise.all([
     getStatuses("request"),
@@ -613,13 +594,14 @@ export default async function ProjectDetailPage({
         <div className="order-1 space-y-4">
           {sub === null ? (
             <Collapsible
-              title={`Dodavatelé & přístup · ${project.vendors.length}`}
+              title={`Přístup k projektu · ${project.memberships.length}`}
             >
-              <ProjectVendors
+              <ProjectAccess
                 projectId={project.id}
-                assigned={project.vendors}
-                available={availableVendors}
-                rolesByVendor={rolesByVendor}
+                members={project.memberships.map((m) => ({
+                  email: m.email,
+                  role: m.role,
+                }))}
                 canManage={isOwner}
               />
             </Collapsible>
@@ -629,12 +611,13 @@ export default async function ProjectDetailPage({
               <Collapsible
                 title={`Přístup ke složce · ${currentSub.memberships.length}`}
               >
-                <ProjectVendors
+                <ProjectAccess
                   projectId={project.id}
                   subProjectId={currentSub.id}
-                  assigned={project.vendors}
-                  available={[]}
-                  rolesByVendor={subRolesByVendor}
+                  members={currentSub.memberships.map((m) => ({
+                    email: m.email,
+                    role: m.role,
+                  }))}
                   canManage={isOwner}
                 />
               </Collapsible>
