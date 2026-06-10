@@ -3,7 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
-import { TASK_DONE_STATUSES } from "@/lib/constants";
+import { TASK_DONE_STATUSES, taskStatusLabel } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +62,7 @@ export default async function PlanningPage({
               assigneeEmail: true,
               subProjectId: true,
               parentId: true,
+              kind: true,
               subProject: { select: { name: true } },
             },
           },
@@ -107,17 +108,56 @@ export default async function PlanningPage({
         );
       }
 
-      const items: GanttItem[] = tasks
-        .filter((t) => t.startDate || t.dueDate)
-        .map((t) => ({
-          id: t.id,
-          name: t.subProject ? `${t.subProject.name}: ${t.title}` : t.title,
-          start: t.startDate,
-          end: t.dueDate,
-          level: t.parentId ? 1 : 0,
-          dependsOnName: null,
-          done: TASK_DONE_STATUSES.includes(t.status),
-        }))
+      // Dílčí úkoly pod fázemi (zobrazí se po kliknutí, ne samostatně)
+      const childrenByPhase = new Map<string, typeof tasks>();
+      for (const t of tasks)
+        if (t.parentId) {
+          const a = childrenByPhase.get(t.parentId) ?? [];
+          a.push(t);
+          childrenByPhase.set(t.parentId, a);
+        }
+      const done = (st: string) => TASK_DONE_STATUSES.includes(st);
+
+      const topRows = tasks.filter((t) =>
+        t.kind === "phase"
+          ? !!(t.startDate || t.dueDate)
+          : !t.parentId && !!(t.startDate || t.dueDate),
+      );
+
+      const items: GanttItem[] = topRows
+        .map((t): GanttItem => {
+          const baseName = t.subProject ? `${t.subProject.name}: ${t.title}` : t.title;
+          if (t.kind === "phase") {
+            const kids = childrenByPhase.get(t.id) ?? [];
+            const allDone = kids.length > 0 && kids.every((k) => done(k.status));
+            return {
+              id: t.id,
+              name: baseName,
+              start: t.startDate,
+              end: t.dueDate,
+              done: done(t.status),
+              kind: "phase",
+              prereqMet: kids.length === 0 ? true : allDone,
+              children: kids.map((k) => ({
+                id: k.id,
+                title: k.title,
+                start: k.startDate,
+                end: k.dueDate,
+                done: done(k.status),
+                statusLabel: taskStatusLabel(k.status),
+                assigneeEmail: k.assigneeEmail,
+              })),
+            };
+          }
+          return {
+            id: t.id,
+            name: baseName,
+            start: t.startDate,
+            end: t.dueDate,
+            done: done(t.status),
+            kind: "task",
+          };
+        })
         .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
       return { project: p, items };
     })
@@ -131,7 +171,7 @@ export default async function PlanningPage({
     }`;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <div>
           <h1 className="display text-4xl text-stone-950">Plánování</h1>

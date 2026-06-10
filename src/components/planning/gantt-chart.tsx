@@ -1,30 +1,47 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronRight, Check } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+
+export type GanttChild = {
+  id: string;
+  title: string;
+  start: Date | null;
+  end: Date | null;
+  done: boolean;
+  statusLabel: string;
+  assigneeEmail: string | null;
+};
 
 export type GanttItem = {
   id: string;
   name: string;
   start: Date | null;
   end: Date | null;
-  level: number;
-  dependsOnName: string | null;
   done?: boolean;
+  kind?: "phase" | "task";
+  prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
+  children?: GanttChild[];
 };
 
 const DAY = 86400000;
-
 function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
 }
-const shortDate = (ms: number) => {
-  const d = new Date(ms);
-  return `${d.getDate()}. ${d.getMonth() + 1}.`;
-};
 
-// Ganttova mapa s časovou mřížkou: pruh start→termín, jen termín = milník.
-// Barva podle splatnosti (po termínu / do 14 dnů / v plánu), hotové tlumeně.
 export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpen((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
   const t0 = startOfDay(today).getTime();
   const stamps: number[] = [t0];
   for (const i of items) {
@@ -40,11 +57,13 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const pct = (ms: number) => ((ms - min) / span) * 100;
   const dayCount = span / DAY;
 
-  // Adaptivní mřížka: krátké období → po týdnech, dlouhé → po měsících.
+  const shortDate = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getDate()}. ${d.getMonth() + 1}.`;
+  };
   const ticks: { left: number; label: string; strong?: boolean }[] = [];
   if (dayCount <= 95) {
     const cur = startOfDay(new Date(min));
-    // posuň na nejbližší pondělí
     const dow = (cur.getDay() + 6) % 7;
     cur.setDate(cur.getDate() - dow + (dow === 0 ? 0 : 7));
     while (cur.getTime() <= max) {
@@ -56,11 +75,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     cur.setDate(1);
     cur.setHours(0, 0, 0, 0);
     while (cur.getTime() <= max) {
-      ticks.push({
-        left: pct(cur.getTime()),
-        label: cur.toLocaleDateString("cs-CZ", { month: "short", year: "2-digit" }),
-        strong: true,
-      });
+      ticks.push({ left: pct(cur.getTime()), label: cur.toLocaleDateString("cs-CZ", { month: "short", year: "2-digit" }), strong: true });
       cur.setMonth(cur.getMonth() + 1);
     }
   }
@@ -68,6 +83,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const todayInRange = todayLeft >= 0 && todayLeft <= 100;
 
   function color(it: GanttItem) {
+    if (it.kind === "phase" && it.prereqMet === false) return "bg-red-500";
     if (it.done) return "bg-stone-300";
     if (!it.end) return "bg-stone-500";
     const e = startOfDay(it.end).getTime();
@@ -76,11 +92,11 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     return "bg-stone-800";
   }
 
-  const LABEL = "11rem";
+  const LABEL = "13rem";
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[680px]">
+      <div className="min-w-[720px]">
         {/* osa */}
         <div className="flex">
           <div className="shrink-0" style={{ width: LABEL }} />
@@ -88,9 +104,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
             {ticks.map((tk, i) => (
               <span
                 key={i}
-                className={`absolute top-1 -translate-x-1/2 text-[10px] tabular-nums ${
-                  tk.strong ? "font-medium text-stone-500" : "text-stone-400"
-                }`}
+                className={`absolute top-1 -translate-x-1/2 text-[10px] tabular-nums ${tk.strong ? "font-medium text-stone-500" : "text-stone-400"}`}
                 style={{ left: `${tk.left}%` }}
               >
                 {tk.label}
@@ -107,39 +121,31 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
           </div>
         </div>
 
-        {/* tělo s mřížkou */}
+        {/* tělo */}
         <div className="relative border-t border-stone-200">
-          {/* mřížka + dnešní linka (na pozadí, zarovnané s časovou osou) */}
-          <div
-            className="pointer-events-none absolute inset-y-0"
-            style={{ left: LABEL, right: 0 }}
-          >
+          <div className="pointer-events-none absolute inset-y-0" style={{ left: LABEL, right: 0 }}>
             <div className="relative h-full">
               {ticks.map((tk, i) => (
                 <div
                   key={i}
-                  className={`absolute inset-y-0 border-l ${
-                    tk.strong ? "border-stone-200" : "border-stone-100"
-                  }`}
+                  className={`absolute inset-y-0 border-l ${tk.strong ? "border-stone-200" : "border-stone-100"}`}
                   style={{ left: `${tk.left}%` }}
                 />
               ))}
               {todayInRange && (
-                <div
-                  className="absolute inset-y-0 border-l-2 border-stone-900/50"
-                  style={{ left: `${todayLeft}%` }}
-                />
+                <div className="absolute inset-y-0 border-l-2 border-stone-900/50" style={{ left: `${todayLeft}%` }} />
               )}
             </div>
           </div>
 
-          {/* řádky */}
           {items.map((it) => {
             const s = it.start ? startOfDay(it.start).getTime() : null;
             const e = it.end ? startOfDay(it.end).getTime() : null;
             const bar = s != null && e != null && e > s;
             const point = !bar ? e ?? s : null;
             const c = color(it);
+            const isPhase = it.kind === "phase";
+            const expanded = open.has(it.id);
             const range =
               s != null && e != null && e > s
                 ? `${formatDate(it.start!)} – ${formatDate(it.end!)}`
@@ -148,43 +154,75 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                   : it.start
                     ? formatDate(it.start)
                     : "";
+            const kids = it.children ?? [];
+            const doneKids = kids.filter((k) => k.done).length;
             return (
-              <div
-                key={it.id}
-                className="group relative flex items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80"
-              >
+              <div key={it.id}>
                 <div
-                  className="shrink-0 truncate py-2.5 pr-3 text-sm text-stone-800"
-                  style={{ width: LABEL, paddingLeft: `${it.level * 14}px` }}
-                  title={it.name}
+                  className={`group relative flex items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80 ${
+                    isPhase && kids.length ? "cursor-pointer" : ""
+                  }`}
+                  onClick={isPhase && kids.length ? () => toggle(it.id) : undefined}
                 >
-                  {it.name}
+                  <div
+                    className="flex shrink-0 items-center gap-1 truncate py-2.5 pr-3 text-sm"
+                    style={{ width: LABEL }}
+                    title={it.name}
+                  >
+                    {isPhase && kids.length > 0 ? (
+                      <ChevronRight className={`size-3.5 shrink-0 text-stone-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                    ) : (
+                      <span className="w-3.5 shrink-0" />
+                    )}
+                    <span className={`truncate ${isPhase ? "font-semibold text-stone-900" : "text-stone-800"}`}>
+                      {isPhase && <span className="kicker mr-1 !text-stone-400">Fáze</span>}
+                      {it.name}
+                    </span>
+                    {isPhase && kids.length > 0 && (
+                      <span className="ml-1 shrink-0 text-[11px] text-stone-400">{doneKids}/{kids.length}</span>
+                    )}
+                  </div>
+                  <div className="relative h-10 flex-1">
+                    {bar && s != null && e != null && (
+                      <div
+                        className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center rounded-sm ${c} shadow-sm`}
+                        style={{ left: `${pct(s)}%`, width: `${Math.max(pct(e) - pct(s), 1.2)}%` }}
+                        title={`${it.name}: ${range}`}
+                      >
+                        <span className="truncate px-1.5 text-[10px] font-medium text-white">{range}</span>
+                      </div>
+                    )}
+                    {point != null && (
+                      <div className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1" style={{ left: `${pct(point)}%` }} title={`${it.name}: ${range}`}>
+                        <span className={`size-3 -translate-x-1/2 rotate-45 rounded-[2px] ${c} shadow-sm`} />
+                        <span className="whitespace-nowrap text-[10px] text-stone-500">{range}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="relative h-10 flex-1">
-                  {bar && s != null && e != null && (
-                    <div
-                      className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center rounded-sm ${c} shadow-sm transition-transform group-hover:scale-y-110`}
-                      style={{ left: `${pct(s)}%`, width: `${Math.max(pct(e) - pct(s), 1.2)}%` }}
-                      title={`${it.name}: ${range}`}
-                    >
-                      <span className="truncate px-1.5 text-[10px] font-medium text-white">
-                        {range}
-                      </span>
-                    </div>
-                  )}
-                  {point != null && (
-                    <div
-                      className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1"
-                      style={{ left: `${pct(point)}%` }}
-                      title={`${it.name}: ${range}`}
-                    >
-                      <span className={`size-3 -translate-x-1/2 rotate-45 rounded-[2px] ${c} shadow-sm`} />
-                      <span className="whitespace-nowrap text-[10px] text-stone-500">
-                        {it.end ? formatDate(it.end) : formatDate(it.start!)}
-                      </span>
-                    </div>
-                  )}
-                </div>
+
+                {/* rozbalený seznam dílčích úkolů */}
+                {isPhase && expanded && kids.length > 0 && (
+                  <div className="border-b border-stone-100 bg-stone-50/60 py-2 pl-8 pr-3">
+                    <ul className="space-y-1">
+                      {kids.map((k) => (
+                        <li key={k.id} className="flex items-center gap-2 text-xs">
+                          <span className={`flex size-3.5 shrink-0 items-center justify-center border ${k.done ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 text-transparent"}`}>
+                            <Check className="size-2.5" />
+                          </span>
+                          <span className={`min-w-0 flex-1 truncate ${k.done ? "text-stone-400 line-through" : "text-stone-800"}`}>
+                            {k.title}
+                          </span>
+                          {k.assigneeEmail && <span className="shrink-0 text-stone-400">{k.assigneeEmail}</span>}
+                          {k.end && <span className="shrink-0 text-stone-500">do {formatDate(k.end)}</span>}
+                          <span className="shrink-0 border border-stone-300 px-1 text-[10px] uppercase tracking-wide text-stone-500">
+                            {k.statusLabel}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -192,21 +230,10 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-red-500" /> po termínu
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-stone-800" /> v plánu
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-stone-300" /> hotovo
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rotate-45 rounded-[2px] bg-stone-500" /> milník
-          </span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / nesplněné prerekvizity</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-300" /> hotovo</span>
         </div>
       </div>
     </div>

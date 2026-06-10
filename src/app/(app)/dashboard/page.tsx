@@ -41,7 +41,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       {/* Statistiky – karty s jemným stínem */}
       <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {stats.map((s) => (

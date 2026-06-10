@@ -404,7 +404,7 @@ export default async function ProjectDetailPage({
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       {currentSub && (
         <EscBack
           href={

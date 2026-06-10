@@ -68,7 +68,7 @@ export default async function ReportsPage() {
 
   if (expenses.length === 0) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-7xl">
         <header className="mb-8 border-b border-stone-300/80 pb-6">
           <h1 className="display text-4xl text-stone-950">Reporty</h1>
         </header>
@@ -80,7 +80,7 @@ export default async function ReportsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       <header className="mb-8 flex items-end justify-between border-b border-stone-300/80 pb-6">
         <h1 className="display text-4xl text-stone-950">Reporty</h1>
         <div className="text-right">

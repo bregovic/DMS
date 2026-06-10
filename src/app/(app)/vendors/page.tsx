@@ -29,7 +29,7 @@ export default async function VendorsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       <header className="mb-8 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <h1 className="display text-4xl text-stone-950">Dodavatelé</h1>
         <NewVendorForm />
