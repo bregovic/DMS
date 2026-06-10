@@ -32,6 +32,7 @@ model User {
   requestsCreated   Request[]    @relation("RequestCreatedBy")
   offersCreated     Offer[]      @relation("OfferCreatedBy")
   subProjectsCreated SubProject[] @relation("SubProjectCreatedBy")
+  tasksCreated      Task[]       @relation("TaskCreatedBy")
 }
 
 model Account {
@@ -212,6 +213,7 @@ model Project {
   memberships ProjectMembership[]
   requests    Request[]
   subProjects SubProject[]
+  tasks       Task[]
 
   @@index([ownerId])
 }
@@ -224,9 +226,6 @@ model SubProject {
   name        String
   description String?
   budget      Decimal?  @db.Decimal(12, 2)
-  startDate   DateTime?
-  deadline    DateTime?
-  dependsOnId String?
   createdById String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -234,15 +233,37 @@ model SubProject {
   project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent     SubProject?  @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
   children   SubProject[] @relation("SubTree")
-  dependsOn  SubProject?  @relation("SubDeps", fields: [dependsOnId], references: [id], onDelete: SetNull)
-  dependents SubProject[] @relation("SubDeps")
   createdBy  User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
   expenses   Expense[]
   requests   Request[]
+  tasks      Task[]
   memberships SubProjectMembership[]
 
   @@index([projectId])
   @@index([parentId])
+}
+
+// Úkol (plánování). Termíny a stav jsou na úkolu (ne na subprojektu).
+model Task {
+  id            String    @id @default(cuid())
+  projectId     String
+  subProjectId  String?
+  title         String
+  description   String?
+  assigneeEmail String?
+  startDate     DateTime?
+  dueDate       DateTime?
+  status        String    @default("todo") // editovatelný číselník scope "task"
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  createdBy  User        @relation("TaskCreatedBy", fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@index([subProjectId])
 }
 
 // Přístup dodavatele přímo k subprojektu (per-subprojekt). Platí i pro jeho

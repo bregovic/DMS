@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
+import { TASK_DONE_STATUSES } from "@/lib/constants";
 
 export default async function PlanningPage() {
   const user = await requireUser();
@@ -15,15 +16,15 @@ export default async function PlanningPage() {
     where: access,
     orderBy: { name: "asc" },
     include: {
-      subProjects: {
-        orderBy: { createdAt: "asc" },
+      tasks: {
+        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
-          name: true,
-          parentId: true,
+          title: true,
           startDate: true,
-          deadline: true,
-          dependsOnId: true,
+          dueDate: true,
+          status: true,
+          subProject: { select: { name: true } },
         },
       },
     },
@@ -31,30 +32,19 @@ export default async function PlanningPage() {
 
   const today = new Date();
 
-  // Připrav data pro každý projekt, kde je aspoň jeden subprojekt s termínem.
+  // Projekty, kde je aspoň jeden úkol s termínem (začátek nebo termín).
   const planned = projects
     .map((p) => {
-      const byId = new Map(p.subProjects.map((s) => [s.id, s]));
-      const depth = (sid: string) => {
-        let d = 0;
-        let cur = byId.get(sid);
-        while (cur?.parentId) {
-          d++;
-          cur = byId.get(cur.parentId);
-        }
-        return d;
-      };
-      const items: GanttItem[] = p.subProjects
-        .filter((s) => s.startDate || s.deadline)
-        .map((s) => ({
-          id: s.id,
-          name: s.name,
-          start: s.startDate,
-          end: s.deadline,
-          level: depth(s.id),
-          dependsOnName: s.dependsOnId
-            ? byId.get(s.dependsOnId)?.name ?? null
-            : null,
+      const items: GanttItem[] = p.tasks
+        .filter((t) => t.startDate || t.dueDate)
+        .map((t) => ({
+          id: t.id,
+          name: t.subProject ? `${t.subProject.name}: ${t.title}` : t.title,
+          start: t.startDate,
+          end: t.dueDate,
+          level: 0,
+          dependsOnName: null,
+          done: TASK_DONE_STATUSES.includes(t.status),
         }))
         .sort((a, b) => {
           const av = (a.start ?? a.end)!.getTime();
@@ -70,15 +60,15 @@ export default async function PlanningPage() {
       <header className="mb-8 border-b border-stone-300/80 pb-6">
         <h1 className="display text-4xl text-stone-950">Plánování</h1>
         <p className="mt-2 max-w-xl text-sm text-stone-500">
-          Časová osa subprojektů podle začátku a termínu. Termín u subprojektu
-          (a začátek / návaznost) nastavíš tužkou přímo u složky v projektu.
+          Časová osa úkolů podle začátku a termínu. Termíny i stavy se nastavují
+          u úkolů v projektu (sekce Úkoly).
         </p>
       </header>
 
       {planned.length === 0 ? (
         <p className="py-16 text-center text-sm text-stone-500">
-          Zatím tu není co plánovat. Přidej subprojektům{" "}
-          <span className="text-stone-950">začátek a termín</span> a objeví se
+          Zatím tu není co plánovat. Přidej úkolům{" "}
+          <span className="text-stone-950">začátek nebo termín</span> a objeví se
           tu jejich časová osa.
         </p>
       ) : (

@@ -7,6 +7,7 @@ export type GanttItem = {
   end: Date | null;
   level: number;
   dependsOnName: string | null;
+  done?: boolean;
 };
 
 const DAY = 86400000;
@@ -48,7 +49,9 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   }
   const todayLeft = pct(t0);
 
-  function color(end: Date | null) {
+  function color(it: GanttItem) {
+    if (it.done) return "bg-stone-300";
+    const end = it.end;
     if (!end) return "bg-stone-500";
     const e = startOfDay(end).getTime();
     if (e < t0) return "bg-red-500";
@@ -81,7 +84,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
           const e = it.end ? startOfDay(it.end).getTime() : null;
           const bar = s != null && e != null && e > s;
           const point = !bar ? (e ?? s) : null;
-          const c = color(it.end);
+          const c = color(it);
           return (
             <div key={it.id} className="flex items-center">
               <div
@@ -136,6 +139,9 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 bg-stone-800" /> v plánu
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 bg-stone-300" /> hotovo
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rotate-45 bg-stone-500" /> milník

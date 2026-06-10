@@ -14,6 +14,7 @@ export default async function SettingsPage() {
     reqStatuses,
     offerStatuses,
     expStatuses,
+    taskStatuses,
   ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: user.id },
@@ -43,6 +44,11 @@ export default async function SettingsPage() {
       }),
       prisma.statusOption.findMany({
         where: { scope: "expense" },
+        orderBy: [{ sort: "asc" }, { label: "asc" }],
+        select: { id: true, label: true },
+      }),
+      prisma.statusOption.findMany({
+        where: { scope: "task" },
         orderBy: [{ sort: "asc" }, { label: "asc" }],
         select: { id: true, label: true },
       }),
@@ -97,6 +103,7 @@ export default async function SettingsPage() {
             },
             { kind: "offerStatus", title: "Stavy nabídek", items: offerStatuses },
             { kind: "expenseStatus", title: "Stavy výdajů", items: expStatuses },
+            { kind: "taskStatus", title: "Stavy úkolů", items: taskStatuses },
           ]}
         />
       </section>

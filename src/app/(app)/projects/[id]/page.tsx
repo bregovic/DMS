@@ -17,15 +17,20 @@ import { RequestStatusSelect } from "@/components/requests/request-status-select
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
+import { NewTaskForm } from "@/components/tasks/new-task-form";
+import { EditTaskForm } from "@/components/tasks/edit-task-form";
+import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
+import { deleteTask } from "@/server/actions/tasks";
 import { deleteDocument } from "@/server/actions/documents";
 import { createExpenseFromRequest, deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   requestStatusLabel,
   roleLabel,
+  taskStatusLabel,
   unitLabel,
 } from "@/lib/constants";
 import { getProjectTypeMap } from "@/server/project-types";
@@ -95,6 +100,10 @@ export default async function ProjectDetailPage({
             },
           },
         },
+        tasks: {
+          orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+          include: { createdBy: { select: { name: true, email: true } } },
+        },
       },
     }),
     getProjectTypeMap(),
@@ -149,6 +158,14 @@ export default async function ProjectDetailPage({
   const visRequests = onlyMine
     ? project.requests.filter((r) => r.createdById === user.id)
     : project.requests;
+  const myEmail = user.email?.toLowerCase();
+  const visTasks = onlyMine
+    ? project.tasks.filter(
+        (t) =>
+          t.createdById === user.id ||
+          (!!t.assigneeEmail && t.assigneeEmail === myEmail),
+      )
+    : project.tasks;
 
   const total = visExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -216,6 +233,9 @@ export default async function ProjectDetailPage({
     : [];
   const levelRequests = levelInScope
     ? visRequests.filter((r) => (r.subProjectId ?? null) === (sub ?? null))
+    : [];
+  const levelTasks = levelInScope
+    ? visTasks.filter((t) => (t.subProjectId ?? null) === (sub ?? null))
     : [];
   // Náklady přímo na této úrovni (mimo podsložky)
   const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
@@ -326,12 +346,15 @@ export default async function ProjectDetailPage({
       })
     : [];
 
-  const [reqStatuses, offerStatuses, expenseStatuses] = await Promise.all([
-    getStatuses("request"),
-    getStatuses("offer"),
-    getStatuses("expense"),
-  ]);
+  const [reqStatuses, offerStatuses, expenseStatuses, taskStatuses] =
+    await Promise.all([
+      getStatuses("request"),
+      getStatuses("offer"),
+      getStatuses("expense"),
+      getStatuses("task"),
+    ]);
   const reqStatusMap = new Map(reqStatuses.map((s) => [s.key, s.label]));
+  const taskStatusMap = new Map(taskStatuses.map((s) => [s.key, s.label]));
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
@@ -403,15 +426,7 @@ export default async function ProjectDetailPage({
                     name: currentSub.name,
                     description: currentSub.description,
                     budget: currentSub.budget != null ? Number(currentSub.budget) : null,
-                    startDate: currentSub.startDate
-                      ? currentSub.startDate.toISOString().slice(0, 10)
-                      : null,
-                    deadline: currentSub.deadline
-                      ? currentSub.deadline.toISOString().slice(0, 10)
-                      : null,
-                    dependsOnId: currentSub.dependsOnId,
                   }}
-                  siblings={subs.map((x) => ({ id: x.id, name: x.name }))}
                   members={currentSub.memberships.map((m) => ({
                     email: m.email,
                     role: m.role,
@@ -488,14 +503,6 @@ export default async function ProjectDetailPage({
         {currentSub && (
           <div className="mb-4 flex flex-wrap gap-x-8 gap-y-1 text-sm text-stone-600">
             {currentSub.description && <span>{currentSub.description}</span>}
-            {currentSub.deadline && (
-              <span>
-                Termín:{" "}
-                <span className="text-stone-950">
-                  {formatDate(currentSub.deadline)}
-                </span>
-              </span>
-            )}
             <span>
               Útrata:{" "}
               <span className="font-mono text-stone-950">
@@ -534,10 +541,7 @@ export default async function ProjectDetailPage({
                       </span>
                     </div>
                     <div className="mt-3 flex items-baseline justify-between border-t border-stone-100 pt-2">
-                      <span className="kicker">
-                        {childCount(s.id)} pod ·{" "}
-                        {s.deadline ? formatDate(s.deadline) : "—"}
-                      </span>
+                      <span className="kicker">{childCount(s.id)} pod</span>
                       <span
                         className={`font-mono text-sm ${over ? "text-red-600" : "text-stone-950"}`}
                       >
@@ -555,15 +559,7 @@ export default async function ProjectDetailPage({
                           name: s.name,
                           description: s.description,
                           budget: s.budget != null ? Number(s.budget) : null,
-                          startDate: s.startDate
-                            ? s.startDate.toISOString().slice(0, 10)
-                            : null,
-                          deadline: s.deadline
-                            ? s.deadline.toISOString().slice(0, 10)
-                            : null,
-                          dependsOnId: s.dependsOnId,
                         }}
-                        siblings={subs.map((x) => ({ id: x.id, name: x.name }))}
                         members={s.memberships.map((m) => ({
                           email: m.email,
                           role: m.role,
@@ -837,6 +833,98 @@ export default async function ProjectDetailPage({
           </ul>
           )}
           </>
+        )}
+      </section>
+
+      {/* Úkoly */}
+      <section className="mt-12">
+        <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+          <h2 className="kicker">
+            Úkoly · {levelTasks.length}
+            {onlyMine ? " · jen tvoje" : ""}
+          </h2>
+          {canAdd && (
+            <NewTaskForm
+              projectId={project.id}
+              subProjectId={sub ?? undefined}
+              statuses={taskStatuses}
+            />
+          )}
+        </div>
+        {levelTasks.length === 0 ? (
+          <p className="py-6 text-sm text-stone-500">Zatím žádné úkoly.</p>
+        ) : (
+          <ul>
+            {levelTasks.map((t) => {
+              const canEditTask = isOwner || t.createdById === user.id;
+              const canStatusTask =
+                canEditTask ||
+                (!!t.assigneeEmail && t.assigneeEmail === myEmail);
+              const done = t.status === "done" || t.status === "cancelled";
+              const overdue =
+                !done && !!t.dueDate && new Date(t.dueDate) < todayStart;
+              return (
+                <li
+                  key={t.id}
+                  className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-950">{t.title}</p>
+                    <p className="kicker mt-0.5">
+                      {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
+                      {t.dueDate ? (
+                        <span className={overdue ? "text-red-600" : undefined}>
+                          do {formatDate(t.dueDate)}
+                        </span>
+                      ) : (
+                        "bez termínu"
+                      )}
+                      {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
+                    </p>
+                    {t.description && (
+                      <p className="mt-1 max-w-xl text-sm text-stone-500">
+                        {t.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {canStatusTask ? (
+                      <TaskStatusSelect id={t.id} status={t.status} statuses={taskStatuses} />
+                    ) : (
+                      <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                        {taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
+                      </span>
+                    )}
+                    {canEditTask && (
+                      <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <EditTaskForm
+                          task={{
+                            id: t.id,
+                            title: t.title,
+                            assigneeEmail: t.assigneeEmail,
+                            startDate: t.startDate
+                              ? t.startDate.toISOString().slice(0, 10)
+                              : null,
+                            dueDate: t.dueDate
+                              ? t.dueDate.toISOString().slice(0, 10)
+                              : null,
+                            status: t.status,
+                            description: t.description,
+                          }}
+                          statuses={taskStatuses}
+                        />
+                        <DeleteButton
+                          action={deleteTask}
+                          fields={{ id: t.id }}
+                          confirm="Smazat tento úkol?"
+                        />
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </div>

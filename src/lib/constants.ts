@@ -122,6 +122,21 @@ export function expenseStatusLabel(value: string) {
   return EXPENSE_STATUSES.find((s) => s.value === value)?.label ?? value;
 }
 
+// Stavy úkolů (vestavěné). Vlastní v číselníku StatusOption scope "task".
+export const TASK_STATUSES = [
+  { value: "todo", label: "K udělání" },
+  { value: "in_progress", label: "Probíhá" },
+  { value: "done", label: "Hotovo" },
+  { value: "cancelled", label: "Zrušeno" },
+] as const;
+
+// Stavy považované za "uzavřené" (kvůli barvě v Ganttu).
+export const TASK_DONE_STATUSES = ["done", "cancelled"];
+
+export function taskStatusLabel(value: string) {
+  return TASK_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
 export const DOCUMENT_TYPES = [
   { value: "receipt", label: "Účtenka" },
   { value: "invoice", label: "Faktura" },

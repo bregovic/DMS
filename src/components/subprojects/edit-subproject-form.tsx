@@ -17,19 +17,14 @@ export type SubEdit = {
   name: string;
   description: string | null;
   budget: number | null;
-  startDate: string | null; // yyyy-mm-dd
-  deadline: string | null; // yyyy-mm-dd
-  dependsOnId: string | null;
 };
 
 export function EditSubProjectForm({
   sub,
-  siblings,
   members,
   variant = "icon",
 }: {
   sub: SubEdit;
-  siblings: { id: string; name: string }[];
   members: { email: string; role: string }[];
   variant?: "icon" | "button";
 }) {
@@ -92,33 +87,9 @@ export function EditSubProjectForm({
             <Input id="es-name" name="name" defaultValue={sub.name} required autoFocus />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="es-start">Začátek</Label>
-              <Input id="es-start" name="startDate" type="date" defaultValue={sub.startDate ?? ""} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-deadline">Termín</Label>
-              <Input id="es-deadline" name="deadline" type="date" defaultValue={sub.deadline ?? ""} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-budget">Rozpočet</Label>
-              <Input id="es-budget" name="budget" type="number" step="0.01" min="0" defaultValue={sub.budget ?? ""} />
-            </div>
-          </div>
-
           <div className="space-y-1.5">
-            <Label htmlFor="es-dep">Navazuje na (volitelné)</Label>
-            <select id="es-dep" name="dependsOnId" defaultValue={sub.dependsOnId ?? ""} className={fieldClass}>
-              <option value="">— bez vazby —</option>
-              {siblings
-                .filter((s) => s.id !== sub.id)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-            </select>
+            <Label htmlFor="es-budget">Rozpočet (volitelné)</Label>
+            <Input id="es-budget" name="budget" type="number" step="0.01" min="0" defaultValue={sub.budget ?? ""} />
           </div>
 
           <div className="space-y-1.5">

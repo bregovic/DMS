@@ -39,13 +39,6 @@ export async function createSubProject(formData: FormData) {
     }
   }
 
-  const toDate = (key: string) => {
-    const s = String(formData.get(key) || "");
-    if (!s) return null;
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
   await prisma.subProject.create({
     data: {
       projectId,
@@ -53,14 +46,11 @@ export async function createSubProject(formData: FormData) {
       name,
       description: String(formData.get("description") || "").trim() || null,
       budget: num(formData.get("budget")),
-      startDate: toDate("startDate"),
-      deadline: toDate("deadline"),
       createdById: user.id,
     },
   });
 
   revalidatePath(`/projects/${projectId}`);
-  revalidatePath("/planning");
 }
 
 export async function updateSubProject(formData: FormData) {
@@ -81,40 +71,16 @@ export async function updateSubProject(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Zadej název subprojektu.");
 
-  const toDate = (key: string) => {
-    const s = String(formData.get(key) || "");
-    if (!s) return null;
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
-  // Návaznost – jen jiný subprojekt téhož projektu (a ne sám na sebe)
-  let dependsOnId = String(formData.get("dependsOnId") || "") || null;
-  if (dependsOnId) {
-    if (dependsOnId === id) dependsOnId = null;
-    else {
-      const dep = await prisma.subProject.findFirst({
-        where: { id: dependsOnId, projectId },
-        select: { id: true },
-      });
-      if (!dep) dependsOnId = null;
-    }
-  }
-
   await prisma.subProject.update({
     where: { id },
     data: {
       name,
       description: String(formData.get("description") || "").trim() || null,
       budget: num(formData.get("budget")),
-      startDate: toDate("startDate"),
-      deadline: toDate("deadline"),
-      dependsOnId,
     },
   });
 
   revalidatePath(`/projects/${projectId}`);
-  revalidatePath("/planning");
 }
 
 export async function deleteSubProject(formData: FormData) {
