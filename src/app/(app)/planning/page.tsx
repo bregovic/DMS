@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlanningPage() {
   const user = await requireUser();
   const email = user.email?.toLowerCase();
