@@ -360,7 +360,7 @@ export default async function ProjectDetailPage({
           <ProjectIcon type={project.type} className="mt-1 size-7 text-stone-800" />
           <div>
             <div className="flex items-center gap-2">
-              <p className="kicker">{typeLabel}</p>
+              <p className="kicker">{currentSub ? project.name : typeLabel}</p>
               {!isOwner && (
                 <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
                   {roleLabel(role)}
@@ -368,19 +368,25 @@ export default async function ProjectDetailPage({
               )}
             </div>
             <h1 className="display mt-1 text-4xl text-stone-950">
-              {project.name}
+              {currentSub ? currentSub.name : project.name}
             </h1>
-            {project.description && (
+            {(currentSub ? currentSub.description : project.description) && (
               <p className="mt-2 max-w-md text-sm text-stone-500">
-                {project.description}
+                {currentSub ? currentSub.description : project.description}
               </p>
             )}
           </div>
         </div>
         <div className="flex items-stretch gap-3">
           <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
-            <p className="kicker !text-stone-400">Celkem</p>
-            <p className="display mt-1 text-2xl">{formatCurrency(total)}</p>
+            <p className="kicker !text-stone-400">
+              {currentSub ? "Složka celkem" : "Celkem"}
+            </p>
+            <p className="display mt-1 text-2xl">
+              {formatCurrency(
+                currentSub ? spentBySub.get(currentSub.id) ?? 0 : total,
+              )}
+            </p>
             {folders.length > 0 && (
               <p className="mt-1 text-xs text-stone-400">
                 přímo zde {formatCurrency(levelTotal)}
