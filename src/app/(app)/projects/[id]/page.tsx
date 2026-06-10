@@ -156,14 +156,35 @@ export default async function ProjectDetailPage({
     }
   }
 
-  // Viditelné položky (aktivní dodavatel jen svoje)
+  const myEmail = user.email?.toLowerCase();
+  // Dodavatelé v evidenci vlastníka se stejným e-mailem (kde "se ho to týká")
+  const myVendorIds = new Set<string>(
+    onlyMine && myEmail
+      ? (
+          await prisma.vendor.findMany({
+            where: { ownerId: project.ownerId, email: myEmail },
+            select: { id: true },
+          })
+        ).map((v) => v.id)
+      : [],
+  );
+
+  // Viditelné položky: aktivní dodavatel vidí své záznamy + kde je uveden jako
+  // dodavatel; úkoly i ty přiřazené na jeho e-mail.
   const visExpenses = onlyMine
-    ? project.expenses.filter((e) => e.createdById === user.id)
+    ? project.expenses.filter(
+        (e) =>
+          e.createdById === user.id ||
+          (!!e.vendorId && myVendorIds.has(e.vendorId)),
+      )
     : project.expenses;
   const visRequests = onlyMine
-    ? project.requests.filter((r) => r.createdById === user.id)
+    ? project.requests.filter(
+        (r) =>
+          r.createdById === user.id ||
+          (!!r.vendorId && myVendorIds.has(r.vendorId)),
+      )
     : project.requests;
-  const myEmail = user.email?.toLowerCase();
   const visTasks = onlyMine
     ? project.tasks.filter(
         (t) =>
