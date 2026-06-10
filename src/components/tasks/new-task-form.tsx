@@ -14,12 +14,15 @@ export function NewTaskForm({
   projectId,
   subProjectId,
   statuses,
+  phases,
 }: {
   projectId: string;
   subProjectId?: string;
   statuses: { key: string; label: string }[];
+  phases: { id: string; title: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState("task");
   const formRef = useRef<HTMLFormElement>(null);
 
   if (!open) {
@@ -35,7 +38,7 @@ export function NewTaskForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nový úkol</h3>
+          <h3 className="kicker">{kind === "phase" ? "Nová fáze" : "Nový úkol"}</h3>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -60,11 +63,46 @@ export function NewTaskForm({
         >
           <input type="hidden" name="projectId" value={projectId} />
           <input type="hidden" name="subProjectId" value={subProjectId ?? ""} />
+          <input type="hidden" name="kind" value={kind} />
+
+          <div className="flex gap-2">
+            {[
+              { v: "task", l: "Úkol" },
+              { v: "phase", l: "Fáze projektu" },
+            ].map((k) => (
+              <button
+                key={k.v}
+                type="button"
+                onClick={() => setKind(k.v)}
+                className={`h-8 flex-1 border text-xs font-medium transition-colors cursor-pointer ${
+                  kind === k.v
+                    ? "border-stone-950 bg-stone-950 text-white"
+                    : "border-stone-300 text-stone-600 hover:border-stone-950"
+                }`}
+              >
+                {k.l}
+              </button>
+            ))}
+          </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="t-title">Název úkolu</Label>
-            <Input id="t-title" name="title" placeholder="Např. Objednat materiál" required autoFocus />
+            <Label htmlFor="t-title">{kind === "phase" ? "Název fáze" : "Název úkolu"}</Label>
+            <Input id="t-title" name="title" placeholder={kind === "phase" ? "Např. Lepení izolace" : "Např. Objednat materiál"} required autoFocus />
           </div>
+
+          {kind === "task" && phases.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="t-parent">Patří pod fázi (volitelné)</Label>
+              <select id="t-parent" name="parentId" defaultValue="" className={fieldClass}>
+                <option value="">— samostatný úkol —</option>
+                {phases.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">

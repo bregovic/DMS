@@ -264,6 +264,25 @@ export default async function ProjectDetailPage({
   const levelTasks = levelInScope
     ? visTasks.filter((t) => (t.subProjectId ?? null) === (sub ?? null))
     : [];
+
+  // Fáze + dílčí úkoly (jedna úroveň vnoření)
+  const taskChildren = new Map<string, typeof levelTasks>();
+  for (const t of levelTasks)
+    if (t.parentId) {
+      const a = taskChildren.get(t.parentId) ?? [];
+      a.push(t);
+      taskChildren.set(t.parentId, a);
+    }
+  const taskPhases = levelTasks.filter((t) => t.kind === "phase");
+  const orderedTasks: { t: (typeof levelTasks)[number]; level: number }[] = [];
+  for (const ph of taskPhases) {
+    orderedTasks.push({ t: ph, level: 0 });
+    for (const ch of taskChildren.get(ph.id) ?? []) orderedTasks.push({ t: ch, level: 1 });
+  }
+  for (const t of levelTasks)
+    if (t.kind !== "phase" && !t.parentId) orderedTasks.push({ t, level: 0 });
+  const phaseOptions = taskPhases.map((p) => ({ id: p.id, title: p.title }));
+  const isTaskDone = (st: string) => st === "done" || st === "cancelled";
   // Náklady přímo na této úrovni (mimo podsložky)
   const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -875,6 +894,7 @@ export default async function ProjectDetailPage({
               projectId={project.id}
               subProjectId={sub ?? undefined}
               statuses={taskStatuses}
+              phases={phaseOptions}
             />
           )}
         </div>
@@ -882,39 +902,66 @@ export default async function ProjectDetailPage({
           <p className="py-6 text-sm text-stone-500">Zatím žádné úkoly.</p>
         ) : (
           <ul>
-            {levelTasks.map((t) => {
+            {orderedTasks.map(({ t, level }) => {
+              const isPhase = t.kind === "phase";
               const canEditTask = isOwner || t.createdById === user.id;
               const canStatusTask =
                 canEditTask ||
                 (!!t.assigneeEmail && t.assigneeEmail === myEmail);
-              const done = t.status === "done" || t.status === "cancelled";
+              const done = isTaskDone(t.status);
               const overdue =
                 !done && !!t.dueDate && new Date(t.dueDate) < todayStart;
+              const kids = isPhase ? taskChildren.get(t.id) ?? [] : [];
+              const kidsDone = kids.filter((k) => isTaskDone(k.status)).length;
+              const phaseWarn =
+                isPhase &&
+                kids.length > 0 &&
+                kidsDone < kids.length &&
+                !!t.startDate &&
+                new Date(t.startDate) <= todayStart;
               return (
                 <li
                   key={t.id}
-                  className="group flex items-start justify-between gap-3 border-b border-stone-200 py-3.5"
+                  className={`group flex items-start justify-between gap-3 border-b border-stone-200 py-3.5 ${
+                    isPhase ? "bg-stone-50/60" : ""
+                  }`}
+                  style={level > 0 ? { paddingLeft: `${level * 24}px` } : undefined}
                 >
                   <div className="flex min-w-0 items-start gap-2.5">
                     {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
                     <div className="min-w-0">
-                    <p className={`text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>{t.title}</p>
-                    <p className="kicker mt-0.5">
-                      {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
-                      {t.dueDate ? (
-                        <span className={overdue ? "text-red-600" : undefined}>
-                          do {formatDate(t.dueDate)}
-                        </span>
-                      ) : (
-                        "bez termínu"
-                      )}
-                      {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
-                    </p>
-                    {t.description && (
-                      <p className="mt-1 max-w-xl text-sm text-stone-500">
-                        {t.description}
+                      <p className={`flex items-center gap-2 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
+                        {isPhase && (
+                          <span className="kicker !text-stone-500">Fáze</span>
+                        )}
+                        {t.title}
+                        {isPhase && kids.length > 0 && (
+                          <span className="text-[11px] font-normal text-stone-500">
+                            {kidsDone}/{kids.length} hotovo
+                          </span>
+                        )}
                       </p>
-                    )}
+                      <p className="kicker mt-0.5">
+                        {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
+                        {t.dueDate ? (
+                          <span className={overdue ? "text-red-600" : undefined}>
+                            do {formatDate(t.dueDate)}
+                          </span>
+                        ) : (
+                          "bez termínu"
+                        )}
+                        {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
+                      </p>
+                      {phaseWarn && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          ⚠ Fáze začíná, ale dílčí úkoly ještě nejsou hotové.
+                        </p>
+                      )}
+                      {t.description && (
+                        <p className="mt-1 max-w-xl text-sm text-stone-500">
+                          {t.description}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -940,13 +987,16 @@ export default async function ProjectDetailPage({
                               : null,
                             status: t.status,
                             description: t.description,
+                            kind: t.kind,
+                            parentId: t.parentId,
                           }}
                           statuses={taskStatuses}
+                          phases={phaseOptions}
                         />
                         <DeleteButton
                           action={deleteTask}
                           fields={{ id: t.id }}
-                          confirm="Smazat tento úkol?"
+                          confirm={isPhase ? "Smazat fázi i s dílčími úkoly?" : "Smazat tento úkol?"}
                         />
                       </span>
                     )}

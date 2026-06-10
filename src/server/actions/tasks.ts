@@ -35,6 +35,24 @@ export async function createTask(formData: FormData) {
     });
     if (!sub) subProjectId = null;
   }
+
+  // Typ a vazba na fázi
+  const kind = String(formData.get("kind") || "task") === "phase" ? "phase" : "task";
+  let parentId: string | null = null;
+  if (kind === "task") {
+    const pid = String(formData.get("parentId") || "") || null;
+    if (pid) {
+      const phase = await prisma.task.findFirst({
+        where: { id: pid, projectId, kind: "phase" },
+        select: { id: true, subProjectId: true },
+      });
+      if (phase) {
+        parentId = phase.id;
+        subProjectId = phase.subProjectId ?? null; // dílčí úkol patří do stejné složky jako fáze
+      }
+    }
+  }
+
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!subProjectId || !scope.has(subProjectId)) {
@@ -46,6 +64,8 @@ export async function createTask(formData: FormData) {
     data: {
       projectId,
       subProjectId,
+      parentId,
+      kind,
       title,
       description: String(formData.get("description") || "").trim() || null,
       assigneeEmail: normEmail(formData.get("assigneeEmail")),
@@ -69,6 +89,8 @@ async function taskCtx(id: string) {
       projectId: true,
       createdById: true,
       assigneeEmail: true,
+      kind: true,
+      subProjectId: true,
     },
   });
   if (!task) throw new Error("Úkol nenalezen.");
@@ -88,6 +110,24 @@ export async function updateTask(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) throw new Error("Zadej název úkolu.");
 
+  // Vazba na fázi lze měnit jen u běžného úkolu (ne u fáze)
+  let parentUpdate: { parentId?: string | null; subProjectId?: string | null } = {
+    parentId: null,
+  };
+  if (task.kind === "task") {
+    const pid = String(formData.get("parentId") || "") || null;
+    if (pid && pid !== task.id) {
+      const phase = await prisma.task.findFirst({
+        where: { id: pid, projectId: task.projectId, kind: "phase" },
+        select: { id: true, subProjectId: true },
+      });
+      if (phase)
+        parentUpdate = { parentId: phase.id, subProjectId: phase.subProjectId ?? null };
+    }
+  } else {
+    parentUpdate = {}; // fáze: parent neměníme
+  }
+
   await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -97,6 +137,7 @@ export async function updateTask(formData: FormData) {
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
       status: String(formData.get("status") || "todo").trim() || "todo",
+      ...parentUpdate,
     },
   });
   revalidatePath(`/projects/${task.projectId}`);

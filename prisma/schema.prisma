@@ -248,6 +248,8 @@ model Task {
   id            String    @id @default(cuid())
   projectId     String
   subProjectId  String?
+  parentId      String? // dílčí úkol patří pod fázi (Task kind=phase)
+  kind          String    @default("task") // task | phase
   title         String
   description   String?
   assigneeEmail String?
@@ -260,10 +262,13 @@ model Task {
 
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  parent     Task?       @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Task[]      @relation("TaskTree")
   createdBy  User        @relation("TaskCreatedBy", fields: [createdById], references: [id])
 
   @@index([projectId])
   @@index([subProjectId])
+  @@index([parentId])
 }
 
 // Přístup dodavatele přímo k subprojektu (per-subprojekt). Platí i pro jeho

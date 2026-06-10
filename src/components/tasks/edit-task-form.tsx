@@ -18,14 +18,18 @@ export type TaskEdit = {
   dueDate: string | null;
   status: string;
   description: string | null;
+  kind: string;
+  parentId: string | null;
 };
 
 export function EditTaskForm({
   task,
   statuses,
+  phases,
 }: {
   task: TaskEdit;
   statuses: { key: string; label: string }[];
+  phases: { id: string; title: string }[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -46,7 +50,7 @@ export function EditTaskForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Upravit úkol</h3>
+          <h3 className="kicker">{task.kind === "phase" ? "Upravit fázi" : "Upravit úkol"}</h3>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -70,9 +74,25 @@ export function EditTaskForm({
           <input type="hidden" name="id" value={task.id} />
 
           <div className="space-y-1.5">
-            <Label htmlFor="et-title">Název úkolu</Label>
+            <Label htmlFor="et-title">{task.kind === "phase" ? "Název fáze" : "Název úkolu"}</Label>
             <Input id="et-title" name="title" defaultValue={task.title} required autoFocus />
           </div>
+
+          {task.kind === "task" && phases.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="et-parent">Patří pod fázi</Label>
+              <select id="et-parent" name="parentId" defaultValue={task.parentId ?? ""} className={fieldClass}>
+                <option value="">— samostatný úkol —</option>
+                {phases
+                  .filter((p) => p.id !== task.id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">

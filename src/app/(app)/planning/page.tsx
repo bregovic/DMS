@@ -61,6 +61,7 @@ export default async function PlanningPage({
               createdById: true,
               assigneeEmail: true,
               subProjectId: true,
+              parentId: true,
               subProject: { select: { name: true } },
             },
           },
@@ -113,7 +114,7 @@ export default async function PlanningPage({
           name: t.subProject ? `${t.subProject.name}: ${t.title}` : t.title,
           start: t.startDate,
           end: t.dueDate,
-          level: 0,
+          level: t.parentId ? 1 : 0,
           dependsOnName: null,
           done: TASK_DONE_STATUSES.includes(t.status),
         }))
