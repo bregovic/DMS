@@ -20,6 +20,7 @@ import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-for
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
+import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
 import { UploadForm } from "@/components/documents/upload-form";
 import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
@@ -892,10 +893,12 @@ export default async function ProjectDetailPage({
               return (
                 <li
                   key={t.id}
-                  className="group flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
+                  className="group flex items-start justify-between gap-3 border-b border-stone-200 py-3.5"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-stone-950">{t.title}</p>
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
+                    <div className="min-w-0">
+                    <p className={`text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>{t.title}</p>
                     <p className="kicker mt-0.5">
                       {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
                       {t.dueDate ? (
@@ -912,6 +915,7 @@ export default async function ProjectDetailPage({
                         {t.description}
                       </p>
                     )}
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {canStatusTask ? (
