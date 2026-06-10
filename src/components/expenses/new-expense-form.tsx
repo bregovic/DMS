@@ -43,6 +43,7 @@ export function NewExpenseForm({
   statuses: { key: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -82,6 +83,8 @@ export function NewExpenseForm({
         <form
           ref={formRef}
           action={async (fd) => {
+            if (saving) return;
+            setSaving(true);
             try {
               const f = fd.get("file");
               if (f instanceof File && f.size > 0) {
@@ -92,6 +95,7 @@ export function NewExpenseForm({
               window.alert(
                 err instanceof Error ? err.message : "Uložení selhalo.",
               );
+              setSaving(false);
               return;
             }
             try {
@@ -108,6 +112,7 @@ export function NewExpenseForm({
             formRef.current?.reset();
             setHours("");
             setRate("");
+            setSaving(false);
             setOpen(false);
           }}
           className="space-y-5 p-5"
@@ -290,7 +295,9 @@ export function NewExpenseForm({
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zrušit
             </Button>
-            <Button type="submit">Uložit</Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Ukládám…" : "Uložit"}
+            </Button>
           </div>
         </form>
       </div>

@@ -91,6 +91,23 @@ export async function createExpense(formData: FormData) {
   const variableSymbol =
     String(formData.get("variableSymbol") || "").trim() || null;
 
+  // Ochrana proti dvojímu odeslání: stejný název+částka v projektu od téhož
+  // uživatele během posledních 20 s považuj za duplicitu a přeskoč.
+  const dup = await prisma.expense.findFirst({
+    where: {
+      projectId,
+      createdById: user.id,
+      title,
+      amount,
+      createdAt: { gte: new Date(Date.now() - 20000) },
+    },
+    select: { id: true },
+  });
+  if (dup) {
+    revalidatePath(`/projects/${projectId}`);
+    return;
+  }
+
   const expense = await prisma.expense.create({
     data: {
       projectId,
@@ -275,6 +292,13 @@ export async function bulkUpdateExpenses(formData: FormData) {
 
   const where = { id: { in: ids }, projectId };
   if (op === "delete") {
+    // smaž i přílohy z úložiště (R2)
+    const docs = await prisma.document.findMany({
+      where: { expenseId: { in: ids } },
+      select: { fileName: true },
+    });
+    await Promise.all(docs.map((d) => storage.delete(d.fileName)));
+    await prisma.document.deleteMany({ where: { expenseId: { in: ids } } });
     await prisma.expense.deleteMany({ where });
   } else if (op === "paid") {
     await prisma.expense.updateMany({ where, data: { paid: true } });
@@ -330,6 +354,13 @@ export async function deleteExpense(formData: FormData) {
   if ((await getProjectRole(projectId, user)) !== "owner") {
     throw new Error("Mazat může jen vlastník projektu.");
   }
+  // smaž i připojené skeny z úložiště (R2)
+  const docs = await prisma.document.findMany({
+    where: { expenseId: id },
+    select: { fileName: true },
+  });
+  await Promise.all(docs.map((d) => storage.delete(d.fileName)));
+  await prisma.document.deleteMany({ where: { expenseId: id } });
   await prisma.expense.deleteMany({ where: { id, projectId } });
 
   revalidatePath(`/projects/${projectId}`);
