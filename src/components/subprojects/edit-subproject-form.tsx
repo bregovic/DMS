@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Settings, X } from "lucide-react";
 import { updateSubProject } from "@/server/actions/subprojects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,15 +26,28 @@ export function EditSubProjectForm({
   sub,
   siblings,
   members,
+  variant = "icon",
 }: {
   sub: SubEdit;
   siblings: { id: string; name: string }[];
   members: { email: string; role: string }[];
+  variant?: "icon" | "button";
 }) {
   const [open, setOpen] = useState(false);
 
   if (!open) {
-    return (
+    return variant === "button" ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-10"
+        title="Nastavení složky"
+        onClick={() => setOpen(true)}
+      >
+        <Settings className="size-4" />
+        Nastavení
+      </Button>
+    ) : (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -50,7 +63,7 @@ export function EditSubProjectForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
       <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Upravit subprojekt</h3>
+          <h3 className="kicker">Nastavení složky</h3>
           <button
             type="button"
             onClick={() => setOpen(false)}

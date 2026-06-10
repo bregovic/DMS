@@ -394,23 +394,48 @@ export default async function ProjectDetailPage({
           </div>
           {isOwner && (
             <div className="flex items-stretch gap-2">
-              <ProjectSettings
-                project={{
-                  id: project.id,
-                  name: project.name,
-                  type: project.type,
-                  description: project.description,
-                  defaultKind: project.defaultKind,
-                  defaultCategory: project.defaultCategory,
-                  defaultCurrency: project.defaultCurrency,
-                }}
-                types={[...typeMap.entries()].map(([key, label]) => ({ key, label }))}
-                categories={categories}
-                members={project.memberships.map((m) => ({
-                  email: m.email,
-                  role: m.role,
-                }))}
-              />
+              {currentSub ? (
+                <EditSubProjectForm
+                  variant="button"
+                  sub={{
+                    id: currentSub.id,
+                    projectId: project.id,
+                    name: currentSub.name,
+                    description: currentSub.description,
+                    budget: currentSub.budget != null ? Number(currentSub.budget) : null,
+                    startDate: currentSub.startDate
+                      ? currentSub.startDate.toISOString().slice(0, 10)
+                      : null,
+                    deadline: currentSub.deadline
+                      ? currentSub.deadline.toISOString().slice(0, 10)
+                      : null,
+                    dependsOnId: currentSub.dependsOnId,
+                  }}
+                  siblings={subs.map((x) => ({ id: x.id, name: x.name }))}
+                  members={currentSub.memberships.map((m) => ({
+                    email: m.email,
+                    role: m.role,
+                  }))}
+                />
+              ) : (
+                <ProjectSettings
+                  project={{
+                    id: project.id,
+                    name: project.name,
+                    type: project.type,
+                    description: project.description,
+                    defaultKind: project.defaultKind,
+                    defaultCategory: project.defaultCategory,
+                    defaultCurrency: project.defaultCurrency,
+                  }}
+                  types={[...typeMap.entries()].map(([key, label]) => ({ key, label }))}
+                  categories={categories}
+                  members={project.memberships.map((m) => ({
+                    email: m.email,
+                    role: m.role,
+                  }))}
+                />
+              )}
               <DeleteButton
                 action={deleteProject}
                 fields={{ id: project.id }}
