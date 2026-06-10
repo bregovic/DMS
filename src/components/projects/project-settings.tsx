@@ -150,8 +150,12 @@ export function ProjectSettings({
               className="inline-flex items-center gap-2 border border-stone-300 px-3 py-2 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
             >
               <Users className="size-4" />
-              Spolupracující e‑maily · {members.length}
+              Přístup k celému projektu · {members.length}
             </button>
+            <p className="mt-2 text-xs text-stone-400">
+              Tady dáváš přístup k <span className="text-stone-600">celému projektu</span>.
+              Přístup jen ke konkrétní složce nastav uvnitř té složky (panel „Přístup ke složce").
+            </p>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -169,7 +173,7 @@ export function ProjectSettings({
         <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-stone-950/40 p-4 py-12">
           <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
             <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-              <h3 className="kicker">Spolupracující e‑maily</h3>
+              <h3 className="kicker">Přístup k celému projektu</h3>
               <button
                 type="button"
                 onClick={() => setMembersOpen(false)}

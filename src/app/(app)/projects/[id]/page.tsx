@@ -626,6 +626,7 @@ export default async function ProjectDetailPage({
           {sub !== null && isOwner && currentSub && (
             <Collapsible
               title={`Přístup ke složce · ${currentSub.memberships.length}`}
+              defaultOpen
             >
               <ProjectAccess
                 projectId={project.id}
