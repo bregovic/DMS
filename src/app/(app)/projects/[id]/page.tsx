@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Folder } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectAccess } from "@/server/access";
@@ -119,6 +119,11 @@ export default async function ProjectDetailPage({
 
   // --- Subprojekty (drill-down) ---
   const sub = typeof sp?.sub === "string" ? sp.sub : null;
+
+  // Dodavatel s přístupem jen k jedné složce: pusť ho rovnou do ní (ne na root projektu)
+  if (scopeSubIds && scopeSubIds.length === 1 && sub === null) {
+    redirect(`/projects/${id}?sub=${scopeSubIds[0]}`);
+  }
   const subs = project.subProjects;
   const subById = new Map(subs.map((s) => [s.id, s]));
   const ancestorsOf = (sid: string) => {
