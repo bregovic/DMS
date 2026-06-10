@@ -6,6 +6,7 @@ import { updateSubProject } from "@/server/actions/subprojects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProjectAccess } from "@/components/projects/project-access";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -24,9 +25,11 @@ export type SubEdit = {
 export function EditSubProjectForm({
   sub,
   siblings,
+  members,
 }: {
   sub: SubEdit;
   siblings: { id: string; name: string }[];
+  members: { email: string; role: string }[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -123,6 +126,16 @@ export function EditSubProjectForm({
             <Button type="submit">Uložit</Button>
           </div>
         </form>
+
+        <div className="border-t border-stone-200 p-5">
+          <p className="kicker mb-2">Přístup ke složce</p>
+          <ProjectAccess
+            projectId={sub.projectId}
+            subProjectId={sub.id}
+            members={members}
+            canManage
+          />
+        </div>
       </div>
     </div>
   );

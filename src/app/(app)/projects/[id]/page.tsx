@@ -539,6 +539,10 @@ export default async function ProjectDetailPage({
                           dependsOnId: s.dependsOnId,
                         }}
                         siblings={subs.map((x) => ({ id: x.id, name: x.name }))}
+                        members={s.memberships.map((m) => ({
+                          email: m.email,
+                          role: m.role,
+                        }))}
                       />
                       <DeleteButton
                         action={deleteSubProject}
