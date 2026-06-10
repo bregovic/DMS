@@ -6,7 +6,6 @@ import { getProjectAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
-import { ProjectAccess } from "@/components/projects/project-access";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
@@ -621,25 +620,8 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Přístup: v kořeni projektový, ve složce per-subprojekt. Dokumenty v kořeni. */}
+        {/* Dokumenty (jen v kořeni). Přístup k projektu je v Nastavení. */}
         <div className="order-1 space-y-4">
-          {sub !== null && isOwner && currentSub && (
-            <Collapsible
-              title={`Přístup ke složce · ${currentSub.memberships.length}`}
-              defaultOpen
-            >
-              <ProjectAccess
-                projectId={project.id}
-                subProjectId={currentSub.id}
-                members={currentSub.memberships.map((m) => ({
-                  email: m.email,
-                  role: m.role,
-                }))}
-                canManage={isOwner}
-              />
-            </Collapsible>
-          )}
-
           {sub === null && (
           <Collapsible
             title={`Dokumenty · ${project.documents.length}`}
