@@ -198,6 +198,9 @@ model Project {
   type        String   @default("other") // house, garage, car, other...
   description String?
   color       String   @default("#6366f1")
+  defaultKind     String? // výchozí druh nového výdaje (expense | work)
+  defaultCategory String? // výchozí kategorie
+  defaultCurrency String? // výchozí měna
   ownerId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

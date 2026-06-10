@@ -50,6 +50,48 @@ export async function createProject(formData: FormData) {
   redirect(`/projects/${project.id}`);
 }
 
+export async function updateProject(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const project = await prisma.project.findFirst({
+    where: { id, ownerId: user.id },
+    select: { id: true },
+  });
+  if (!project) throw new Error("Nemáš oprávnění.");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Zadej název projektu.");
+
+  // Typ: existující klíč, nebo nově zadaný vlastní typ
+  let type = String(formData.get("type") || "other");
+  if (type === "__new__") {
+    const label = String(formData.get("newType") || "").trim();
+    if (!label) throw new Error("Zadej název nového typu.");
+    const key = slugifyType(label);
+    await prisma.projectType.upsert({
+      where: { key },
+      update: { label },
+      create: { key, label },
+    });
+    type = key;
+  }
+
+  await prisma.project.update({
+    where: { id },
+    data: {
+      name,
+      type,
+      description: String(formData.get("description") || "").trim() || null,
+      defaultKind: String(formData.get("defaultKind") || "").trim() || null,
+      defaultCategory: String(formData.get("defaultCategory") || "").trim() || null,
+      defaultCurrency: String(formData.get("defaultCurrency") || "").trim() || null,
+    },
+  });
+
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+}
+
 export async function deleteProject(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));

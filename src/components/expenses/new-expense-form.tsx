@@ -34,6 +34,7 @@ export function NewExpenseForm({
   categories,
   docTypes,
   statuses,
+  defaults,
 }: {
   projectId: string;
   subProjectId?: string;
@@ -41,25 +42,35 @@ export function NewExpenseForm({
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
   statuses: { key: string; label: string }[];
+  defaults?: {
+    kind?: string | null;
+    category?: string | null;
+    currency?: string | null;
+  };
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const today = new Date().toISOString().slice(0, 10);
 
+  // Přednost: výchozí hodnoty projektu → poslední použité (localStorage) → pevné
   const [d] = useState(loadDefaults);
-  const [kind, setKind] = useState(d.kind || "expense");
-  const [category, setCategory] = useState(d.category || "materials");
-  const [currency, setCurrency] = useState(d.currency || "CZK");
+  const [kind, setKind] = useState(defaults?.kind || d.kind || "expense");
+  const [category, setCategory] = useState(
+    defaults?.category || d.category || "materials",
+  );
+  const [currency, setCurrency] = useState(
+    defaults?.currency || d.currency || "CZK",
+  );
   const [amountMode, setAmountMode] = useState(d.amountMode || "fixed");
   const [rate, setRate] = useState("");
   const [hours, setHours] = useState("");
 
   if (!open) {
     return (
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-4" />
-        Přidat
+      <Button onClick={() => setOpen(true)} className="h-11 px-6 text-base">
+        <Plus className="size-5" />
+        Přidat výdaj
       </Button>
     );
   }

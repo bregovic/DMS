@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectAccess } from "@/components/projects/project-access";
+import { ProjectSettings } from "@/components/projects/project-settings";
 import { Collapsible } from "@/components/app/collapsible";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
@@ -387,12 +388,31 @@ export default async function ProjectDetailPage({
             )}
           </div>
           {isOwner && (
-            <DeleteButton
-              action={deleteProject}
-              fields={{ id: project.id }}
-              confirm={`Smazat projekt „${project.name}" včetně všech výdajů a dokumentů?`}
-              className="flex w-10 items-center justify-center border border-stone-300 text-stone-400 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
-            />
+            <div className="flex items-stretch gap-2">
+              <ProjectSettings
+                project={{
+                  id: project.id,
+                  name: project.name,
+                  type: project.type,
+                  description: project.description,
+                  defaultKind: project.defaultKind,
+                  defaultCategory: project.defaultCategory,
+                  defaultCurrency: project.defaultCurrency,
+                }}
+                types={[...typeMap.entries()].map(([key, label]) => ({ key, label }))}
+                categories={categories}
+                members={project.memberships.map((m) => ({
+                  email: m.email,
+                  role: m.role,
+                }))}
+              />
+              <DeleteButton
+                action={deleteProject}
+                fields={{ id: project.id }}
+                confirm={`Smazat projekt „${project.name}" včetně všech výdajů a dokumentů?`}
+                className="flex w-10 items-center justify-center border border-stone-300 text-stone-400 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
+              />
+            </div>
           )}
         </div>
       </div>
@@ -550,6 +570,11 @@ export default async function ProjectDetailPage({
                 categories={categories}
                 docTypes={docTypes}
                 statuses={expenseStatuses}
+                defaults={{
+                  kind: project.defaultKind,
+                  category: project.defaultCategory,
+                  currency: project.defaultCurrency,
+                }}
               />
             )}
           </div>
@@ -592,36 +617,20 @@ export default async function ProjectDetailPage({
 
         {/* Přístup: v kořeni projektový, ve složce per-subprojekt. Dokumenty v kořeni. */}
         <div className="order-1 space-y-4">
-          {sub === null ? (
+          {sub !== null && isOwner && currentSub && (
             <Collapsible
-              title={`Přístup k projektu · ${project.memberships.length}`}
+              title={`Přístup ke složce · ${currentSub.memberships.length}`}
             >
               <ProjectAccess
                 projectId={project.id}
-                members={project.memberships.map((m) => ({
+                subProjectId={currentSub.id}
+                members={currentSub.memberships.map((m) => ({
                   email: m.email,
                   role: m.role,
                 }))}
                 canManage={isOwner}
               />
             </Collapsible>
-          ) : (
-            isOwner &&
-            currentSub && (
-              <Collapsible
-                title={`Přístup ke složce · ${currentSub.memberships.length}`}
-              >
-                <ProjectAccess
-                  projectId={project.id}
-                  subProjectId={currentSub.id}
-                  members={currentSub.memberships.map((m) => ({
-                    email: m.email,
-                    role: m.role,
-                  }))}
-                  canManage={isOwner}
-                />
-              </Collapsible>
-            )
           )}
 
           {sub === null && (
