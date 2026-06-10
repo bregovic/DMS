@@ -567,7 +567,6 @@ export default async function ProjectDetailPage({
         <div className="order-1 space-y-4">
           <Collapsible
             title={`Dodavatelé & přístup · ${project.vendors.length}`}
-            defaultOpen
           >
             <ProjectVendors
               projectId={project.id}
