@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
 import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -16,8 +16,8 @@ export async function createExpense(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
 
-  const role = await getProjectRole(projectId, user);
-  if (role !== "owner" && role !== "active") {
+  const access = await getProjectAccess(projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
     throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
@@ -49,6 +49,14 @@ export async function createExpense(formData: FormData) {
     if (!sub) subProjectId = null;
   }
 
+  // Per-subprojekt přístup: smí přidávat jen do své složky (a jejích pod-složek)
+  if (access.scopeSubIds) {
+    const scope = await expandScope(projectId, access.scopeSubIds);
+    if (!subProjectId || !scope.has(subProjectId)) {
+      throw new Error("Do této složky nemáš oprávnění přidávat.");
+    }
+  }
+
   const amountMode = String(formData.get("amountMode") || "fixed");
   let amount: number | null;
   let hours: number | null = null;
@@ -74,7 +82,7 @@ export async function createExpense(formData: FormData) {
 
   const dateStr = String(formData.get("date") || "");
   const date = dateStr ? new Date(dateStr) : new Date();
-  const status = role === "owner" ? "approved" : "for_approval";
+  const status = access.role === "owner" ? "approved" : "for_approval";
 
   const paid =
     formData.get("paid") === "on" || formData.get("paid") === "true";

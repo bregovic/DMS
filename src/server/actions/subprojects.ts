@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -14,8 +14,8 @@ function num(v: FormDataEntryValue | null): number | null {
 export async function createSubProject(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
-  const role = await getProjectRole(projectId, user);
-  if (role !== "owner" && role !== "active") {
+  const access = await getProjectAccess(projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
     throw new Error("Nemáš oprávnění.");
   }
 
@@ -29,6 +29,14 @@ export async function createSubProject(formData: FormData) {
       select: { id: true },
     });
     if (!parent) parentId = null;
+  }
+
+  // Per-subprojekt přístup: smí zakládat jen uvnitř své složky
+  if (access.scopeSubIds) {
+    const scope = await expandScope(projectId, access.scopeSubIds);
+    if (!parentId || !scope.has(parentId)) {
+      throw new Error("Subprojekt smíš založit jen uvnitř své složky.");
+    }
   }
 
   const toDate = (key: string) => {

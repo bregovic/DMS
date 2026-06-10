@@ -236,9 +236,28 @@ model SubProject {
   createdBy  User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
   expenses   Expense[]
   requests   Request[]
+  memberships SubProjectMembership[]
 
   @@index([projectId])
   @@index([parentId])
+}
+
+// Přístup dodavatele přímo k subprojektu (per-subprojekt). Platí i pro jeho
+// vnořené pod-složky. Projektové členství (ProjectMembership) má přednost.
+model SubProjectMembership {
+  id           String   @id @default(cuid())
+  subProjectId String
+  projectId    String
+  email        String
+  role         String   @default("active")
+  vendorId     String?
+  createdAt    DateTime @default(now())
+
+  subProject SubProject @relation(fields: [subProjectId], references: [id], onDelete: Cascade)
+
+  @@unique([subProjectId, email])
+  @@index([email])
+  @@index([projectId])
 }
 
 // Přístup k projektu podle e-mailu + role (owner | active | reader).

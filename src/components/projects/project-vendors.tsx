@@ -16,22 +16,37 @@ export function ProjectVendors({
   available,
   rolesByVendor,
   canManage,
+  subProjectId,
 }: {
   projectId: string;
   assigned: VendorLite[];
   available: VendorLite[];
   rolesByVendor: Record<string, string>;
   canManage: boolean;
+  subProjectId?: string;
 }) {
+  const scoped = Boolean(subProjectId);
   return (
     <div>
       {canManage && (
         <p className="mb-3 text-xs text-stone-500">
-          Přiřaď dodavatele z evidence a nastav roli:{" "}
-          <span className="text-stone-800">Aktivní dodavatel</span> se přihlásí
-          (e‑mailem) a může přidávat záznamy,{" "}
-          <span className="text-stone-800">Reader</span> jen čte. Přístup platí
-          pro celý projekt včetně subprojektů.
+          {scoped ? (
+            <>
+              Nastav roli dodavateli <span className="text-stone-800">jen pro tuto
+              složku</span> (a její pod-složky):{" "}
+              <span className="text-stone-800">Aktivní dodavatel</span> přidává
+              záznamy, <span className="text-stone-800">Reader</span> jen čte.
+              Nabízí se dodavatelé přiřazení k projektu.
+            </>
+          ) : (
+            <>
+              Přiřaď dodavatele z evidence a nastav roli:{" "}
+              <span className="text-stone-800">Aktivní dodavatel</span> se přihlásí
+              (e‑mailem) a může přidávat záznamy,{" "}
+              <span className="text-stone-800">Reader</span> jen čte. Přístup platí
+              pro celý projekt včetně subprojektů.
+            </>
+          )}
         </p>
       )}
       {assigned.length === 0 ? (
@@ -57,6 +72,7 @@ export function ProjectVendors({
                       projectId={projectId}
                       vendorId={v.id}
                       role={role}
+                      subProjectId={subProjectId}
                     />
                   ) : (
                     role !== "vendor" && (
@@ -65,7 +81,7 @@ export function ProjectVendors({
                       </span>
                     )
                   )}
-                  {canManage && (
+                  {canManage && !scoped && (
                     <form action={removeVendorFromProject}>
                       <input type="hidden" name="projectId" value={projectId} />
                       <input type="hidden" name="vendorId" value={v.id} />
@@ -85,7 +101,7 @@ export function ProjectVendors({
         </ul>
       )}
 
-      {canManage && available.length > 0 && (
+      {canManage && !scoped && available.length > 0 && (
         <form action={addVendorToProject} className="mt-3 flex gap-2">
           <input type="hidden" name="projectId" value={projectId} />
           <select
@@ -105,7 +121,7 @@ export function ProjectVendors({
         </form>
       )}
 
-      {canManage && available.length === 0 && (
+      {canManage && !scoped && available.length === 0 && (
         <p className="mt-3 text-xs text-stone-500">
           Žádný další dodavatel k přiřazení.{" "}
           <Link

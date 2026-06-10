@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -15,8 +15,8 @@ export async function createRequest(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
 
-  const role = await getProjectRole(projectId, user);
-  if (role !== "owner" && role !== "active") {
+  const access = await getProjectAccess(projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
     throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
@@ -45,6 +45,13 @@ export async function createRequest(formData: FormData) {
       select: { id: true },
     });
     if (!sub) subProjectId = null;
+  }
+
+  if (access.scopeSubIds) {
+    const scope = await expandScope(projectId, access.scopeSubIds);
+    if (!subProjectId || !scope.has(subProjectId)) {
+      throw new Error("Do této složky nemáš oprávnění přidávat.");
+    }
   }
 
   const reqDateStr = String(formData.get("requiredDate") || "");

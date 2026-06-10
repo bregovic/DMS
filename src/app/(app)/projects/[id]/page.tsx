@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Folder } from "lucide-react";
 import { requireUser } from "@/lib/dal";
-import { getProjectRole } from "@/server/access";
+import { getProjectAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
@@ -48,10 +48,11 @@ export default async function ProjectDetailPage({
   const sp = await searchParams;
   const docFilter = typeof sp?.docType === "string" ? sp.docType : null;
 
-  const role = await getProjectRole(id, user);
-  if (!role) notFound();
+  const access = await getProjectAccess(id, user);
+  if (!access) notFound();
+  const role = access.role;
+  const scopeSubIds = access.scopeSubIds; // null = celý projekt
   const isOwner = role === "owner";
-  const canAdd = role === "owner" || role === "active";
   // Aktivní dodavatel vidí jen své vlastní záznamy
   const onlyMine = role === "active";
 
@@ -79,7 +80,10 @@ export default async function ProjectDetailPage({
           select: { id: true, name: true, email: true },
         },
         memberships: true,
-        subProjects: { orderBy: { createdAt: "asc" } },
+        subProjects: {
+          orderBy: { createdAt: "asc" },
+          include: { memberships: true },
+        },
         requests: {
           orderBy: [{ status: "asc" }, { createdAt: "desc" }],
           include: {
@@ -118,6 +122,26 @@ export default async function ProjectDetailPage({
     return out;
   };
 
+  // Rozsah přístupu (per-subprojekt): povolené subprojekty + všechny jejich pod-složky
+  const childrenOf = new Map<string, string[]>();
+  for (const s of subs)
+    if (s.parentId) {
+      const a = childrenOf.get(s.parentId) ?? [];
+      a.push(s.id);
+      childrenOf.set(s.parentId, a);
+    }
+  let scopeSet: Set<string> | null = null;
+  if (scopeSubIds) {
+    scopeSet = new Set<string>();
+    const stack = [...scopeSubIds];
+    while (stack.length) {
+      const x = stack.pop()!;
+      if (scopeSet.has(x)) continue;
+      scopeSet.add(x);
+      (childrenOf.get(x) ?? []).forEach((c) => stack.push(c));
+    }
+  }
+
   // Viditelné položky (aktivní dodavatel jen svoje)
   const visExpenses = onlyMine
     ? project.expenses.filter((e) => e.createdById === user.id)
@@ -138,21 +162,29 @@ export default async function ProjectDetailPage({
     }
   }
 
-  // Aktivní dodavatel: viditelné jen složky, které založil nebo se ho týkají
+  // Aktivní dodavatel: viditelné složky podle rozsahu, jinak jen svoje
   let visibleSubIds: Set<string> | null = null;
   if (onlyMine) {
     const set = new Set<string>();
-    for (const s of subs) if (s.createdById === user.id) set.add(s.id);
-    for (const e of visExpenses)
-      if (e.subProjectId) {
-        set.add(e.subProjectId);
-        ancestorsOf(e.subProjectId).forEach((a) => set.add(a));
+    if (scopeSet) {
+      // per-subprojekt přístup: povolené složky + nadřazené (kvůli navigaci)
+      for (const id of scopeSet) {
+        set.add(id);
+        ancestorsOf(id).forEach((a) => set.add(a));
       }
-    for (const r of visRequests)
-      if (r.subProjectId) {
-        set.add(r.subProjectId);
-        ancestorsOf(r.subProjectId).forEach((a) => set.add(a));
-      }
+    } else {
+      for (const s of subs) if (s.createdById === user.id) set.add(s.id);
+      for (const e of visExpenses)
+        if (e.subProjectId) {
+          set.add(e.subProjectId);
+          ancestorsOf(e.subProjectId).forEach((a) => set.add(a));
+        }
+      for (const r of visRequests)
+        if (r.subProjectId) {
+          set.add(r.subProjectId);
+          ancestorsOf(r.subProjectId).forEach((a) => set.add(a));
+        }
+    }
     visibleSubIds = set;
   }
 
@@ -174,12 +206,17 @@ export default async function ProjectDetailPage({
   const childCount = (sid: string) =>
     subs.filter((s) => s.parentId === sid).length;
 
-  const levelExpenses = visExpenses.filter(
-    (e) => (e.subProjectId ?? null) === (sub ?? null),
-  );
-  const levelRequests = visRequests.filter(
-    (r) => (r.subProjectId ?? null) === (sub ?? null),
-  );
+  // Na této úrovni smí dodavatel s per-subprojekt přístupem vidět/přidávat
+  // jen je-li úroveň v jeho rozsahu (root a nadřazené složky jsou jen k navigaci).
+  const levelInScope = !scopeSet || (sub != null && scopeSet.has(sub));
+  const canAdd = (role === "owner" || role === "active") && levelInScope;
+
+  const levelExpenses = levelInScope
+    ? visExpenses.filter((e) => (e.subProjectId ?? null) === (sub ?? null))
+    : [];
+  const levelRequests = levelInScope
+    ? visRequests.filter((r) => (r.subProjectId ?? null) === (sub ?? null))
+    : [];
   // Náklady přímo na této úrovni (mimo podsložky)
   const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -287,6 +324,15 @@ export default async function ProjectDetailPage({
   const rolesByVendor: Record<string, string> = {};
   for (const v of project.vendors) {
     rolesByVendor[v.id] = memByEmail.get(v.email.toLowerCase()) ?? "vendor";
+  }
+
+  // Role pro aktuální subprojekt (per-subprojekt přístup)
+  const subMemByEmail = new Map(
+    (currentSub?.memberships ?? []).map((m) => [m.email.toLowerCase(), m.role]),
+  );
+  const subRolesByVendor: Record<string, string> = {};
+  for (const v of project.vendors) {
+    subRolesByVendor[v.id] = subMemByEmail.get(v.email.toLowerCase()) ?? "vendor";
   }
 
   const accountVendors = canAdd
@@ -563,19 +609,37 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        {/* Dodavatelé & přístup (vždy) + dokumenty (jen v kořeni) */}
+        {/* Přístup: v kořeni projektový, ve složce per-subprojekt. Dokumenty v kořeni. */}
         <div className="order-1 space-y-4">
-          <Collapsible
-            title={`Dodavatelé & přístup · ${project.vendors.length}`}
-          >
-            <ProjectVendors
-              projectId={project.id}
-              assigned={project.vendors}
-              available={availableVendors}
-              rolesByVendor={rolesByVendor}
-              canManage={isOwner}
-            />
-          </Collapsible>
+          {sub === null ? (
+            <Collapsible
+              title={`Dodavatelé & přístup · ${project.vendors.length}`}
+            >
+              <ProjectVendors
+                projectId={project.id}
+                assigned={project.vendors}
+                available={availableVendors}
+                rolesByVendor={rolesByVendor}
+                canManage={isOwner}
+              />
+            </Collapsible>
+          ) : (
+            isOwner &&
+            currentSub && (
+              <Collapsible
+                title={`Přístup ke složce · ${currentSub.memberships.length}`}
+              >
+                <ProjectVendors
+                  projectId={project.id}
+                  subProjectId={currentSub.id}
+                  assigned={project.vendors}
+                  available={[]}
+                  rolesByVendor={subRolesByVendor}
+                  canManage={isOwner}
+                />
+              </Collapsible>
+            )
+          )}
 
           {sub === null && (
           <Collapsible

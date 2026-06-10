@@ -31,7 +31,12 @@ export default async function ProjectsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map(({ project: p, role }) => {
-            const total = p.expenses.reduce((s, e) => s + Number(e.amount), 0);
+            // Aktivní dodavatel vidí jen součet svých vlastních nákladů
+            const visible =
+              role === "active"
+                ? p.expenses.filter((e) => e.createdById === user.id)
+                : p.expenses;
+            const total = visible.reduce((s, e) => s + Number(e.amount), 0);
             return (
               <Link
                 key={p.id}
@@ -58,7 +63,8 @@ export default async function ProjectsPage() {
                 )}
                 <div className="mt-6 flex items-baseline justify-between border-t border-stone-200 pt-3">
                   <span className="kicker">
-                    {p._count.expenses} · {p._count.documents} dok.
+                    {role === "active" ? visible.length : p._count.expenses}
+                    {role === "active" ? "" : ` · ${p._count.documents} dok.`}
                   </span>
                   <span className="font-mono text-sm text-stone-950">
                     {formatCurrency(total)}

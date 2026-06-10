@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { setVendorRole } from "@/server/actions/memberships";
+import { setVendorRole, setVendorSubRole } from "@/server/actions/memberships";
 import { PROJECT_ROLES } from "@/lib/constants";
 
 export function VendorRoleSelect({
   projectId,
   vendorId,
   role,
+  subProjectId,
 }: {
   projectId: string;
   vendorId: string;
   role: string;
+  subProjectId?: string;
 }) {
   const [value, setValue] = useState(role);
   const [pending, start] = useTransition();
@@ -28,9 +30,11 @@ export function VendorRoleSelect({
     fd.set("projectId", projectId);
     fd.set("vendorId", vendorId);
     fd.set("role", next);
+    if (subProjectId) fd.set("subProjectId", subProjectId);
     start(async () => {
       try {
-        await setVendorRole(fd);
+        if (subProjectId) await setVendorSubRole(fd);
+        else await setVendorRole(fd);
       } catch {
         setValue(prev); // při chybě zpět
         window.alert("Změna role se nezdařila.");
