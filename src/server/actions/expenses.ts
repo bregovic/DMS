@@ -82,7 +82,7 @@ export async function createExpense(formData: FormData) {
 
   const dateStr = String(formData.get("date") || "");
   const date = dateStr ? new Date(dateStr) : new Date();
-  const status = access.role === "owner" ? "approved" : "for_approval";
+  const status = "approved"; // schvalování zrušeno – vše rovnou platné
 
   const paid =
     formData.get("paid") === "on" || formData.get("paid") === "true";

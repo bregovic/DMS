@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { PaymentInfo } from "@/components/expenses/payment-info";
+import { setExpensePaid } from "@/server/actions/expenses";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function PaymentsPage() {
@@ -58,17 +59,28 @@ export default async function PaymentsPage() {
                 </p>
                 <PaymentInfo
                   expenseId={e.id}
-                  projectId={e.project.id}
                   paid={e.paid}
                   dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
                   overdue={!!e.dueDate && new Date(e.dueDate) < todayStart}
                   hasBank={Boolean(e.vendor?.bankAccount)}
-                  canManage={true}
                 />
               </div>
-              <span className="shrink-0 font-mono text-sm text-stone-950">
-                {formatCurrency(Number(e.amount), e.currency)}
-              </span>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-mono text-sm text-stone-950">
+                  {formatCurrency(Number(e.amount), e.currency)}
+                </span>
+                <form action={setExpensePaid}>
+                  <input type="hidden" name="id" value={e.id} />
+                  <input type="hidden" name="projectId" value={e.project.id} />
+                  <input type="hidden" name="paid" value="true" />
+                  <button
+                    type="submit"
+                    className="whitespace-nowrap border border-stone-300 px-2 py-1 text-[11px] text-stone-600 transition-colors hover:border-emerald-600 hover:bg-emerald-600 hover:text-white cursor-pointer"
+                  >
+                    Uhrazeno
+                  </button>
+                </form>
+              </div>
             </li>
           ))}
         </ul>

@@ -1,18 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Paperclip, Trash2 } from "lucide-react";
-import {
-  approveExpense,
-  deleteExpense,
-  bulkUpdateExpenses,
-} from "@/server/actions/expenses";
+import { Paperclip, Trash2 } from "lucide-react";
+import { deleteExpense, bulkUpdateExpenses } from "@/server/actions/expenses";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
 import { EditExpenseForm, type ExpenseEdit } from "@/components/expenses/edit-expense-form";
 import { DeleteButton } from "@/components/ui/delete-button";
-import { kindLabel, statusLabel } from "@/lib/constants";
+import { kindLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
 type StatusOpt = { key: string; label: string };
@@ -190,11 +186,6 @@ export function ExpenseList({
                 {e.docs.length > 0 && (
                   <Paperclip className="size-3 shrink-0 text-stone-400" />
                 )}
-                {e.status === "for_approval" && (
-                  <span className="shrink-0 border border-amber-500 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-700">
-                    {statusLabel(e.status)}
-                  </span>
-                )}
               </p>
               <p className="kicker mt-0.5">
                 {kindLabel(e.kind)} · {e.categoryLabel} · {e.dateLabel}
@@ -204,12 +195,10 @@ export function ExpenseList({
               </p>
               <PaymentInfo
                 expenseId={e.id}
-                projectId={projectId}
                 paid={e.paid}
                 dueLabel={e.dueLabel}
                 overdue={e.overdue}
                 hasBank={e.hasBank}
-                canManage={isOwner}
               />
               <ExpenseScan
                 projectId={projectId}
@@ -237,19 +226,6 @@ export function ExpenseList({
               <span className="font-mono text-sm text-stone-950">
                 {formatCurrency(e.amount, e.currency)}
               </span>
-              {isOwner && e.status === "for_approval" && (
-                <form action={approveExpense}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <input type="hidden" name="projectId" value={projectId} />
-                  <button
-                    type="submit"
-                    title="Schválit"
-                    className="flex size-8 items-center justify-center text-emerald-600 transition-colors hover:bg-emerald-600 hover:text-white cursor-pointer"
-                  >
-                    <Check className="size-4" />
-                  </button>
-                </form>
-              )}
               {isOwner && (
                 <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                   <EditExpenseForm
