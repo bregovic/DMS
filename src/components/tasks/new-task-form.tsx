@@ -15,11 +15,13 @@ export function NewTaskForm({
   subProjectId,
   statuses,
   phases,
+  triggerClassName,
 }: {
   projectId: string;
   subProjectId?: string;
   statuses: { key: string; label: string }[];
   phases: { id: string; title: string }[];
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState("task");
@@ -27,7 +29,7 @@ export function NewTaskForm({
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} className={triggerClassName}>
         <Plus className="size-4" />
         Úkol
       </Button>
@@ -35,7 +37,7 @@ export function NewTaskForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">{kind === "phase" ? "Nová fáze" : "Nový úkol"}</h3>

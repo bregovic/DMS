@@ -62,7 +62,7 @@ export function QuickAdd({
         </div>
 
         {pid && (
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
             <NewExpenseForm
               key={`e-${pid}`}
               projectId={pid}
@@ -70,18 +70,21 @@ export function QuickAdd({
               categories={categories}
               docTypes={docTypes}
               statuses={expenseStatuses}
+              triggerClassName="w-full justify-center sm:w-auto"
             />
             <NewTaskForm
               key={`t-${pid}`}
               projectId={pid}
               statuses={taskStatuses}
               phases={[]}
+              triggerClassName="h-11 w-full justify-center text-base sm:w-auto"
             />
             <NewRequestForm
               key={`r-${pid}`}
               projectId={pid}
               vendors={vendors.map((v) => ({ id: v.id, name: v.name }))}
               categories={categories}
+              triggerClassName="h-11 w-full justify-center text-base sm:w-auto"
             />
           </div>
         )}

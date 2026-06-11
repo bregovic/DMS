@@ -35,6 +35,7 @@ export function NewExpenseForm({
   docTypes,
   statuses,
   defaults,
+  triggerClassName,
 }: {
   projectId: string;
   subProjectId?: string;
@@ -47,6 +48,7 @@ export function NewExpenseForm({
     category?: string | null;
     currency?: string | null;
   };
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,7 +70,7 @@ export function NewExpenseForm({
 
   if (!open) {
     return (
-      <Button onClick={() => setOpen(true)} className="h-11 px-6 text-base">
+      <Button onClick={() => setOpen(true)} className={`h-11 px-6 text-base ${triggerClassName ?? ""}`}>
         <Plus className="size-5" />
         Přidat výdaj
       </Button>
@@ -79,7 +81,7 @@ export function NewExpenseForm({
     Number(hours.replace(",", ".")) * Number(rate.replace(",", ".")) || 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">Nový záznam</h3>

@@ -17,18 +17,20 @@ export function NewRequestForm({
   subProjectId,
   vendors,
   categories,
+  triggerClassName,
 }: {
   projectId: string;
   subProjectId?: string;
   vendors: { id: string; name: string }[];
   categories: { key: string; label: string }[];
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} className={triggerClassName}>
         <Plus className="size-4" />
         Žádanka
       </Button>
@@ -36,7 +38,7 @@ export function NewRequestForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-4 py-12">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
       <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">Nová žádanka</h3>

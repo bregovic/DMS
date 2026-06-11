@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { Sidebar } from "@/components/app/sidebar";
 import { UserMenu } from "@/components/app/user-menu";
 import { MobileNav } from "@/components/app/mobile-nav";
+import { MobileTabBar } from "@/components/app/mobile-tabbar";
 
 export default async function AppLayout({
   children,
@@ -38,8 +39,11 @@ export default async function AppLayout({
           <div className="flex-1" />
           <UserMenu name={user.name} email={user.email} />
         </header>
-        <main className="flex-1 px-4 py-8 sm:px-8 lg:px-12">{children}</main>
+        <main className="flex-1 px-4 pb-24 pt-6 sm:px-8 sm:pt-8 md:pb-8 lg:px-12">
+          {children}
+        </main>
       </div>
+      <MobileTabBar />
     </div>
   );
 }
