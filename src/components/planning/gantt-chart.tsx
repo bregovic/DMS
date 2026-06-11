@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { ChevronRight, Check } from "lucide-react";
+import { setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 
 export type GanttChild = {
@@ -30,6 +31,47 @@ function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
+}
+
+// Řádek dílčího úkolu s klikacím odškrtnutím (splnit / vrátit).
+function ChildRow({ k }: { k: GanttChild }) {
+  const [pending, start] = useTransition();
+  return (
+    <li className="flex items-center gap-2 text-xs">
+      <button
+        type="button"
+        disabled={pending}
+        title={k.done ? "Označit jako nehotové" : "Označit jako hotové"}
+        onClick={() => {
+          const fd = new FormData();
+          fd.set("id", k.id);
+          fd.set("status", k.done ? "todo" : "done");
+          start(async () => {
+            try {
+              await setTaskStatus(fd);
+            } catch {
+              window.alert("Změna se nezdařila (nemáš oprávnění?).");
+            }
+          });
+        }}
+        className={`flex size-4 shrink-0 items-center justify-center border transition-colors disabled:opacity-50 cursor-pointer ${
+          k.done
+            ? "border-stone-900 bg-stone-900 text-white"
+            : "border-stone-300 text-transparent hover:border-stone-950"
+        }`}
+      >
+        <Check className="size-2.5" />
+      </button>
+      <span className={`min-w-0 flex-1 truncate ${k.done ? "text-stone-400 line-through" : "text-stone-800"}`}>
+        {k.title}
+      </span>
+      {k.assigneeEmail && <span className="shrink-0 text-stone-400">{k.assigneeEmail}</span>}
+      {k.end && <span className="shrink-0 text-stone-500">do {formatDate(k.end)}</span>}
+      <span className="shrink-0 border border-stone-300 px-1 text-[10px] uppercase tracking-wide text-stone-500">
+        {k.statusLabel}
+      </span>
+    </li>
+  );
 }
 
 export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }) {
@@ -204,21 +246,9 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                 {/* rozbalený seznam dílčích úkolů */}
                 {isPhase && expanded && kids.length > 0 && (
                   <div className="border-b border-stone-100 bg-stone-50/60 py-2 pl-8 pr-3">
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {kids.map((k) => (
-                        <li key={k.id} className="flex items-center gap-2 text-xs">
-                          <span className={`flex size-3.5 shrink-0 items-center justify-center border ${k.done ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 text-transparent"}`}>
-                            <Check className="size-2.5" />
-                          </span>
-                          <span className={`min-w-0 flex-1 truncate ${k.done ? "text-stone-400 line-through" : "text-stone-800"}`}>
-                            {k.title}
-                          </span>
-                          {k.assigneeEmail && <span className="shrink-0 text-stone-400">{k.assigneeEmail}</span>}
-                          {k.end && <span className="shrink-0 text-stone-500">do {formatDate(k.end)}</span>}
-                          <span className="shrink-0 border border-stone-300 px-1 text-[10px] uppercase tracking-wide text-stone-500">
-                            {k.statusLabel}
-                          </span>
-                        </li>
+                        <ChildRow key={k.id} k={k} />
                       ))}
                     </ul>
                   </div>
