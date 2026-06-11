@@ -3,34 +3,67 @@ import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { ProjectIcon } from "@/components/projects/project-icon";
+import { QuickAdd } from "@/components/app/quick-add";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { getExpenseCategoryMap } from "@/server/expense-categories";
+import { getExpenseCategoryMap, getExpenseCategories } from "@/server/expense-categories";
+import { getDocumentTypes } from "@/server/document-types";
+import { getStatuses } from "@/server/statuses";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [projectCount, expenseAgg, recentExpenses, projects, catMap] =
-    await Promise.all([
-      prisma.project.count({ where: { ownerId: user.id } }),
-      prisma.expense.aggregate({
-        where: { project: { ownerId: user.id } },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      prisma.expense.findMany({
-        where: { project: { ownerId: user.id } },
-        orderBy: { date: "desc" },
-        take: 6,
-        include: { project: true },
-      }),
-      prisma.project.findMany({
-        where: { ownerId: user.id },
-        include: { _count: { select: { expenses: true, documents: true } } },
-        orderBy: { updatedAt: "desc" },
-        take: 5,
-      }),
-      getExpenseCategoryMap(),
-    ]);
+  const [
+    projectCount,
+    expenseAgg,
+    recentExpenses,
+    projects,
+    catMap,
+    allProjects,
+    vendorRows,
+    categories,
+    docTypes,
+    expenseStatuses,
+    taskStatuses,
+  ] = await Promise.all([
+    prisma.project.count({ where: { ownerId: user.id } }),
+    prisma.expense.aggregate({
+      where: { project: { ownerId: user.id } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.expense.findMany({
+      where: { project: { ownerId: user.id } },
+      orderBy: { date: "desc" },
+      take: 6,
+      include: { project: true },
+    }),
+    prisma.project.findMany({
+      where: { ownerId: user.id },
+      include: { _count: { select: { expenses: true, documents: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    }),
+    getExpenseCategoryMap(),
+    prisma.project.findMany({
+      where: { ownerId: user.id },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, name: true },
+    }),
+    prisma.vendor.findMany({
+      where: { ownerId: user.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, hourlyRate: true },
+    }),
+    getExpenseCategories(),
+    getDocumentTypes(),
+    getStatuses("expense"),
+    getStatuses("task"),
+  ]);
+  const quickVendors = vendorRows.map((v) => ({
+    id: v.id,
+    name: v.name,
+    hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+  }));
 
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
 
@@ -42,6 +75,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl">
+      <QuickAdd
+        projects={allProjects}
+        vendors={quickVendors}
+        categories={categories}
+        docTypes={docTypes}
+        expenseStatuses={expenseStatuses}
+        taskStatuses={taskStatuses}
+      />
+
       {/* Statistiky – karty s jemným stínem */}
       <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {stats.map((s) => (
