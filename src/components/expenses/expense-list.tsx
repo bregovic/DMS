@@ -168,47 +168,50 @@ export function ExpenseList({
         {expenses.map((e) => (
           <li
             key={e.id}
-            className={`group flex items-baseline gap-3 border-b border-stone-200 py-3.5 ${
+            className={`group flex flex-col gap-2 border-b border-stone-200 py-3.5 sm:flex-row sm:items-baseline sm:gap-3 ${
               sel.has(e.id) ? "bg-stone-50" : ""
             }`}
           >
-            {isOwner && (
-              <input
-                type="checkbox"
-                checked={sel.has(e.id)}
-                onChange={() => toggle(e.id)}
-                className="mt-1 size-4 shrink-0 accent-stone-950"
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 truncate text-sm font-medium text-stone-950">
-                {e.title}
-                {e.docs.length > 0 && (
-                  <Paperclip className="size-3 shrink-0 text-stone-400" />
-                )}
-              </p>
-              <p className="kicker mt-0.5">
-                {kindLabel(e.kind)} · {e.categoryLabel} · {e.dateLabel}
-                {e.vendorName ? ` · ${e.vendorName}` : ""}
-                {e.hours ? ` · ${e.hours} h × ${e.rate}` : ""}
-                {` · zadal ${e.createdByLabel}`}
-              </p>
-              <PaymentInfo
-                expenseId={e.id}
-                paid={e.paid}
-                dueLabel={e.dueLabel}
-                overdue={e.overdue}
-                hasBank={e.hasBank}
-              />
-              <ExpenseScan
-                projectId={projectId}
-                expenseId={e.id}
-                docs={e.docs}
-                canAttach={canAdd}
-                types={docTypes}
-              />
+            <div className="flex min-w-0 flex-1 items-start gap-2.5">
+              {isOwner && (
+                <input
+                  type="checkbox"
+                  checked={sel.has(e.id)}
+                  onChange={() => toggle(e.id)}
+                  className="mt-1 size-4 shrink-0 accent-stone-950"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-sm font-medium text-stone-950">
+                  <span className="min-w-0 break-words">{e.title}</span>
+                  {e.docs.length > 0 && (
+                    <Paperclip className="size-3 shrink-0 text-stone-400" />
+                  )}
+                </p>
+                <p className="kicker mt-0.5">
+                  {kindLabel(e.kind)} · {e.categoryLabel} · {e.dateLabel}
+                  {e.vendorName ? ` · ${e.vendorName}` : ""}
+                  {e.hours ? ` · ${e.hours} h × ${e.rate}` : ""}
+                  {` · zadal ${e.createdByLabel}`}
+                </p>
+                <PaymentInfo
+                  expenseId={e.id}
+                  paid={e.paid}
+                  dueLabel={e.dueLabel}
+                  overdue={e.overdue}
+                  hasBank={e.hasBank}
+                />
+                <ExpenseScan
+                  projectId={projectId}
+                  expenseId={e.id}
+                  docs={e.docs}
+                  canAttach={canAdd}
+                  types={docTypes}
+                />
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {/* Ovládání: na mobilu samostatný řádek (stav + částka + úpravy), na webu vpravo */}
+            <div className="flex shrink-0 items-center gap-2 pl-6 sm:justify-end sm:pl-0">
               {isOwner ? (
                 <ExpenseStageSelect
                   projectId={projectId}
@@ -223,11 +226,11 @@ export function ExpenseList({
                   </span>
                 )
               )}
-              <span className="font-mono text-sm text-stone-950">
+              <span className="ml-auto font-mono text-sm text-stone-950 sm:ml-0">
                 {formatCurrency(e.amount, e.currency)}
               </span>
               {isOwner && (
-                <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                   <EditExpenseForm
                     expense={e.edit}
                     vendors={vendors}

@@ -597,7 +597,7 @@ export default async function ProjectDetailPage({
                     </div>
                   </Link>
                   {(isOwner || s.createdById === user.id) && (
-                    <span className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="absolute right-2 top-2 flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                       <EditSubProjectForm
                         sub={{
                           id: s.id,
@@ -738,7 +738,7 @@ export default async function ProjectDetailPage({
                       </span>
                     </a>
                     {isOwner && (
-                      <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                         <DeleteButton
                           action={deleteDocument}
                           fields={{ id: d.id }}
@@ -840,7 +840,7 @@ export default async function ProjectDetailPage({
                       </form>
                     )}
                     {isOwner && (
-                      <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                         <DeleteButton
                           action={deleteRequest}
                           fields={{ id: r.id, projectId: project.id }}
@@ -973,7 +973,7 @@ export default async function ProjectDetailPage({
                       </span>
                     )}
                     {canEditTask && (
-                      <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                         <EditTaskForm
                           task={{
                             id: t.id,
