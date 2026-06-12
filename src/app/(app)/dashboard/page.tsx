@@ -65,6 +65,38 @@ export default async function DashboardPage() {
     hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
   }));
 
+  // Subprojekty vlastníka pro výběr složky v rychlém přidání (s odsazením dle vnoření)
+  const subRows = await prisma.subProject.findMany({
+    where: { project: { ownerId: user.id } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, projectId: true, parentId: true },
+  });
+  const subsByProject: Record<string, { id: string; name: string }[]> = {};
+  {
+    const byProj = new Map<string, typeof subRows>();
+    for (const s of subRows) {
+      const a = byProj.get(s.projectId) ?? [];
+      a.push(s);
+      byProj.set(s.projectId, a);
+    }
+    for (const [pid, list] of byProj) {
+      const byId = new Map(list.map((s) => [s.id, s]));
+      const depth = (id: string) => {
+        let d = 0;
+        let cur = byId.get(id);
+        while (cur?.parentId) {
+          d++;
+          cur = byId.get(cur.parentId);
+        }
+        return d;
+      };
+      subsByProject[pid] = list.map((s) => ({
+        id: s.id,
+        name: `${"– ".repeat(depth(s.id))}${s.name}`,
+      }));
+    }
+  }
+
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
 
   const stats = [
@@ -77,6 +109,7 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-7xl">
       <QuickAdd
         projects={allProjects}
+        subsByProject={subsByProject}
         vendors={quickVendors}
         categories={categories}
         docTypes={docTypes}
