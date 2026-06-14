@@ -575,9 +575,11 @@ export async function updateTaskPlan(formData: FormData) {
 
   // U fáze se termín i % počítají z úkolů – needitujeme je (recompute by je stejně přepsal).
   const isPhase = task.kind === "phase";
+  const newTitle = String(formData.get("title") || "").trim();
   await prisma.task.update({
     where: { id: task.id },
     data: {
+      ...(newTitle ? { title: newTitle } : {}),
       ...(isPhase
         ? {}
         : {

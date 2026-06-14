@@ -7,6 +7,7 @@ import {
   getTaskDetail,
   updateTaskPlan,
   scheduleTaskByAvailability,
+  createTask,
 } from "@/server/actions/tasks";
 import {
   createRequestForTask,
@@ -46,6 +47,8 @@ export function TaskDetailDialog({
   const expTitle = useRef<HTMLInputElement>(null);
   const expAmount = useRef<HTMLInputElement>(null);
   const expLink = useRef<HTMLSelectElement>(null);
+  const subTitle = useRef<HTMLInputElement>(null);
+  const subDays = useRef<HTMLInputElement>(null);
 
   async function reload() {
     setD(await getTaskDetail(id));
@@ -147,8 +150,13 @@ export function TaskDetailDialog({
               </p>
             )}
 
-            <div>
-              <p className="text-base font-medium text-stone-950">{d.title}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="dd-title">{d.kind === "phase" ? "Název fáze" : "Název úkolu"}</Label>
+              {d.canEdit ? (
+                <Input key={`t-${d.id}`} id="dd-title" name="title" defaultValue={d.title} required />
+              ) : (
+                <p className="text-base font-medium text-stone-950">{d.title}</p>
+              )}
               <p className="kicker mt-0.5">
                 {taskStatusLabel(d.status)}
                 {` · hotovo ${d.percentDone} %`}
@@ -243,6 +251,47 @@ export function TaskDetailDialog({
                     </label>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Přidat dílčí úkol (jen u fáze) */}
+            {d.kind === "phase" && d.canEdit && (
+              <div className="space-y-2 border-t border-stone-200 pt-4">
+                <p className="kicker">Přidat dílčí úkol</p>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="nt-title">Název</Label>
+                    <Input ref={subTitle} id="nt-title" placeholder="Co je potřeba udělat" />
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Label htmlFor="nt-days">Odhad (dny)</Label>
+                    <Input ref={subDays} id="nt-days" type="number" min={0} placeholder="1" />
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      const tt = subTitle.current?.value.trim();
+                      if (!tt) return;
+                      act(createTask, {
+                        projectId: d.projectId,
+                        kind: "task",
+                        parentId: d.id,
+                        title: tt,
+                        estimateDays: subDays.current?.value ?? "",
+                        status: "todo",
+                      }).then(() => {
+                        if (subTitle.current) subTitle.current.value = "";
+                        if (subDays.current) subDays.current.value = "";
+                      });
+                    }}
+                  >
+                    Přidat
+                  </Button>
+                </div>
+                <p className="text-[11px] text-stone-400">
+                  Nový úkol nemá termín — po přidání dej v plánování „Přepočítat termíny".
+                </p>
               </div>
             )}
 
