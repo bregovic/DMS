@@ -9,20 +9,29 @@ function utcDate(iso: string): Date | null {
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
 }
 
-async function ownVendor(vendorId: string) {
+// Dostupnost smí spravovat vlastník dodavatele NEBO uživatel se shodným e-mailem
+// (uživatel systému, který je zároveň tímto dodavatelem).
+async function canManageVendor(vendorId: string) {
   const user = await requireUser();
+  const email = user.email ?? "";
   const v = await prisma.vendor.findFirst({
-    where: { id: vendorId, ownerId: user.id },
+    where: {
+      id: vendorId,
+      OR: [
+        { ownerId: user.id },
+        ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
+      ],
+    },
     select: { id: true },
   });
-  if (!v) throw new Error("Dodavatel nenalezen.");
+  if (!v) throw new Error("Na tohoto dodavatele nemáš oprávnění.");
   return v;
 }
 
 /** Naplní kalendář dostupnosti: vybrané dny v týdnu v rozmezí od–do. */
 export async function fillAvailability(formData: FormData) {
   const vendorId = String(formData.get("vendorId") || "");
-  await ownVendor(vendorId);
+  await canManageVendor(vendorId);
 
   const from = utcDate(String(formData.get("from") || ""));
   const to = utcDate(String(formData.get("to") || ""));
@@ -56,7 +65,7 @@ export async function fillAvailability(formData: FormData) {
 /** Smaže záznamy dostupnosti v rozmezí (vrátí na "neurčeno"). */
 export async function clearAvailability(formData: FormData) {
   const vendorId = String(formData.get("vendorId") || "");
-  await ownVendor(vendorId);
+  await canManageVendor(vendorId);
   const from = utcDate(String(formData.get("from") || ""));
   const to = utcDate(String(formData.get("to") || ""));
   if (!from || !to || to < from) throw new Error("Zadej platné rozmezí dat.");
@@ -72,7 +81,7 @@ export async function getVendorAvailability(
   fromIso: string,
   toIso: string,
 ) {
-  await ownVendor(vendorId);
+  await canManageVendor(vendorId);
   const from = utcDate(fromIso);
   const to = utcDate(toIso);
   if (!from || !to) return [];

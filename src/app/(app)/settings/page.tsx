@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/account/change-password-form";
 import { InstallButton } from "@/components/app/install-button";
 import { CodelistManager } from "@/components/account/codelist-manager";
+import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -54,6 +55,20 @@ export default async function SettingsPage() {
       }),
     ]);
   const hasPassword = Boolean(dbUser?.passwordHash);
+
+  // Dodavatelé navázaní na e-mail uživatele (uživatel je zároveň dodavatelem)
+  const myVendors = user.email
+    ? await prisma.vendor.findMany({
+        where: { email: { equals: user.email, mode: "insensitive" } },
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          owner: { select: { name: true, email: true } },
+        },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -107,6 +122,35 @@ export default async function SettingsPage() {
           ]}
         />
       </section>
+
+      {myVendors.length > 0 && (
+        <section className="mt-12">
+          <h2 className="kicker mb-2">Moje dostupnost (jako dodavatel)</h2>
+          <p className="mb-5 max-w-lg text-sm text-stone-500">
+            Jsi v systému veden jako dodavatel (podle e-mailu). Tady si můžeš
+            spravovat kalendář své dostupnosti — projeví se při plánování úkolů,
+            které ti někdo přiřadí.
+          </p>
+          <ul className="border-t border-stone-200">
+            {myVendors.map((v) => (
+              <li
+                key={v.id}
+                className="flex items-center justify-between gap-3 border-b border-stone-200 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-stone-950">{v.name}</p>
+                  {v.ownerId !== user.id && (
+                    <p className="kicker mt-0.5">
+                      eviduje {v.owner.name ?? v.owner.email ?? "?"}
+                    </p>
+                  )}
+                </div>
+                <VendorAvailabilityDialog vendorId={v.id} vendorName={v.name} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
