@@ -423,13 +423,19 @@ export async function updateTaskPlan(formData: FormData) {
     if (!v) vendorId = null;
   }
 
+  // U fáze se termín i % počítají z úkolů – needitujeme je (recompute by je stejně přepsal).
+  const isPhase = task.kind === "phase";
   await prisma.task.update({
     where: { id: task.id },
     data: {
-      startDate: toDate(formData.get("startDate")),
-      dueDate: toDate(formData.get("dueDate")),
+      ...(isPhase
+        ? {}
+        : {
+            startDate: toDate(formData.get("startDate")),
+            dueDate: toDate(formData.get("dueDate")),
+            percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
+          }),
       vendorId,
-      percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");

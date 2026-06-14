@@ -128,21 +128,32 @@ export function TaskDetailDialog({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="dd-start">Začátek</Label>
-                <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="dd-due">Termín</Label>
-                <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={!d.canEdit} />
-              </div>
-            </div>
+            {d.kind === "phase" ? (
+              <p className="border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-500">
+                Termín i % se u fáze počítají z úkolů:{" "}
+                <span className="text-stone-700">
+                  {d.startDate ?? "?"} – {d.dueDate ?? "?"} · {d.percentDone} %
+                </span>
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dd-start">Začátek</Label>
+                    <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dd-due">Termín</Label>
+                    <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={!d.canEdit} />
+                  </div>
+                </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="dd-pct">Hotovo (%)</Label>
-              <Input id="dd-pct" name="percentDone" type="number" min={0} max={100} defaultValue={d.percentDone ?? 0} disabled={!d.canEdit} />
-            </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dd-pct">Hotovo (%)</Label>
+                  <Input id="dd-pct" name="percentDone" type="number" min={0} max={100} defaultValue={d.percentDone ?? 0} disabled={!d.canEdit} />
+                </div>
+              </>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="dd-vendor">Dodavatel</Label>
