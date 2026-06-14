@@ -14,10 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { ParamField } from "@/components/catalog/param-field";
+import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
-
-const fieldClass =
-  "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
 
 export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; taskTitle: string }) {
   const router = useRouter();
@@ -93,15 +91,21 @@ export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; t
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
           <div className="space-y-1.5">
-            <Label htmlFor="tf-op">Činnost z katalogu</Label>
-            <select id="tf-op" className={fieldClass} value={opId} onChange={(e) => pick(e.target.value)} disabled={!ops}>
-              <option value="">{ops ? "— vyber úkon —" : "Načítám katalog…"}</option>
-              {(ops ?? []).map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.unit})
-                </option>
-              ))}
-            </select>
+            <Label>Činnost z katalogu</Label>
+            {op ? (
+              <p className="flex items-center gap-2 text-sm text-stone-700">
+                Vybráno: <span className="font-medium text-stone-950">{op.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpId("")}
+                  className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
+                >
+                  změnit
+                </button>
+              </p>
+            ) : (
+              <OperationPicker ops={ops} onPick={(o) => pick(o.id)} />
+            )}
           </div>
 
           {op && (

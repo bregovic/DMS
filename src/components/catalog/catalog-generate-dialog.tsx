@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { ParamField } from "@/components/catalog/param-field";
+import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
 
 type Line = {
@@ -225,34 +226,13 @@ export function CatalogGenerateDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="cg-add">Přidat činnost</Label>
-            <select
-              id="cg-add"
-              className={fieldClass}
-              value=""
-              onChange={(e) => {
-                if (e.target.value) addLine(e.target.value);
-                e.target.value = "";
-              }}
-              disabled={!ops}
-            >
-              <option value="">{ops ? "— vyber úkon z katalogu —" : "Načítám katalog…"}</option>
-              {(ops ?? []).map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.unit})
-                </option>
-              ))}
-            </select>
-            {ops && ops.length === 0 && (
-              <p className="text-[11px] text-stone-400">
-                Katalog je prázdný – přidej nejdřív úkony v Katalogu.
-              </p>
-            )}
+            <Label>Přidat činnost</Label>
+            <OperationPicker ops={ops} onPick={(o) => addLine(o.id)} />
           </div>
 
           {packages.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="cg-pkg">Nebo přidat balíček „na klíč"</Label>
+              <Label htmlFor="cg-pkg">Nebo přidat balíček „na klíč“</Label>
               <div className="flex items-end gap-2">
                 <select
                   id="cg-pkg"

@@ -365,7 +365,8 @@ export async function deleteRecipe(formData: FormData) {
 // Integrace do fází: generování úkolů + žádanek z katalogu
 // ---------------------------------------------------------------------------
 
-export type CalcOperationDTO = CalcOperation & {
+export type CalcOperationDTO = Omit<CalcOperation, "id"> & {
+  id: string;
   code: string;
   paramsMeta: { key: string; label: string; unit: string | null; defaultValue: number | null }[];
 };
