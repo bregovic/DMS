@@ -8,6 +8,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import { Collapsible } from "@/components/app/collapsible";
+import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
 import { ListFilters } from "@/components/ui/list-filters";
@@ -658,14 +659,19 @@ export default async function ProjectDetailPage({
 
       <div className="mt-8 flex flex-col gap-10">
         {/* Výdaje */}
-        <section className="order-2">
-          <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+        <CollapsibleSection
+          className="order-2"
+          storageKey={`dms-sec:${project.id}:${sub ?? "root"}:expenses`}
+          defaultOpen
+          title={
             <h2 className="kicker">
               Výdaje · {shownExpenses.length}
               {expenseFilterActive ? ` z ${levelExpenses.length}` : ""}
               {onlyMine ? " · jen tvoje" : ""}
             </h2>
-            {canAdd && (
+          }
+          actions={
+            canAdd && (
               <NewExpenseForm
                 projectId={project.id}
                 subProjectId={sub ?? undefined}
@@ -683,9 +689,9 @@ export default async function ProjectDetailPage({
                   currency: project.defaultCurrency,
                 }}
               />
-            )}
-          </div>
-
+            )
+          }
+        >
           {levelExpenses.length === 0 ? (
             <p className="py-8 text-sm text-stone-500">Zatím žádné výdaje.</p>
           ) : (
@@ -720,7 +726,7 @@ export default async function ProjectDetailPage({
             )}
             </>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* Dokumenty (jen v kořeni). Přístup k projektu je v Nastavení. */}
         <div className="order-1 space-y-4">
@@ -794,22 +800,28 @@ export default async function ProjectDetailPage({
       </div>
 
       {/* Žádanky */}
-      <section className="mt-12">
-        <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+      <CollapsibleSection
+        className="mt-12"
+        storageKey={`dms-sec:${project.id}:${sub ?? "root"}:requests`}
+        defaultOpen
+        title={
           <h2 className="kicker">
             Žádanky · {shownRequests.length}
             {requestFilterActive ? ` z ${levelRequests.length}` : ""}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
-          {canAdd && (
+        }
+        actions={
+          canAdd && (
             <NewRequestForm
               projectId={project.id}
               subProjectId={sub ?? undefined}
               vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
               categories={categories}
             />
-          )}
-        </div>
+          )
+        }
+      >
         {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
         ) : (
@@ -917,24 +929,30 @@ export default async function ProjectDetailPage({
           )}
           </>
         )}
-      </section>
+      </CollapsibleSection>
 
       {/* Úkoly */}
-      <section className="mt-12">
-        <div className="mb-4 flex items-center justify-between border-b border-stone-300/80 pb-2">
+      <CollapsibleSection
+        className="mt-12"
+        storageKey={`dms-sec:${project.id}:${sub ?? "root"}:tasks`}
+        defaultOpen
+        title={
           <h2 className="kicker">
             Úkoly · {levelTasks.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
-          {canAdd && (
+        }
+        actions={
+          canAdd && (
             <NewTaskForm
               projectId={project.id}
               subProjectId={sub ?? undefined}
               statuses={taskStatuses}
               phases={phaseOptions}
             />
-          )}
-        </div>
+          )
+        }
+      >
         {levelTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné úkoly.</p>
         ) : (
@@ -1073,7 +1091,7 @@ export default async function ProjectDetailPage({
             })}
           </ul>
         )}
-      </section>
+      </CollapsibleSection>
     </div>
   );
 }
