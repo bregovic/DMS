@@ -4,11 +4,19 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole } from "@/server/access";
+import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
   const n = parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
   return isNaN(n) ? null : n;
+}
+function intOrNull(v: FormDataEntryValue | null): number | null {
+  const n = num(v);
+  return n == null ? null : Math.round(n);
+}
+function strOrNull(v: FormDataEntryValue | null): string | null {
+  return String(v || "").trim() || null;
 }
 
 type Ctx = {
@@ -68,7 +76,9 @@ export async function createOffer(formData: FormData) {
       price: num(formData.get("price")),
       deliveryDate:
         deliveryDate && !isNaN(deliveryDate.getTime()) ? deliveryDate : null,
-      note: String(formData.get("note") || "").trim() || null,
+      note: strOrNull(formData.get("note")),
+      rating: strOrNull(formData.get("rating")),
+      score: intOrNull(formData.get("score")),
       status: "nova",
       createdById: ctx.userId,
     },
@@ -125,10 +135,49 @@ export async function updateOffer(formData: FormData) {
       price: num(formData.get("price")),
       deliveryDate:
         deliveryDate && !isNaN(deliveryDate.getTime()) ? deliveryDate : null,
-      note: String(formData.get("note") || "").trim() || null,
+      note: strOrNull(formData.get("note")),
+      rating: strOrNull(formData.get("rating")),
+      score: intOrNull(formData.get("score")),
     },
   });
 
+  revalidatePath(`/projects/${projectId}`);
+}
+
+// Příloha k nabídce (PDF/sken nabídky). Owner + aktivní dodavatel (svou nabídku).
+export async function attachOfferFile(formData: FormData) {
+  const id = String(formData.get("id"));
+  const { offer, projectId, canEdit } = await offerCtx(id);
+  if (!canEdit) throw new Error("K této nabídce nemůžeš přidat přílohu.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
+  if (file.size > 8 * 1024 * 1024) throw new Error("Soubor je větší než 8 MB.");
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+  if (!project) throw new Error("Projekt nenalezen.");
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const key = await storage.save(
+    buffer,
+    file.name,
+    `${project.ownerId}/${projectId}/nabidky`,
+  );
+  await prisma.document.create({
+    data: {
+      projectId,
+      offerId: offer.id,
+      fileName: key,
+      originalName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      type: "offer",
+      uploadedById: (await requireUser()).id,
+    },
+  });
   revalidatePath(`/projects/${projectId}`);
 }
 

@@ -1,14 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Pencil, Plus, X } from "lucide-react";
+import { Check, Paperclip, Pencil, Plus, X } from "lucide-react";
 import {
   createOffer,
   updateOffer,
   deleteOffer,
   setOfferStatus,
   selectOffer,
+  attachOfferFile,
 } from "@/server/actions/offers";
+import { deleteDocument } from "@/server/actions/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,9 +26,12 @@ export type OfferView = {
   price: number | null;
   deliveryDate: string | null; // yyyy-mm-dd
   note: string | null;
+  rating: string | null;
+  score: number | null;
   status: string;
   selected: boolean;
   canEdit: boolean;
+  docs: { id: string; originalName: string }[];
 };
 
 type Vendor = { id: string; label: string };
@@ -58,11 +63,7 @@ function OfferForm({
       <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">{mode === "create" ? "Nová nabídka" : "Upravit nabídku"}</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
+          <button type="button" onClick={() => setOpen(false)} className="text-stone-400 hover:text-stone-950 cursor-pointer">
             <X className="size-4" />
           </button>
         </div>
@@ -94,53 +95,46 @@ function OfferForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="vendorName">…nebo jméno mimo evidenci</Label>
-            <Input
-              id="vendorName"
-              name="vendorName"
-              defaultValue={offer?.vendorName ?? ""}
-              placeholder="Např. Truhlář Karel"
-            />
+            <Input id="vendorName" name="vendorName" defaultValue={offer?.vendorName ?? ""} placeholder="Např. Truhlář Karel" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="price">Cena</Label>
-              <Input
-                id="price"
-                name="price"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={offer?.price ?? ""}
-                placeholder="0"
-              />
+              <Input id="price" name="price" type="number" step="0.01" min="0" defaultValue={offer?.price ?? ""} placeholder="0" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deliveryDate">Termín dodání</Label>
-              <Input
-                id="deliveryDate"
-                name="deliveryDate"
-                type="date"
-                defaultValue={offer?.deliveryDate ?? ""}
-              />
+              <Input id="deliveryDate" name="deliveryDate" type="date" defaultValue={offer?.deliveryDate ?? ""} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="score">Body (0–100)</Label>
+              <Input id="score" name="score" type="number" step="1" min="0" max="100" defaultValue={offer?.score ?? ""} placeholder="—" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rating">Hodnocení dodavatele</Label>
+              <Input id="rating" name="rating" defaultValue={offer?.rating ?? ""} placeholder="Např. 4,5★ / reference" />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="note">Poznámka</Label>
+            <Label htmlFor="note">Komentář k nabídce</Label>
             <textarea
               id="note"
               name="note"
               rows={2}
               defaultValue={offer?.note ?? ""}
-              placeholder="Podmínky, co je v ceně…"
+              placeholder="Podmínky, co je v ceně, posouzení…"
               className={fieldClass}
             />
           </div>
 
           <p className="text-xs text-stone-400">
-            Dodavatele lze vybrat z evidence, nebo napsat jméno mimo evidenci. Cenu a
-            termín můžeš doplnit i později.
+            Dodavatele lze vybrat z evidence, nebo napsat jméno mimo evidenci. Cenu,
+            termín, body i komentář můžeš doplnit i později.
           </p>
 
           <div className="flex justify-end gap-2">
@@ -222,32 +216,71 @@ export function OffersPanel({
           {offers.map((o) => (
             <li
               key={o.id}
-              className={`group flex items-baseline justify-between gap-3 border-b border-stone-100 py-2 ${
+              className={`group flex flex-col gap-1.5 border-b border-stone-100 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 ${
                 o.selected ? "bg-stone-50" : ""
               }`}
             >
               <div className="min-w-0">
-                <p className="text-sm text-stone-900">
-                  {o.selected && (
-                    <Check className="mr-1 inline size-3.5 align-[-2px] text-stone-900" />
-                  )}
-                  {o.vendorLabel}
+                <p className="flex flex-wrap items-center gap-x-2 text-sm text-stone-900">
+                  {o.selected && <Check className="size-3.5 text-stone-900" />}
+                  <span className="font-medium">{o.vendorLabel}</span>
                   {o.price != null && (
-                    <span className="ml-2 font-mono text-stone-700">
-                      {formatCurrency(o.price)}
+                    <span className="font-mono text-stone-700">{formatCurrency(o.price)}</span>
+                  )}
+                  {o.score != null && (
+                    <span className="border border-stone-300 px-1 text-[10px] font-medium text-stone-700">
+                      {o.score} b
                     </span>
                   )}
                 </p>
                 <p className="kicker mt-0.5">
                   {o.deliveryDate ? `do ${formatDate(o.deliveryDate)}` : "termín neurčen"}
+                  {o.rating ? ` · ${o.rating}` : ""}
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
-                  {o.note ? ` · ${o.note}` : ""}
                 </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {o.canEdit && (
-                  <OfferStatusSelect id={o.id} status={o.status} statuses={statuses} />
+                {o.note && <p className="mt-0.5 text-xs text-stone-500">{o.note}</p>}
+
+                {/* Přílohy nabídky */}
+                {(o.docs.length > 0 || o.canEdit) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    {o.docs.map((d) => (
+                      <span key={d.id} className="inline-flex items-center gap-1 text-stone-500">
+                        <Paperclip className="size-3" />
+                        <a
+                          href={`/api/documents/${d.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline-offset-2 hover:text-stone-950 hover:underline"
+                        >
+                          {d.originalName}
+                        </a>
+                        {o.canEdit && (
+                          <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat přílohu?" />
+                        )}
+                      </span>
+                    ))}
+                    {o.canEdit && (
+                      <form action={attachOfferFile}>
+                        <input type="hidden" name="id" value={o.id} />
+                        <label className="inline-flex cursor-pointer items-center gap-1 text-stone-400 underline-offset-2 hover:text-stone-950 hover:underline">
+                          <Plus className="size-3" />
+                          příloha
+                          <input
+                            type="file"
+                            name="file"
+                            accept="image/*,application/pdf,.eml,.msg"
+                            className="hidden"
+                            onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                          />
+                        </label>
+                      </form>
+                    )}
+                  </div>
                 )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                {o.canEdit && <OfferStatusSelect id={o.id} status={o.status} statuses={statuses} />}
                 {isOwner && (
                   <form action={selectOffer}>
                     <input type="hidden" name="id" value={o.id} />
@@ -265,7 +298,7 @@ export function OffersPanel({
                   </form>
                 )}
                 {o.canEdit && (
-                  <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <OfferForm
                       mode="edit"
                       offer={o}
@@ -281,11 +314,7 @@ export function OffersPanel({
                         </button>
                       )}
                     />
-                    <DeleteButton
-                      action={deleteOffer}
-                      fields={{ id: o.id }}
-                      confirm="Smazat tuto nabídku?"
-                    />
+                    <DeleteButton action={deleteOffer} fields={{ id: o.id }} confirm="Smazat tuto nabídku?" />
                   </span>
                 )}
               </div>

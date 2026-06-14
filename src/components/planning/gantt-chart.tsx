@@ -21,7 +21,7 @@ export type GanttItem = {
   start: Date | null;
   end: Date | null;
   done?: boolean;
-  kind?: "phase" | "task";
+  kind?: "phase" | "task" | "request";
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
   children?: GanttChild[];
 };
@@ -126,6 +126,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
   function color(it: GanttItem) {
     if (it.kind === "phase" && it.prereqMet === false) return "bg-red-500";
+    if (it.kind === "request" && !it.done) return "bg-red-500";
     if (it.done) return "bg-stone-300";
     if (!it.end) return "bg-stone-500";
     const e = startOfDay(it.end).getTime();
@@ -218,7 +219,10 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                     )}
                     <span className={`truncate ${isPhase ? "font-semibold text-stone-900" : "text-stone-800"}`}>
                       {isPhase && <span className="kicker mr-1 !text-stone-400">Fáze</span>}
-                      {it.name}
+                      {it.kind === "request" && (
+                        <span className="kicker mr-1 !text-red-500">VŘ</span>
+                      )}
+                      {it.kind === "request" ? it.name.replace(/^Žádanka:\s*/, "") : it.name}
                     </span>
                     {isPhase && kids.length > 0 && (
                       <span className="ml-1 shrink-0 text-[11px] text-stone-400">{doneKids}/{kids.length}</span>
@@ -260,7 +264,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / nesplněné prerekvizity</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / nesplněné prerekvizity / nedokončené VŘ</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-300" /> hotovo</span>

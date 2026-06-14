@@ -141,16 +141,19 @@ model Offer {
   vendorName   String?
   price        Decimal?  @db.Decimal(12, 2)
   deliveryDate DateTime?
-  note         String?
+  note         String? // komentář / hodnocení nabídky
+  rating       String? // hodnocení dodavatele (text)
+  score        Int? // bodové hodnocení nabídky (pro řazení)
   status       String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
   selected     Boolean   @default(false)
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  vendor    Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  createdBy User    @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  request   Request    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  vendor    Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdBy User       @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  documents Document[]
 
   @@index([requestId])
   @@index([vendorId])
@@ -344,6 +347,7 @@ model Document {
   id           String   @id @default(cuid())
   projectId    String
   expenseId    String?
+  offerId      String?
   fileName     String // klíč v úložišti (storage key)
   originalName String
   mimeType     String
@@ -354,8 +358,10 @@ model Document {
 
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  offer      Offer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
   uploadedBy User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([projectId])
   @@index([expenseId])
+  @@index([offerId])
 }

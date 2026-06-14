@@ -66,6 +66,19 @@ export default async function PlanningPage({
               subProject: { select: { name: true } },
             },
           },
+          requests: {
+            where: { requiredDate: { not: null } },
+            orderBy: { requiredDate: "asc" },
+            select: {
+              id: true,
+              title: true,
+              requiredDate: true,
+              status: true,
+              createdById: true,
+              subProjectId: true,
+              subProject: { select: { name: true } },
+            },
+          },
         },
       })
     : [];
@@ -74,9 +87,8 @@ export default async function PlanningPage({
 
   const planned = projects
     .map((p) => {
-      let tasks = p.tasks;
-
-      // Složkový přístup: jen úkoly z povolených složek (+ pod-složek) nebo mé.
+      // Rozsah (null = plný přístup): povolené složky + jejich pod-složky
+      let scope: Set<string> | null = null;
       if (!fullIds.has(p.id)) {
         const childrenOf = new Map<string, string[]>();
         for (const s of p.subProjects)
@@ -85,7 +97,7 @@ export default async function PlanningPage({
             a.push(s.id);
             childrenOf.set(s.parentId, a);
           }
-        const scope = new Set<string>();
+        scope = new Set<string>();
         const stack = [...(subScope.get(p.id) ?? [])];
         while (stack.length) {
           const x = stack.pop()!;
@@ -93,20 +105,22 @@ export default async function PlanningPage({
           scope.add(x);
           (childrenOf.get(x) ?? []).forEach((ch) => stack.push(ch));
         }
-        tasks = tasks.filter(
-          (t) =>
-            (!!t.subProjectId && scope.has(t.subProjectId)) ||
-            t.createdById === user.id ||
-            t.assigneeEmail === email,
-        );
       }
+      const sc = scope;
+      const visible = (
+        subProjectId: string | null,
+        createdById: string,
+        assignee?: string | null,
+      ) =>
+        (!sc ||
+          (!!subProjectId && sc.has(subProjectId)) ||
+          createdById === user.id ||
+          assignee === email) &&
+        (!mine || createdById === user.id || assignee === email);
 
-      // Filtr „jen moje"
-      if (mine) {
-        tasks = tasks.filter(
-          (t) => t.createdById === user.id || t.assigneeEmail === email,
-        );
-      }
+      const tasks = p.tasks.filter((t) =>
+        visible(t.subProjectId, t.createdById, t.assigneeEmail),
+      );
 
       // Dílčí úkoly pod fázemi (zobrazí se po kliknutí, ne samostatně)
       const childrenByPhase = new Map<string, typeof tasks>();
@@ -159,7 +173,23 @@ export default async function PlanningPage({
           };
         })
         .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
-      return { project: p, items };
+
+      // Žádanky (výběrová řízení) jako milníky; červené, dokud nejsou dokončené
+      const reqItems: GanttItem[] = p.requests
+        .filter((r) => visible(r.subProjectId, r.createdById))
+        .map((r): GanttItem => ({
+          id: `req-${r.id}`,
+          name: `Žádanka: ${r.subProject ? `${r.subProject.name}: ` : ""}${r.title}`,
+          start: null,
+          end: r.requiredDate,
+          done: r.status === "schvaleno" || r.status === "zruseno",
+          kind: "request",
+        }));
+
+      const allItems = [...items, ...reqItems].sort(
+        (a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime(),
+      );
+      return { project: p, items: allItems };
     })
     .filter((x) => x.items.length > 0);
 

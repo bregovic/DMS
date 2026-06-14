@@ -96,8 +96,19 @@ export default async function ProjectDetailPage({
             vendor: { select: { name: true } },
             createdBy: { select: { name: true, email: true } },
             offers: {
-              orderBy: [{ selected: "desc" }, { price: "asc" }, { createdAt: "asc" }],
-              include: { vendor: { select: { name: true } } },
+              orderBy: [
+                { selected: "desc" },
+                { score: { sort: "desc", nulls: "last" } },
+                { price: "asc" },
+                { createdAt: "asc" },
+              ],
+              include: {
+                vendor: { select: { name: true } },
+                documents: {
+                  select: { id: true, originalName: true },
+                  orderBy: { createdAt: "asc" },
+                },
+              },
             },
           },
         },
@@ -868,10 +879,16 @@ export default async function ProjectDetailPage({
                       ? o.deliveryDate.toISOString().slice(0, 10)
                       : null,
                     note: o.note,
+                    rating: o.rating,
+                    score: o.score,
                     status: o.status,
                     selected: o.selected,
                     canEdit:
                       isOwner || (role === "active" && o.createdById === user.id),
+                    docs: o.documents.map((d) => ({
+                      id: d.id,
+                      originalName: d.originalName,
+                    })),
                   }))}
                 />
               </li>
