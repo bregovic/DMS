@@ -1057,7 +1057,14 @@ export default async function ProjectDetailPage({
                       </span>
                     )}
                     {canEditTask && (
-                      <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                      <span className="flex items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                        {isPhase && (
+                          <CatalogGenerateDialog
+                            projectId={project.id}
+                            subProjectId={sub ?? undefined}
+                            phase={{ id: t.id, title: t.title }}
+                          />
+                        )}
                         <EditTaskForm
                           task={{
                             id: t.id,

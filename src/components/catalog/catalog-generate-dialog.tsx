@@ -31,10 +31,12 @@ export function CatalogGenerateDialog({
   projectId,
   subProjectId,
   phases = [],
+  phase,
 }: {
   projectId: string;
   subProjectId?: string | null;
   phases?: { id: string; title: string }[];
+  phase?: { id: string; title: string }; // přidat do existující fáze
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -75,7 +77,7 @@ export function CatalogGenerateDialog({
     for (const p of op.paramsMeta) values[p.key] = Number(p.defaultValue ?? 0);
     counter.current += 1;
     setLines((ls) => [...ls, { lineId: counter.current, operationId, values, multiplier: 1 }]);
-    if (!phaseName) setPhaseName(op.name ?? "");
+    if (!phase && !phaseName) setPhaseName(op.name ?? "");
   }
 
   function close() {
@@ -89,8 +91,9 @@ export function CatalogGenerateDialog({
       const res = await generateFromCatalog({
         projectId,
         subProjectId: subProjectId ?? null,
-        phaseName,
-        dependsOnPhaseId: dependsOnPhaseId || null,
+        phaseId: phase?.id ?? null,
+        phaseName: phase ? undefined : phaseName,
+        dependsOnPhaseId: phase ? null : dependsOnPhaseId || null,
         lines: lines.map((l) => ({ operationId: l.operationId, values: l.values, multiplier: l.multiplier })),
       });
       if ("error" in res) {
@@ -122,7 +125,17 @@ export function CatalogGenerateDialog({
       : null;
 
   if (!open) {
-    return (
+    return phase ? (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Přidat do fáze z katalogu"
+        className="inline-flex items-center gap-1 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
+      >
+        <Boxes className="size-3.5" />
+        Z katalogu
+      </button>
+    ) : (
       <Button variant="outline" onClick={() => setOpen(true)}>
         <Boxes className="size-4" />
         Z katalogu
@@ -134,13 +147,16 @@ export function CatalogGenerateDialog({
     <ModalBackdrop onClose={close}>
       <div className="w-full max-w-2xl border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nová fáze z katalogu</h3>
+          <h3 className="kicker">
+            {phase ? `Přidat do fáze · ${phase.title}` : "Nová fáze z katalogu"}
+          </h3>
           <button type="button" onClick={close} className="text-stone-400 hover:text-stone-950 cursor-pointer">
             <X className="size-4" />
           </button>
         </div>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
+          {!phase && (
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="cg-phase">Název fáze</Label>
@@ -163,6 +179,7 @@ export function CatalogGenerateDialog({
               </select>
             </div>
           </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="cg-add">Přidat činnost</Label>
@@ -311,15 +328,16 @@ export function CatalogGenerateDialog({
 
         <div className="flex items-center justify-between gap-2 border-t border-stone-200 px-5 py-4">
           <p className="text-[11px] text-stone-400">
-            Vytvoří fázi s dílčími úkoly (pracnost → dny, 8 h/den) a žádankami na
-            materiál i práci (Poptávka) – rovnou se počítají ve forecastu.
+            {phase
+              ? "Přidá do fáze dílčí úkoly (pracnost → dny, 8 h/den) a žádanky na materiál i práci; termíny se přepočítají."
+              : "Vytvoří fázi s dílčími úkoly (pracnost → dny, 8 h/den) a žádankami na materiál i práci (Poptávka) – rovnou se počítají ve forecastu."}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={close}>
               Zrušit
             </Button>
             <Button type="button" disabled={pending || lines.length === 0} onClick={submit}>
-              {pending ? "Generuji…" : "Vytvořit fázi"}
+              {pending ? "Generuji…" : phase ? "Přidat do fáze" : "Vytvořit fázi"}
             </Button>
           </div>
         </div>
