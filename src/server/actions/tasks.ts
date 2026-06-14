@@ -193,6 +193,140 @@ async function saveDeps(
   }
 }
 
+const DAY_MS = 86400000;
+function addDaysUTC(d: Date, n: number) {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x;
+}
+
+/** Smí uživatel plánovat (datumy/závislosti) tento prvek? owner / tvůrce / active-ve-scope. */
+async function canPlan(
+  task: { projectId: string; createdById: string; subProjectId: string | null },
+  user: { id: string; email?: string | null }
+) {
+  const access = await getProjectAccess(task.projectId, user);
+  if (!access) return false;
+  if (access.role === "owner") return true;
+  if (task.createdById === user.id) return true;
+  if (access.role === "active") {
+    if (!access.scopeSubIds) return true;
+    const scope = await expandScope(task.projectId, access.scopeSubIds);
+    return !!task.subProjectId && scope.has(task.subProjectId);
+  }
+  return false;
+}
+
+/** Najde N nejbližších dostupných dní dodavatele od data `from`. */
+async function availabilityDates(vendorId: string, from: Date, need: number) {
+  const avail = await prisma.vendorAvailability.findMany({
+    where: { vendorId, available: true, date: { gte: from } },
+    orderBy: { date: "asc" },
+    take: need,
+    select: { date: true },
+  });
+  if (!avail.length) return null;
+  return {
+    start: avail[0].date,
+    due: avail[avail.length - 1].date,
+    enough: avail.length >= need,
+    got: avail.length,
+  };
+}
+
+/** Přepočítá termíny fází (min/max dílčích úkolů). */
+async function recomputePhaseDates(projectId: string) {
+  const [phases, children] = await Promise.all([
+    prisma.task.findMany({ where: { projectId, kind: "phase" }, select: { id: true, startDate: true, dueDate: true } }),
+    prisma.task.findMany({ where: { projectId, kind: "task", parentId: { not: null } }, select: { parentId: true, startDate: true, dueDate: true } }),
+  ]);
+  const byParent = new Map<string, { startDate: Date | null; dueDate: Date | null }[]>();
+  for (const c of children) {
+    if (!c.parentId) continue;
+    const a = byParent.get(c.parentId) ?? [];
+    a.push(c);
+    byParent.set(c.parentId, a);
+  }
+  const same = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+  for (const p of phases) {
+    const kids = byParent.get(p.id) ?? [];
+    const starts = kids.map((k) => k.startDate?.getTime()).filter((x): x is number => x != null);
+    const dues = kids.map((k) => k.dueDate?.getTime()).filter((x): x is number => x != null);
+    const start = starts.length ? new Date(Math.min(...starts)) : null;
+    const due = dues.length ? new Date(Math.max(...dues)) : null;
+    if (!same(start, p.startDate) || !same(due, p.dueDate))
+      await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
+  }
+}
+
+/** Po změně termínu posune navazující úkoly (jen dopředu) a přepočítá fáze. */
+async function cascadeReschedule(projectId: string, triggerId: string) {
+  const tasks = await prisma.task.findMany({
+    where: { projectId, kind: "task" },
+    select: {
+      id: true, vendorId: true, estimateDays: true, startDate: true, dueDate: true,
+      dependsOn: { select: { dependsOnId: true } },
+    },
+  });
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const deps = new Map(tasks.map((t) => [t.id, t.dependsOn.map((d) => d.dependsOnId).filter((x) => byId.has(x))]));
+  const rev = new Map<string, string[]>(tasks.map((t) => [t.id, []]));
+  for (const [id, ds] of deps) for (const d of ds) rev.get(d)!.push(id);
+
+  // dotčené = potomci spouštěče v grafu závislostí
+  const affected = new Set<string>();
+  const stack = [...(rev.get(triggerId) ?? [])];
+  while (stack.length) {
+    const x = stack.pop()!;
+    if (affected.has(x)) continue;
+    affected.add(x);
+    (rev.get(x) ?? []).forEach((n) => stack.push(n));
+  }
+
+  if (affected.size) {
+    // topologické pořadí (Kahn) – cykly se přeskočí
+    const indeg = new Map(tasks.map((t) => [t.id, deps.get(t.id)!.length]));
+    const queue = tasks.filter((t) => indeg.get(t.id) === 0).map((t) => t.id);
+    const order: string[] = [];
+    while (queue.length) {
+      const x = queue.shift()!;
+      order.push(x);
+      for (const n of rev.get(x) ?? []) {
+        indeg.set(n, indeg.get(n)! - 1);
+        if (indeg.get(n) === 0) queue.push(n);
+      }
+    }
+    const dm = new Map(tasks.map((t) => [t.id, { start: t.startDate, due: t.dueDate }]));
+    for (const id of order) {
+      if (!affected.has(id)) continue;
+      const t = byId.get(id)!;
+      let maxPred: Date | null = null;
+      for (const d of deps.get(id)!) {
+        const dd = dm.get(d)?.due;
+        if (dd && (!maxPred || dd > maxPred)) maxPred = dd;
+      }
+      if (!maxPred) continue;
+      const desired = addDaysUTC(maxPred, 1);
+      const cur = dm.get(id)!;
+      const newStart = cur.start && cur.start > desired ? cur.start : desired;
+      if (cur.start && newStart.getTime() === cur.start.getTime()) continue; // už je dost pozdě
+      if (t.vendorId && t.estimateDays && t.estimateDays > 0) {
+        const s = await availabilityDates(t.vendorId, newStart, t.estimateDays);
+        if (s) {
+          dm.set(id, { start: s.start, due: s.due });
+          await prisma.task.update({ where: { id }, data: { startDate: s.start, dueDate: s.due } });
+          continue;
+        }
+      }
+      const durMs = cur.start && cur.due ? cur.due.getTime() - cur.start.getTime() : t.estimateDays ? (t.estimateDays - 1) * DAY_MS : 0;
+      const newDue = new Date(newStart.getTime() + durMs);
+      dm.set(id, { start: newStart, due: newDue });
+      await prisma.task.update({ where: { id }, data: { startDate: newStart, dueDate: newDue } });
+    }
+  }
+  await recomputePhaseDates(projectId);
+}
+
 /** Detail prvku (fáze/úkol) pro dialog v plánování. */
 export async function getTaskDetail(id: string) {
   const user = await requireUser();
@@ -210,7 +344,10 @@ export async function getTaskDetail(id: string) {
   if (!task) throw new Error("Prvek nenalezen.");
   const access = await getProjectAccess(task.projectId, user);
   if (!access) throw new Error("Nemáš přístup.");
-  const canEdit = access.role === "owner" || task.createdById === user.id || false;
+  const canEdit = await canPlan(
+    { projectId: task.projectId, createdById: task.createdById, subProjectId: task.subProjectId },
+    user
+  );
 
   const [candidates, vendors, requests, expenses] = await Promise.all([
     prisma.task.findMany({
@@ -267,8 +404,8 @@ export async function getTaskDetail(id: string) {
 /** Uloží z dialogu: datumy, dodavatele a závislosti. */
 export async function updateTaskPlan(formData: FormData) {
   const id = String(formData.get("id"));
-  const { task, isOwner, isCreator } = await taskCtx(id);
-  if (!isOwner && !isCreator) throw new Error("Tento prvek nemůžeš upravit.");
+  const { user, task } = await taskCtx(id);
+  if (!(await canPlan(task, user))) throw new Error("Tento prvek nemůžeš upravit.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
@@ -292,6 +429,7 @@ export async function updateTaskPlan(formData: FormData) {
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
+  await cascadeReschedule(task.projectId, task.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
@@ -303,16 +441,13 @@ export async function scheduleTaskByAvailability(formData: FormData) {
   const task = await prisma.task.findUnique({
     where: { id },
     select: {
-      id: true, projectId: true, createdById: true, vendorId: true,
+      id: true, projectId: true, createdById: true, subProjectId: true, vendorId: true,
       estimateDays: true,
       dependsOn: { select: { dependsOn: { select: { dueDate: true } } } },
     },
   });
   if (!task) throw new Error("Úkol nenalezen.");
-  const access = await getProjectAccess(task.projectId, user);
-  if (!access || (access.role !== "owner" && task.createdById !== user.id)) {
-    throw new Error("Tento úkol nemůžeš plánovat.");
-  }
+  if (!(await canPlan(task, user))) throw new Error("Tento úkol nemůžeš plánovat.");
   if (!task.vendorId) throw new Error("Úkol nemá přiřazeného dodavatele.");
   const need = task.estimateDays ?? 0;
   if (need <= 0) throw new Error("Úkol nemá zadaný odhad dní.");
@@ -323,37 +458,30 @@ export async function scheduleTaskByAvailability(formData: FormData) {
   for (const d of task.dependsOn) {
     const due = d.dependsOn.dueDate;
     if (due) {
-      const next = new Date(due);
-      next.setUTCDate(next.getUTCDate() + 1);
+      const next = addDaysUTC(due, 1);
       if (next > earliest) earliest = next;
     }
   }
 
-  const avail = await prisma.vendorAvailability.findMany({
-    where: { vendorId: task.vendorId, available: true, date: { gte: earliest } },
-    orderBy: { date: "asc" },
-    take: need,
-    select: { date: true },
-  });
-  if (avail.length === 0) {
+  const s = await availabilityDates(task.vendorId, earliest, need);
+  if (!s) {
     throw new Error(
       "Dodavatel nemá v kalendáři žádné dostupné dny od plánovaného začátku. Doplň mu dostupnost.",
     );
   }
-  const start = avail[0].date;
-  const due = avail[avail.length - 1].date;
   await prisma.task.update({
     where: { id: task.id },
-    data: { startDate: start, dueDate: due },
+    data: { startDate: s.start, dueDate: s.due },
   });
+  await cascadeReschedule(task.projectId, task.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
   return {
     ok: true,
-    start: start.toISOString().slice(0, 10),
-    due: due.toISOString().slice(0, 10),
-    enough: avail.length >= need,
-    got: avail.length,
+    start: s.start.toISOString().slice(0, 10),
+    due: s.due.toISOString().slice(0, 10),
+    enough: s.enough,
+    got: s.got,
     need,
   };
 }

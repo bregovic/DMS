@@ -108,6 +108,13 @@ export function TaskDetailDialog({
           >
             <input type="hidden" name="id" value={d.id} />
 
+            {!d.canEdit && (
+              <p className="border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-500">
+                Jen pro čtení — úpravy může dělat vlastník projektu nebo člen
+                s přístupem k této složce.
+              </p>
+            )}
+
             <div>
               <p className="text-base font-medium text-stone-950">{d.title}</p>
               <p className="kicker mt-0.5">
