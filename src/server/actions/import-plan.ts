@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { parseAnyDate, type ProjectPlan } from "@/lib/plan";
+import { parseAnyDate, type ProjectPlan, type PlanTask } from "@/lib/plan";
 import { getExpenseCategories, slugifyCategory } from "@/server/expense-categories";
 import { getProjectAccess, canImportProject, fullAccessProjectIds } from "@/server/access";
 
@@ -222,9 +222,20 @@ export async function importPlanJson(
     }
   }
 
-  // Předzpracuj seznam dodavatelů (enrichment z ARES proběhne jednou).
+  // Předzpracuj seznam dodavatelů (enrichment z ARES proběhne jednou) + dostupnost.
   for (const d of plan.dodavatele ?? []) {
-    await resolveVendor({ ico: d.ico, email: d.email, name: d.nazev });
+    const vid = await resolveVendor({ ico: d.ico, email: d.email, name: d.nazev });
+    if (vid && d.dostupnost?.length) {
+      for (const a of d.dostupnost) {
+        const date = new Date(a.datum);
+        if (isNaN(date.getTime())) continue;
+        await prisma.vendorAvailability.upsert({
+          where: { vendorId_date: { vendorId: vid, date } },
+          create: { vendorId: vid, date, available: !!a.dostupny },
+          update: { available: !!a.dostupny },
+        });
+      }
+    }
   }
 
   // --- Složky (subprojekty) ---
@@ -295,13 +306,18 @@ export async function importPlanJson(
   // --- Žádanky + nabídky ---
   const reqKeyToId = new Map<string, string>();
   const offerKeyToId = new Map<string, string>();
+  const taskKeyToId = new Map<string, string>(); // ref|id úkolu/fáze -> id
+  const taskDepRefs: { taskId: string; refs: string[] }[] = []; // závislosti (2. průchod)
+  const reqTaskRefs: { rid: string; ref: string }[] = []; // navázání žádanky na úkol (2. průchod)
   for (const z of plan.zadanky ?? []) {
     if (!z.nazev) continue;
     const subId = resolveSub(z.slozkaRef);
     const data = {
       title: z.nazev,
       description: z.popis ?? null,
+      startDate: parseAnyDate(z.start),
       requiredDate: parseAnyDate(z.termin),
+      leadDays: z.dodaciLhutaDny != null && isFinite(z.dodaciLhutaDny) ? Math.round(z.dodaciLhutaDny) : null,
       status: z.stav || "poptavka",
       subProjectId: subId,
       unit: z.jednotka || "ks",
@@ -330,6 +346,7 @@ export async function importPlanJson(
     }
     if (z.ref) reqKeyToId.set(z.ref, rid);
     if (z.id) reqKeyToId.set(z.id, rid);
+    if (z.ukolRef) reqTaskRefs.push({ rid, ref: z.ukolRef });
 
     // Nabídky této žádanky
     let selectedOffer: { id: string; vendorId: string | null; price: number | null } | null = null;
@@ -393,12 +410,22 @@ export async function importPlanJson(
 
   // --- Fáze + úkoly ---
   async function upsertTask(
-    t: { id?: string | null; nazev: string; komu?: string | null; start?: string | null; termin?: string | null; stav?: string | null; slozkaRef?: string | null },
+    t: PlanTask,
     kind: "phase" | "task",
     parentId: string | null,
   ): Promise<string | null> {
     if (!t.nazev) return null;
-    const data = {
+    const vendorId =
+      t.dodavatelIco || t.dodavatelEmail
+        ? await resolveVendor({ ico: t.dodavatelIco, email: t.dodavatelEmail })
+        : null;
+    const data: {
+      title: string; assigneeEmail: string | null; startDate: Date | null;
+      dueDate: Date | null; status: string; subProjectId: string | null;
+      kind: "phase" | "task"; parentId: string | null;
+      priority?: string | null; profession?: string | null;
+      estimateDays?: number | null; percentDone?: number; vendorId?: string | null;
+    } = {
       title: t.nazev,
       assigneeEmail: (t.komu || "").trim().toLowerCase() || null,
       startDate: parseAnyDate(t.start),
@@ -408,19 +435,38 @@ export async function importPlanJson(
       kind,
       parentId,
     };
+    if (t.priorita !== undefined)
+      data.priority = ["high", "medium", "low"].includes(t.priorita || "") ? t.priorita : null;
+    if (t.profese !== undefined) data.profession = (t.profese || "").trim() || null;
+    if (t.odhadDni !== undefined)
+      data.estimateDays = t.odhadDni != null && isFinite(t.odhadDni) ? Math.round(t.odhadDni) : null;
+    if (t.hotovoProcent !== undefined)
+      data.percentDone =
+        t.hotovoProcent != null && isFinite(t.hotovoProcent)
+          ? Math.max(0, Math.min(100, Math.round(t.hotovoProcent)))
+          : 0;
+    if (t.dodavatelIco !== undefined || t.dodavatelEmail !== undefined) data.vendorId = vendorId;
+
+    let id: string | null = null;
     if (t.id) {
       const ex = await prisma.task.findFirst({ where: { id: t.id, projectId: PID }, select: { id: true } });
       if (ex) {
         await prisma.task.update({ where: { id: ex.id }, data });
         if (kind === "phase") sum.phases.updated++;
         else sum.tasks.updated++;
-        return ex.id;
+        id = ex.id;
       }
     }
-    const created = await prisma.task.create({ data: { ...data, projectId: PID, createdById: user.id }, select: { id: true } });
-    if (kind === "phase") sum.phases.created++;
-    else sum.tasks.created++;
-    return created.id;
+    if (!id) {
+      const created = await prisma.task.create({ data: { ...data, projectId: PID, createdById: user.id }, select: { id: true } });
+      if (kind === "phase") sum.phases.created++;
+      else sum.tasks.created++;
+      id = created.id;
+    }
+    if (t.ref) taskKeyToId.set(t.ref, id);
+    if (t.id) taskKeyToId.set(t.id, id);
+    if (t.navazuje?.length) taskDepRefs.push({ taskId: id, refs: t.navazuje });
+    return id;
   }
 
   for (const f of plan.faze ?? []) {
@@ -433,6 +479,25 @@ export async function importPlanJson(
   }
   for (const u of plan.ukoly ?? []) {
     await upsertTask(u, "task", null);
+  }
+
+  // --- Závislosti mezi úkoly/fázemi (2. průchod – ref→id) ---
+  for (const { taskId, refs } of taskDepRefs) {
+    const depIds = [
+      ...new Set(refs.map((r) => taskKeyToId.get(r)).filter((x): x is string => !!x)),
+    ].filter((d) => d !== taskId);
+    await prisma.taskDependency.deleteMany({ where: { taskId } });
+    if (depIds.length) {
+      await prisma.taskDependency.createMany({
+        data: depIds.map((dependsOnId) => ({ taskId, dependsOnId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+  // --- Navázání žádanek na úkol/fázi (2. průchod) ---
+  for (const { rid, ref } of reqTaskRefs) {
+    const tid = taskKeyToId.get(ref);
+    if (tid) await prisma.request.update({ where: { id: rid }, data: { taskId: tid } });
   }
 
   // --- Výdaje (realizace plánu) ---
@@ -453,6 +518,7 @@ export async function importPlanJson(
       category: await resolveCategory(v.kategorie),
       date: parseAnyDate(v.datum) ?? new Date(),
       subProjectId: resolveSub(v.slozkaRef),
+      taskId: (v.ukolRef && taskKeyToId.get(v.ukolRef)) || null,
       vendorId,
       requestId,
       offerId,

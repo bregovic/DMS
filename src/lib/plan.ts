@@ -11,6 +11,7 @@ export type PlanVendor = {
   dic?: string | null;
   email?: string | null;
   adresa?: string | null;
+  dostupnost?: { datum: string; dostupny: boolean }[]; // kalendář dostupnosti
 };
 
 export type PlanSubProject = {
@@ -41,9 +42,12 @@ export type PlanRequest = {
   ref?: string | null;
   nazev: string;
   popis?: string | null;
-  termin?: string | null; // yyyy-mm-dd – do plánování
-  stav?: string | null; // poptavka | nabidka | vyhovuje | schvaleno | zruseno
+  start?: string | null; // začátek výběrového řízení (yyyy-mm-dd)
+  termin?: string | null; // yyyy-mm-dd – do plánování / rozhodnout do
+  stav?: string | null; // poptavka | nabidka | vyhovuje | objednano | schvaleno | zruseno
   slozkaRef?: string | null;
+  ukolRef?: string | null; // navázání na úkol/fázi (procurement)
+  dodaciLhutaDny?: number | null; // dodací lhůta ve dnech (leadDays)
   mnozstvi?: number | null;
   jednotka?: string | null;
   kategorie?: string | null;
@@ -57,8 +61,15 @@ export type PlanTask = {
   komu?: string | null; // e-mail řešitele
   start?: string | null;
   termin?: string | null;
-  stav?: string | null; // todo | in_progress | done | cancelled
+  stav?: string | null; // todo | in_progress | done | cancelled | rozhodnout
   slozkaRef?: string | null;
+  priorita?: string | null; // high | medium | low
+  profese?: string | null;
+  odhadDni?: number | null;
+  hotovoProcent?: number | null; // 0–100
+  dodavatelIco?: string | null; // přiřazený dodavatel
+  dodavatelEmail?: string | null;
+  navazuje?: string[]; // refs předchozích úkolů/fází (závislosti)
 };
 
 export type PlanPhase = PlanTask & { ukoly?: PlanTask[] };
@@ -73,6 +84,7 @@ export type PlanExpense = {
   dodavatelIco?: string | null;
   dodavatelEmail?: string | null;
   slozkaRef?: string | null;
+  ukolRef?: string | null; // navázání na úkol/fázi
   zadankaRef?: string | null; // realizace žádanky
   nabidkaRef?: string | null; // realizace konkrétní nabídky
 };

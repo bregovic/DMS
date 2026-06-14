@@ -55,6 +55,13 @@ export async function GET(req: NextRequest) {
         dueDate: true,
         status: true,
         subProjectId: true,
+        priority: true,
+        profession: true,
+        estimateDays: true,
+        percentDone: true,
+        vendorId: true,
+        vendor: { select: { ico: true, email: true } },
+        dependsOn: { select: { dependsOnId: true } },
       },
     }),
     prisma.expense.findMany({
@@ -64,16 +71,32 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  // Sbírka dodavatelů použitých v plánu (z evidence).
+  // Sbírka dodavatelů použitých v plánu (z evidence) – z nabídek, výdajů i úkolů.
   const vendorIds = new Set<string>();
   for (const r of requests) for (const o of r.offers) if (o.vendorId) vendorIds.add(o.vendorId);
   for (const e of expenses) if (e.vendorId) vendorIds.add(e.vendorId);
-  const vendors = vendorIds.size
-    ? await prisma.vendor.findMany({
-        where: { id: { in: [...vendorIds] }, ownerId: project.ownerId },
-        select: { ico: true, name: true, dic: true, email: true, address: true },
-      })
-    : [];
+  for (const t of tasks) if (t.vendorId) vendorIds.add(t.vendorId);
+  const [vendors, avail] = await Promise.all([
+    vendorIds.size
+      ? prisma.vendor.findMany({
+          where: { id: { in: [...vendorIds] }, ownerId: project.ownerId },
+          select: { id: true, ico: true, name: true, dic: true, email: true, address: true },
+        })
+      : Promise.resolve([]),
+    vendorIds.size
+      ? prisma.vendorAvailability.findMany({
+          where: { vendorId: { in: [...vendorIds] } },
+          select: { vendorId: true, date: true, available: true },
+          orderBy: { date: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
+  const availByVendor = new Map<string, { datum: string; dostupny: boolean }[]>();
+  for (const a of avail) {
+    const arr = availByVendor.get(a.vendorId) ?? [];
+    arr.push({ datum: a.date.toISOString().slice(0, 10), dostupny: a.available });
+    availByVendor.set(a.vendorId, arr);
+  }
 
   const dodavatele: PlanVendor[] = vendors.map((v) => ({
     ico: v.ico ?? null,
@@ -81,11 +104,30 @@ export async function GET(req: NextRequest) {
     dic: v.dic ?? null,
     email: v.email ?? null,
     adresa: v.address ?? null,
+    dostupnost: availByVendor.get(v.id),
   }));
 
   const phases = tasks.filter((t) => t.kind === "phase");
   const childTasks = tasks.filter((t) => t.kind !== "phase" && t.parentId);
   const looseTasks = tasks.filter((t) => t.kind !== "phase" && !t.parentId);
+
+  const taskToPlan = (t: (typeof tasks)[number]) => ({
+    id: t.id,
+    ref: t.id,
+    nazev: t.title,
+    komu: t.assigneeEmail ?? null,
+    start: isoDate(t.startDate),
+    termin: isoDate(t.dueDate),
+    stav: t.status,
+    slozkaRef: t.subProjectId ?? null,
+    priorita: t.priority ?? null,
+    profese: t.profession ?? null,
+    odhadDni: t.estimateDays ?? null,
+    hotovoProcent: t.percentDone ?? null,
+    dodavatelIco: t.vendor?.ico ?? null,
+    dodavatelEmail: t.vendor?.email ?? null,
+    navazuje: t.dependsOn.map((d) => d.dependsOnId),
+  });
 
   const plan: ProjectPlan = {
     dmsPlan: PLAN_VERSION,
@@ -104,9 +146,12 @@ export async function GET(req: NextRequest) {
       ref: r.id,
       nazev: r.title,
       popis: r.description ?? null,
+      start: isoDate(r.startDate),
       termin: isoDate(r.requiredDate),
       stav: r.status,
       slozkaRef: r.subProjectId ?? null,
+      ukolRef: r.taskId ?? null,
+      dodaciLhutaDny: r.leadDays ?? null,
       mnozstvi: r.quantity != null ? Number(r.quantity) : null,
       jednotka: r.unit,
       kategorie: r.category,
@@ -126,34 +171,10 @@ export async function GET(req: NextRequest) {
       })),
     })),
     faze: phases.map((p) => ({
-      id: p.id,
-      ref: p.id,
-      nazev: p.title,
-      start: isoDate(p.startDate),
-      termin: isoDate(p.dueDate),
-      slozkaRef: p.subProjectId ?? null,
-      ukoly: childTasks
-        .filter((t) => t.parentId === p.id)
-        .map((t) => ({
-          id: t.id,
-          ref: t.id,
-          nazev: t.title,
-          komu: t.assigneeEmail ?? null,
-          start: isoDate(t.startDate),
-          termin: isoDate(t.dueDate),
-          stav: t.status,
-        })),
+      ...taskToPlan(p),
+      ukoly: childTasks.filter((t) => t.parentId === p.id).map(taskToPlan),
     })),
-    ukoly: looseTasks.map((t) => ({
-      id: t.id,
-      ref: t.id,
-      nazev: t.title,
-      komu: t.assigneeEmail ?? null,
-      start: isoDate(t.startDate),
-      termin: isoDate(t.dueDate),
-      stav: t.status,
-      slozkaRef: t.subProjectId ?? null,
-    })),
+    ukoly: looseTasks.map(taskToPlan),
     vydaje: expenses.map((e) => ({
       id: e.id,
       nazev: e.title,
@@ -164,6 +185,7 @@ export async function GET(req: NextRequest) {
       dodavatelIco: e.vendor?.ico ?? null,
       dodavatelEmail: e.vendor?.email ?? null,
       slozkaRef: e.subProjectId ?? null,
+      ukolRef: e.taskId ?? null,
       zadankaRef: e.requestId ?? null,
       nabidkaRef: e.offerId ?? null,
     })),
