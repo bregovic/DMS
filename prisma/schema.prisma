@@ -126,6 +126,7 @@ model Request {
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
   createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
   offers     Offer[]
+  expenses   Expense[] // realizované výdaje k této žádance
 
   @@index([projectId])
   @@index([vendorId])
@@ -154,6 +155,7 @@ model Offer {
   vendor    Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   createdBy User       @relation("OfferCreatedBy", fields: [createdById], references: [id])
   documents Document[]
+  expenses  Expense[] // realizované výdaje z vybrané nabídky
 
   @@index([requestId])
   @@index([vendorId])
@@ -327,6 +329,8 @@ model Expense {
   variableSymbol String?
   vendorId    String?
   subProjectId String?
+  requestId   String? // realizace žádanky (výběrového řízení)
+  offerId     String? // realizace konkrétní (vybrané) nabídky
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -335,12 +339,16 @@ model Expense {
   createdBy  User        @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  request    Request?    @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  offer      Offer?      @relation(fields: [offerId], references: [id], onDelete: SetNull)
   documents  Document[]
 
   @@index([projectId])
   @@index([date])
   @@index([vendorId])
   @@index([subProjectId])
+  @@index([requestId])
+  @@index([offerId])
 }
 
 model Document {
