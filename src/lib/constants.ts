@@ -13,6 +13,7 @@ export const BUILTIN_PROJECT_TYPES = [
 
 export const EXPENSE_CATEGORIES = [
   { value: "materials", label: "Materiál" },
+  { value: "prace", label: "Práce" },
   { value: "services", label: "Služby / práce" },
   { value: "energy", label: "Energie" },
   { value: "insurance", label: "Pojištění" },
