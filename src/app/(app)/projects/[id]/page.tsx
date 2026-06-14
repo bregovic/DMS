@@ -19,6 +19,7 @@ import { OffersPanel } from "@/components/requests/offers-panel";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
+import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
@@ -944,12 +945,15 @@ export default async function ProjectDetailPage({
         }
         actions={
           canAdd && (
-            <NewTaskForm
-              projectId={project.id}
-              subProjectId={sub ?? undefined}
-              statuses={taskStatuses}
-              phases={phaseOptions}
-            />
+            <div className="flex items-center gap-2">
+              <CatalogGenerateDialog projectId={project.id} subProjectId={sub ?? undefined} />
+              <NewTaskForm
+                projectId={project.id}
+                subProjectId={sub ?? undefined}
+                statuses={taskStatuses}
+                phases={phaseOptions}
+              />
+            </div>
           )
         }
       >

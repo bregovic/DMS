@@ -6,6 +6,9 @@ import { z } from "zod";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { validateFormula } from "@/lib/formula";
+import { calcOperation, type CalcOperation } from "@/lib/process-calc";
+import { getProjectAccess, expandScope } from "@/server/access";
+import { recomputeSchedule } from "@/server/actions/tasks";
 
 export type FormState = { error?: string; ok?: boolean } | undefined;
 
@@ -352,4 +355,192 @@ export async function deleteRecipe(formData: FormData) {
   if (!row) return;
   await prisma.operationMaterial.delete({ where: { id } });
   revalidatePath(`/katalog/ukony/${row.operationId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Integrace do fází: generování úkolů + žádanek z katalogu
+// ---------------------------------------------------------------------------
+
+export type CalcOperationDTO = CalcOperation & {
+  code: string;
+  paramsMeta: { key: string; label: string; unit: string | null; defaultValue: number | null }[];
+};
+
+/** Vrátí katalog úkonů ve formě pro klientskou kalkulačku/dialog. */
+export async function listOperationsForCalc(): Promise<CalcOperationDTO[]> {
+  const user = await requireUser();
+  const ops = await prisma.operation.findMany({
+    where: { ownerId: user.id },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+    include: {
+      params: { orderBy: { sort: "asc" } },
+      materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true } } } },
+    },
+  });
+  return ops.map((o) => ({
+    id: o.id,
+    code: o.code,
+    name: o.name,
+    unit: o.unit,
+    quantityFormula: o.quantityFormula,
+    laborFormula: o.laborFormula,
+    params: o.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
+    paramsMeta: o.params.map((p) => ({
+      key: p.key,
+      label: p.label,
+      unit: p.unit,
+      defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null,
+    })),
+    materials: o.materials.map((r) => ({
+      materialId: r.material.id,
+      name: r.material.name,
+      unit: r.material.unit,
+      unitPrice: Number(r.material.unitPrice),
+      quantityFormula: r.quantityFormula,
+      wastePct: r.wastePct != null ? Number(r.wastePct) : null,
+    })),
+  }));
+}
+
+const HOURS_PER_DAY = 8;
+
+export type GenerateInput = {
+  projectId: string;
+  subProjectId?: string | null;
+  phaseId?: string | null; // přidat do existující fáze; jinak vznikne nová
+  phaseName?: string;
+  lines: { operationId: string; values: Record<string, number>; multiplier?: number }[];
+};
+
+/** Z vybraných úkonů katalogu vytvoří fázi s dílčími úkoly (pracnost→dny)
+ *  a žádankami na materiál (stav Poptávka, mimo forecast). */
+export async function generateFromCatalog(
+  input: GenerateInput,
+): Promise<{ ok: true; phaseId: string } | { error: string }> {
+  const user = await requireUser();
+  const access = await getProjectAccess(input.projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
+    return { error: "Nemáš oprávnění přidávat do projektu." };
+  }
+  if (!input.lines?.length) return { error: "Vyber alespoň jednu činnost." };
+
+  // Cílová složka.
+  let subProjectId = input.subProjectId || null;
+  if (subProjectId) {
+    const sub = await prisma.subProject.findFirst({
+      where: { id: subProjectId, projectId: input.projectId },
+      select: { id: true },
+    });
+    if (!sub) subProjectId = null;
+  }
+
+  // Cílová fáze – existující nebo nová.
+  let phaseId = input.phaseId || null;
+  if (phaseId) {
+    const phase = await prisma.task.findFirst({
+      where: { id: phaseId, projectId: input.projectId, kind: "phase" },
+      select: { id: true, subProjectId: true },
+    });
+    if (!phase) return { error: "Fáze nenalezena." };
+    subProjectId = phase.subProjectId ?? null;
+  }
+
+  // Kontrola scope pro omezeného člena.
+  if (access.scopeSubIds) {
+    const scope = await expandScope(input.projectId, access.scopeSubIds);
+    if (!subProjectId || !scope.has(subProjectId)) {
+      return { error: "Do této složky nemáš oprávnění přidávat." };
+    }
+  }
+
+  // Načti úkony a přepočítej na serveru (klientovi nevěříme čísla).
+  const opIds = [...new Set(input.lines.map((l) => l.operationId))];
+  const ops = await prisma.operation.findMany({
+    where: { id: { in: opIds }, ownerId: user.id },
+    include: {
+      params: { orderBy: { sort: "asc" } },
+      materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true, category: true } } } },
+    },
+  });
+  const opMap = new Map(ops.map((o) => [o.id, o]));
+  const catById = new Map<string, string>();
+  for (const o of ops) for (const r of o.materials) catById.set(r.material.id, r.material.category);
+
+  if (!phaseId) {
+    const phase = await prisma.task.create({
+      data: {
+        projectId: input.projectId,
+        subProjectId,
+        kind: "phase",
+        title: (input.phaseName || "").trim() || "Nová fáze",
+        status: "todo",
+        createdById: user.id,
+      },
+    });
+    phaseId = phase.id;
+  }
+
+  for (const line of input.lines) {
+    const op = opMap.get(line.operationId);
+    if (!op) continue;
+    const calcOp: CalcOperation = {
+      id: op.id,
+      name: op.name,
+      unit: op.unit,
+      quantityFormula: op.quantityFormula,
+      laborFormula: op.laborFormula,
+      params: op.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
+      materials: op.materials.map((r) => ({
+        materialId: r.material.id,
+        name: r.material.name,
+        unit: r.material.unit,
+        unitPrice: Number(r.material.unitPrice),
+        quantityFormula: r.quantityFormula,
+        wastePct: r.wastePct != null ? Number(r.wastePct) : null,
+      })),
+    };
+    const res = calcOperation(calcOp, line.values || {}, line.multiplier ?? 1);
+    const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
+
+    const subtask = await prisma.task.create({
+      data: {
+        projectId: input.projectId,
+        subProjectId,
+        parentId: phaseId,
+        kind: "task",
+        title: op.name,
+        status: "todo",
+        estimateDays,
+        createdById: user.id,
+      },
+    });
+
+    for (const mat of res.materials) {
+      if (mat.quantity <= 0) continue;
+      await prisma.request.create({
+        data: {
+          projectId: input.projectId,
+          subProjectId,
+          taskId: subtask.id,
+          title: mat.name,
+          quantity: mat.quantity,
+          unit: mat.unit,
+          price: mat.cost,
+          category: catById.get(mat.materialId) || "other",
+          status: "poptavka",
+          createdById: user.id,
+        },
+      });
+    }
+  }
+
+  // Přepočítej rozvrh (dílčí úkoly dostanou termíny dle délek/návazností).
+  const fd = new FormData();
+  fd.set("projectId", input.projectId);
+  if (subProjectId) fd.set("subProjectId", subProjectId);
+  await recomputeSchedule(fd);
+
+  revalidatePath(`/projects/${input.projectId}`);
+  revalidatePath("/planning");
+  return { ok: true, phaseId };
 }
