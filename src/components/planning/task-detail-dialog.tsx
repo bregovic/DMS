@@ -230,7 +230,7 @@ export function TaskDetailDialog({
             </div>
 
             {(() => {
-              const lock = d.kind === "phase" || !d.canEdit;
+              const lock = !d.canEdit;
               return (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -251,7 +251,8 @@ export function TaskDetailDialog({
 
                   {d.kind === "phase" && (
                     <p className="text-[11px] text-stone-400">
-                      Termín i % fáze se počítají z dílčích úkolů (proto je nelze u fáze přímo měnit).
+                      Termín i % fáze nastavuješ ručně. Prázdná fáze se jednorázově
+                      předvyplní z dílčích úkolů, ručně zadané se už nepřepisuje.
                     </p>
                   )}
                 </>

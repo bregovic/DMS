@@ -253,15 +253,17 @@ async function recomputePhaseDates(projectId: string) {
     a.push(c);
     byParent.set(c.parentId, a);
   }
-  const same = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
   for (const p of phases) {
+    // Fáze s ručně/dříve nastaveným termínem se nepřepisuje (fáze jsou ruční);
+    // automaticky se jen inicializuje prázdná fáze z dílčích úkolů.
+    if (p.startDate != null || p.dueDate != null) continue;
     const kids = byParent.get(p.id) ?? [];
     const starts = kids.map((k) => k.startDate?.getTime()).filter((x): x is number => x != null);
     const dues = kids.map((k) => k.dueDate?.getTime()).filter((x): x is number => x != null);
+    if (!starts.length && !dues.length) continue;
     const start = starts.length ? new Date(Math.min(...starts)) : null;
     const due = dues.length ? new Date(Math.max(...dues)) : null;
-    if (!same(start, p.startDate) || !same(due, p.dueDate))
-      await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
+    await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
   }
 }
 
@@ -347,6 +349,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
   });
   const phases = tasks.filter((t) => t.kind === "phase");
   const phaseIds = new Set(phases.map((p) => p.id));
+  const byId = new Map(tasks.map((t) => [t.id, t]));
   const childrenOf = new Map<string, typeof tasks>();
   for (const t of tasks)
     if (t.kind === "task" && t.parentId) {
@@ -406,10 +409,16 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
   const upd: { id: string; start: Date; due: Date }[] = [];
 
   for (const pid of order) {
+    const phaseObj = byId.get(pid);
     const kids = childrenOf.get(pid) ?? [];
     const preds = pred.get(pid) ?? [];
     const predEnd = preds.length ? Math.max(...preds.map((x) => phaseDue.get(x) ?? TODAY)) : null;
-    let cursor = predEnd != null ? predEnd + DAY_MS : TODAY;
+    // Dílčí úkoly začínají od ručního termínu fáze, jinak po předchůdcích / dnes.
+    let cursor = phaseObj?.startDate
+      ? phaseObj.startDate.getTime()
+      : predEnd != null
+        ? predEnd + DAY_MS
+        : TODAY;
     const dates: { start: number; end: number }[] = [];
     for (const k of kids) {
       let s: number, e: number;
@@ -427,10 +436,18 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
       }
       dates.push({ start: s, end: e });
     }
-    if (dates.length) {
-      phaseStart.set(pid, Math.min(...dates.map((d) => d.start)));
-      phaseDue.set(pid, Math.max(...dates.map((d) => d.end)));
-      upd.push({ id: pid, start: new Date(phaseStart.get(pid)!), due: new Date(phaseDue.get(pid)!) });
+    const kidsStart = dates.length ? Math.min(...dates.map((d) => d.start)) : null;
+    const kidsDue = dates.length ? Math.max(...dates.map((d) => d.end)) : null;
+    // Pro návaznost dalších fází: ruční termín fáze má přednost před výpočtem z úkolů.
+    phaseStart.set(pid, phaseObj?.startDate?.getTime() ?? kidsStart ?? cursor);
+    phaseDue.set(pid, phaseObj?.dueDate?.getTime() ?? kidsDue ?? phaseStart.get(pid)!);
+    // Termín fáze zapíšeme jen když je prázdný (inicializace); ruční nepřepisujeme.
+    if (phaseObj && phaseObj.startDate == null && (kidsStart != null || kidsDue != null)) {
+      upd.push({
+        id: pid,
+        start: new Date(kidsStart ?? kidsDue!),
+        due: new Date(kidsDue ?? kidsStart!),
+      });
     }
   }
 
@@ -578,20 +595,15 @@ export async function updateTaskPlan(formData: FormData) {
     if (!v) vendorId = null;
   }
 
-  // U fáze se termín i % počítají z úkolů – needitujeme je (recompute by je stejně přepsal).
-  const isPhase = task.kind === "phase";
+  // Termín i % se ukládají ručně i u fáze (fáze jsou ruční; přepočet je nepřepíše).
   const newTitle = String(formData.get("title") || "").trim();
   await prisma.task.update({
     where: { id: task.id },
     data: {
       ...(newTitle ? { title: newTitle } : {}),
-      ...(isPhase
-        ? {}
-        : {
-            startDate: toDate(formData.get("startDate")),
-            dueDate: toDate(formData.get("dueDate")),
-            percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
-          }),
+      startDate: toDate(formData.get("startDate")),
+      dueDate: toDate(formData.get("dueDate")),
+      percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       vendorId,
       description: toText(formData.get("description")),
       status: String(formData.get("status") || "todo").trim() || "todo",

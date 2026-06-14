@@ -148,15 +148,14 @@ export function buildProjectGantt(
         const blockers = (t.dependsOn ?? [])
           .map((d) => d.dependsOn)
           .filter((p) => !(phaseDone.get(p.id) ?? done(p.status)));
-        const pct = kids.length
-          ? Math.round(kids.reduce((s, k) => s + effPct(k), 0) / kids.length)
-          : effPct(t);
+        // Fáze jsou ruční: % i „hotovo" se berou z fáze samotné, ne z dílčích úkolů.
+        const pct = effPct(t);
         return {
           id: t.id,
           name: name(t),
           start: t.startDate,
           end: t.dueDate,
-          done: kids.length > 0 ? allDone : done(t.status),
+          done: done(t.status),
           kind: "phase",
           percentDone: pct,
           procurementLate: kids.some((k) => procLate(k)),
