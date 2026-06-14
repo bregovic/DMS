@@ -90,9 +90,13 @@ export const REQUEST_STATUSES = [
   { value: "poptavka", label: "Poptávka" },
   { value: "nabidka", label: "Nabídka" },
   { value: "vyhovuje", label: "Vyhovuje" },
+  { value: "objednano", label: "Objednáno" },
   { value: "schvaleno", label: "Schváleno" },
   { value: "zruseno", label: "Zrušeno" },
 ] as const;
+
+// Stavy žádanky považované za "vyřízené" (objednáno/uzavřeno) – kvůli procurement prerekvizitě.
+export const REQUEST_HANDLED_STATUSES = ["objednano", "schvaleno", "zruseno"];
 
 export function requestStatusLabel(value: string) {
   return REQUEST_STATUSES.find((s) => s.value === value)?.label ?? value;

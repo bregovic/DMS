@@ -14,6 +14,7 @@ export type GanttChild = {
   end: Date | null;
   done: boolean;
   percentDone?: number;
+  procurementLate?: boolean;
   statusLabel: string;
   assigneeEmail: string | null;
 };
@@ -25,6 +26,7 @@ export type GanttItem = {
   end: Date | null;
   done?: boolean;
   percentDone?: number; // 0–100
+  procurementLate?: boolean; // navázaná žádanka neobjednaná včas
   kind?: "phase" | "task" | "request";
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
   blocked?: boolean; // fáze: některá fáze, na kterou navazuje, není hotová
@@ -151,6 +153,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   }
   function color(it: GanttItem) {
     if (it.kind === "request") return it.done ? "bg-stone-300" : "bg-red-500";
+    if (it.procurementLate) return "bg-red-500"; // žádanka neobjednaná včas
     return colorFor(it.start ?? null, it.end ?? null, !!it.done, it.percentDone);
   }
   const effPct = (done?: boolean, pct?: number) => (done ? 100 : pct ?? 0);
@@ -302,7 +305,9 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         const ke = k.end ? startOfDay(k.end).getTime() : null;
                         const kbar = ks != null && ke != null && ke > ks;
                         const kpoint = !kbar ? ke ?? ks : null;
-                        const kc = colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
+                        const kc = k.procurementLate
+                          ? "bg-red-500"
+                          : colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
                         const kpct = effPct(k.done, k.percentDone);
                         const krange = kbar
                           ? `${formatDate(k.start!)} – ${formatDate(k.end!)}`

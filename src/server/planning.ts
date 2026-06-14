@@ -1,4 +1,8 @@
-import { TASK_DONE_STATUSES, taskStatusLabel } from "@/lib/constants";
+import {
+  TASK_DONE_STATUSES,
+  taskStatusLabel,
+  REQUEST_HANDLED_STATUSES,
+} from "@/lib/constants";
 import type { GanttItem } from "@/components/planning/gantt-chart";
 
 export type PlanTaskRow = {
@@ -15,6 +19,7 @@ export type PlanTaskRow = {
   percentDone: number;
   subProject: { name: string } | null;
   dependsOn: { dependsOn: { id: string; title: string; status: string } }[];
+  requests?: { status: string; leadDays: number | null; requiredDate: Date | null }[];
 };
 
 export type PlanRequestRow = {
@@ -91,6 +96,19 @@ export function buildProjectGantt(
   const name = (t: { subProject: { name: string } | null; title: string }) =>
     withSubprojectName && t.subProject ? `${t.subProject.name}: ${t.title}` : t.title;
 
+  // procurement skluz: navázaná žádanka není vyřízená a "objednat do" prošlo
+  const now = new Date();
+  const t0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const procLate = (t: PlanTaskRow) =>
+    (t.requests ?? []).some((r) => {
+      if (REQUEST_HANDLED_STATUSES.includes(r.status)) return false;
+      const base = t.startDate ?? r.requiredDate ?? null;
+      if (!base) return false;
+      const orderBy =
+        r.leadDays != null ? new Date(base.getTime() - r.leadDays * 86400000) : base;
+      return orderBy < t0;
+    });
+
   const items: GanttItem[] = topRows
     .map((t): GanttItem => {
       const effPct = (k: PlanTaskRow) => (done(k.status) ? 100 : k.percentDone ?? 0);
@@ -111,6 +129,7 @@ export function buildProjectGantt(
           done: done(t.status),
           kind: "phase",
           percentDone: pct,
+          procurementLate: kids.some((k) => procLate(k)),
           prereqMet: kids.length === 0 ? true : allDone,
           blocked: blockers.length > 0,
           blockedBy: blockers.map((p) => p.title),
@@ -121,6 +140,7 @@ export function buildProjectGantt(
             end: k.dueDate,
             done: done(k.status),
             percentDone: effPct(k),
+            procurementLate: procLate(k),
             statusLabel: taskStatusLabel(k.status),
             assigneeEmail: k.assigneeEmail,
           })),
@@ -134,6 +154,7 @@ export function buildProjectGantt(
         done: done(t.status),
         kind: "task",
         percentDone: effPct(t),
+        procurementLate: procLate(t),
       };
     })
     .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());

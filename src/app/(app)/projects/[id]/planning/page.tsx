@@ -49,6 +49,7 @@ export default async function ProjectPlanningPage({
           dependsOn: {
             select: { dependsOn: { select: { id: true, title: true, status: true } } },
           },
+          requests: { select: { status: true, leadDays: true, requiredDate: true } },
         },
       },
       requests: {

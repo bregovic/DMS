@@ -130,8 +130,10 @@ model Request {
   price        Decimal?  @db.Decimal(12, 2)
   vendorId     String?
   subProjectId String?
+  taskId       String? // navázáno na úkol/fázi (procurement prerekvizita)
   requiredDate DateTime?
-  status       String    @default("poptavka") // poptavka | nabidka | vyhovuje | schvaleno | zruseno
+  leadDays     Int? // dodací lhůta ve dnech (objednat do = potřeba − leadDays)
+  status       String    @default("poptavka") // poptavka | nabidka | vyhovuje | objednano | schvaleno | zruseno
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -139,6 +141,7 @@ model Request {
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  task       Task?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
   offers     Offer[]
   expenses   Expense[] // realizované výdaje k této žádance
@@ -146,6 +149,7 @@ model Request {
   @@index([projectId])
   @@index([vendorId])
   @@index([subProjectId])
+  @@index([taskId])
 }
 
 // Nabídka k žádance (výběrové řízení). Dodavatel z evidence nebo volný název;
@@ -296,6 +300,8 @@ model Task {
   // Závislosti mezi fázemi (kind=phase): "tato fáze navazuje na…".
   dependsOn   TaskDependency[] @relation("TaskDepFrom")
   dependedOnBy TaskDependency[] @relation("TaskDepTo")
+  requests   Request[] // žádanky navázané na úkol/fázi (procurement)
+  expenses   Expense[] // výdaje navázané na úkol/fázi
 
   @@index([projectId])
   @@index([subProjectId])
@@ -371,6 +377,7 @@ model Expense {
   variableSymbol String?
   vendorId    String?
   subProjectId String?
+  taskId      String? // navázáno na úkol/fázi
   requestId   String? // realizace žádanky (výběrového řízení)
   offerId     String? // realizace konkrétní (vybrané) nabídky
   createdById String
@@ -381,6 +388,7 @@ model Expense {
   createdBy  User        @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  task       Task?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   request    Request?    @relation(fields: [requestId], references: [id], onDelete: SetNull)
   offer      Offer?      @relation(fields: [offerId], references: [id], onDelete: SetNull)
   documents  Document[]
@@ -389,6 +397,7 @@ model Expense {
   @@index([date])
   @@index([vendorId])
   @@index([subProjectId])
+  @@index([taskId])
   @@index([requestId])
   @@index([offerId])
 }

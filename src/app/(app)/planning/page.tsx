@@ -70,6 +70,7 @@ export default async function PlanningPage({
                   dependsOn: { select: { id: true, title: true, status: true } },
                 },
               },
+              requests: { select: { status: true, leadDays: true, requiredDate: true } },
             },
           },
           requests: {

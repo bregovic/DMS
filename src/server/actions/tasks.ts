@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, expandScope } from "@/server/access";
+import { REQUEST_HANDLED_STATUSES } from "@/lib/constants";
 
 function toDate(v: FormDataEntryValue | null): Date | null {
   const s = String(v || "").trim();
@@ -351,7 +352,7 @@ export async function getTaskDetail(id: string) {
     user
   );
 
-  const [candidates, vendors, requests, expenses] = await Promise.all([
+  const [candidates, vendors, linkedReqs, linkedExps, candReqs, candExps] = await Promise.all([
     prisma.task.findMany({
       where: {
         projectId: task.projectId,
@@ -367,17 +368,45 @@ export async function getTaskDetail(id: string) {
       orderBy: { name: "asc" },
     }),
     prisma.request.findMany({
-      where: { projectId: task.projectId, subProjectId: task.subProjectId },
-      select: { id: true, title: true, status: true },
+      where: { taskId: task.id },
+      select: { id: true, title: true, status: true, requiredDate: true, leadDays: true, vendor: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.expense.findMany({
-      where: { projectId: task.projectId, subProjectId: task.subProjectId },
+      where: { taskId: task.id },
       select: { id: true, title: true, amount: true },
       orderBy: { date: "desc" },
-      take: 30,
+    }),
+    prisma.request.findMany({
+      where: { projectId: task.projectId, subProjectId: task.subProjectId, taskId: null },
+      select: { id: true, title: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.expense.findMany({
+      where: { projectId: task.projectId, subProjectId: task.subProjectId, taskId: null },
+      select: { id: true, title: true, amount: true },
+      orderBy: { date: "desc" },
+      take: 50,
     }),
   ]);
+
+  // "objednat do" = začátek úkolu − dodací lhůta; pozadu, když není vyřízeno a datum prošlo
+  const now = new Date();
+  const t0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const requests = linkedReqs.map((r) => {
+    const base = task.startDate ?? r.requiredDate ?? null;
+    const orderBy = base && r.leadDays != null ? addDaysUTC(base, -r.leadDays) : base;
+    const handled = REQUEST_HANDLED_STATUSES.includes(r.status);
+    return {
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      vendorName: r.vendor?.name ?? null,
+      leadDays: r.leadDays,
+      orderBy: orderBy ? orderBy.toISOString().slice(0, 10) : null,
+      late: !handled && !!orderBy && orderBy < t0,
+    };
+  });
 
   return {
     id: task.id,
@@ -400,7 +429,9 @@ export async function getTaskDetail(id: string) {
     candidates,
     vendors,
     requests,
-    expenses: expenses.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
+    expenses: linkedExps.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
+    candidateRequests: candReqs,
+    candidateExpenses: candExps.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
   };
 }
 
