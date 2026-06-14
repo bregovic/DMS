@@ -48,6 +48,12 @@ export function buildProjectGantt(
     withSubprojectName?: boolean;
     /** true = striktně dle scope (nezahrne "moje" úkoly mimo scope). */
     strictScope?: boolean;
+    filter?: {
+      status?: "all" | "open" | "done" | "overdue";
+      onlyRequests?: boolean;
+      from?: Date | null;
+      to?: Date | null;
+    };
   },
 ): GanttItem[] {
   const {
@@ -57,6 +63,7 @@ export function buildProjectGantt(
     mine = false,
     withSubprojectName = true,
     strictScope = false,
+    filter = {},
   } = opts;
   const visible = (
     subProjectId: string | null,
@@ -149,7 +156,7 @@ export function buildProjectGantt(
           name: name(t),
           start: t.startDate,
           end: t.dueDate,
-          done: done(t.status),
+          done: kids.length > 0 ? allDone : done(t.status),
           kind: "phase",
           percentDone: pct,
           procurementLate: kids.some((k) => procLate(k)),
@@ -185,20 +192,45 @@ export function buildProjectGantt(
     })
     .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
 
-  const reqItems: GanttItem[] = requests
-    .filter((r) => visible(r.subProjectId, r.createdById))
-    .filter((r) => !(r.taskId && phaseIdSet.has(r.taskId))) // navázané na fázi jsou uvnitř fáze
-    .map((r): GanttItem => ({
-      id: `req-${r.id}`,
-      requestId: r.id,
-      name: `Žádanka: ${withSubprojectName && r.subProject ? `${r.subProject.name}: ` : ""}${r.title}`,
-      start: r.startDate,
-      end: r.requiredDate,
-      done: REQUEST_HANDLED_STATUSES.includes(r.status),
-      kind: "request",
-    }));
+  const visibleRequests = requests.filter((r) => visible(r.subProjectId, r.createdById));
+  const requestItem = (r: PlanRequestRow): GanttItem => ({
+    id: `req-${r.id}`,
+    requestId: r.id,
+    name: `Žádanka: ${withSubprojectName && r.subProject ? `${r.subProject.name}: ` : ""}${r.title}`,
+    start: r.startDate,
+    end: r.requiredDate,
+    done: REQUEST_HANDLED_STATUSES.includes(r.status),
+    kind: "request",
+  });
+  // nenavázané žádanky = samostatné milníky (navázané na fázi jsou uvnitř fáze)
+  const reqItems = visibleRequests
+    .filter((r) => !(r.taskId && phaseIdSet.has(r.taskId)))
+    .map(requestItem);
 
-  return [...items, ...reqItems].sort(
-    (a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime(),
-  );
+  // při "pouze VŘ" zobraz všechna výběrová řízení jako samostatné řádky
+  let top = filter.onlyRequests ? visibleRequests.map(requestItem) : [...items, ...reqItems];
+
+  // filtr stavu
+  const st = filter.status ?? "all";
+  if (st !== "all") {
+    top = top.filter((it) => {
+      const overdue = !it.done && !!it.end && it.end.getTime() < t0.getTime();
+      if (st === "open") return !it.done;
+      if (st === "done") return !!it.done;
+      return overdue; // "overdue"
+    });
+  }
+  // filtr období (překryv s rozmezím)
+  if (filter.from || filter.to) {
+    top = top.filter((it) => {
+      const s = it.start ?? it.end;
+      const e = it.end ?? it.start;
+      if (!s || !e) return false;
+      if (filter.from && e < filter.from) return false;
+      if (filter.to && s > filter.to) return false;
+      return true;
+    });
+  }
+
+  return top.sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
 }

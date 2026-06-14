@@ -15,13 +15,20 @@ export default async function ProjectPlanningPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sub?: string; mine?: string }>;
+  searchParams: Promise<{
+    sub?: string; mine?: string; f?: string; vr?: string; from?: string; to?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   const user = await requireUser();
   const email = user.email?.toLowerCase() ?? "";
   const mine = sp?.mine === "1";
+  const statusF = (["open", "done", "overdue"] as const).find((x) => x === sp?.f) ?? "all";
+  const onlyVR = sp?.vr === "1";
+  const fromD = sp?.from ? new Date(sp.from) : null;
+  const toD = sp?.to ? new Date(sp.to) : null;
+  if (toD) toD.setHours(23, 59, 59, 999);
 
   const access = await getProjectAccess(id, user);
   if (!access) notFound();
@@ -119,19 +126,15 @@ export default async function ProjectPlanningPage({
     mine,
     withSubprojectName: false, // v rámci projektu název složky neopakujeme
     strictScope: true,
+    filter: { status: statusF, onlyRequests: onlyVR, from: fromD, to: toD },
   });
 
   const backHref = currentSub
     ? `/projects/${project.id}?sub=${currentSub.id}`
     : `/projects/${project.id}`;
-  const planHref = (m: boolean) =>
-    `/projects/${project.id}/planning?${subId ? `sub=${subId}&` : ""}${m ? "mine=1" : ""}`;
-  const tabClass = (active: boolean) =>
-    `border px-3 py-1.5 text-xs transition-colors ${
-      active
-        ? "border-stone-950 bg-stone-950 text-white"
-        : "border-stone-300 text-stone-600 hover:border-stone-950"
-    }`;
+  const anyFilter = mine || onlyVR || statusF !== "all" || !!sp?.from || !!sp?.to;
+  const selectClass =
+    "h-8 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950";
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -166,19 +169,57 @@ export default async function ProjectPlanningPage({
               </button>
             </form>
           )}
-          <Link href={planHref(false)} className={tabClass(!mine)}>
-            Vše
-          </Link>
-          <Link href={planHref(true)} className={tabClass(mine)}>
-            Jen moje
-          </Link>
         </div>
       </header>
 
+      {/* Filtry */}
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-x-3 gap-y-2">
+        {subId && <input type="hidden" name="sub" value={subId} />}
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
+          Stav
+          <select name="f" defaultValue={statusF} className={selectClass}>
+            <option value="all">Vše</option>
+            <option value="open">Otevřené</option>
+            <option value="done">Hotové</option>
+            <option value="overdue">Po termínu</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
+          Od
+          <input type="date" name="from" defaultValue={sp?.from ?? ""} className={selectClass} />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
+          Do
+          <input type="date" name="to" defaultValue={sp?.to ?? ""} className={selectClass} />
+        </label>
+        <label className="flex h-8 items-center gap-1.5 text-xs text-stone-600">
+          <input type="checkbox" name="vr" value="1" defaultChecked={onlyVR} className="size-4 accent-stone-900" />
+          Pouze VŘ
+        </label>
+        <label className="flex h-8 items-center gap-1.5 text-xs text-stone-600">
+          <input type="checkbox" name="mine" value="1" defaultChecked={mine} className="size-4 accent-stone-900" />
+          Jen moje
+        </label>
+        <button
+          type="submit"
+          className="h-8 border border-stone-950 bg-stone-950 px-3 text-xs text-white transition-colors hover:bg-stone-800"
+        >
+          Filtrovat
+        </button>
+        {anyFilter && (
+          <Link
+            href={`/projects/${project.id}/planning${subId ? `?sub=${subId}` : ""}`}
+            className="h-8 border border-stone-300 px-3 text-xs leading-8 text-stone-600 transition-colors hover:border-stone-950"
+          >
+            Zrušit filtr
+          </Link>
+        )}
+      </form>
+
       {items.length === 0 ? (
         <p className="py-16 text-center text-sm text-stone-500">
-          {mine
-            ? "Žádné tvoje úkoly s termínem."
+          {anyFilter
+            ? "Filtru nic neodpovídá. Zkus ho zmírnit nebo zrušit."
             : "Zatím tu není co plánovat. Přidej úkolům začátek nebo termín a objeví se tu časová osa."}
         </p>
       ) : (
