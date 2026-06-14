@@ -1,11 +1,47 @@
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartLegend, ProjectPieChart } from "@/components/reports/charts";
 import { ForecastReport } from "@/components/reports/forecast-report";
 import { formatCurrency } from "@/lib/utils";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
 import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
+
+type BreakRow = { name: string; actual: number; forecast: number };
+
+/** Rozpad s pruhem skutečné (tmavá) + forecast (světlá), škálováno k maximu. */
+function BreakdownList({ rows }: { rows: BreakRow[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.actual + r.forecast));
+  return (
+    <ul className="space-y-4">
+      {rows.map((r) => (
+        <li key={r.name} className="space-y-1.5">
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-stone-600">{r.name}</span>
+            <span className="font-mono text-stone-950">
+              {formatCurrency(r.actual + r.forecast)}
+            </span>
+          </div>
+          <div className="flex h-1.5 overflow-hidden bg-stone-200">
+            <div
+              className="h-full bg-stone-950"
+              style={{ width: `${(r.actual / max) * 100}%` }}
+            />
+            <div
+              className="h-full bg-stone-400"
+              style={{ width: `${(r.forecast / max) * 100}%` }}
+            />
+          </div>
+          {(r.actual > 0 || r.forecast > 0) && (
+            <div className="flex justify-between text-[11px] text-stone-400">
+              <span>Skutečné {formatCurrency(r.actual)}</span>
+              <span>Forecast {formatCurrency(r.forecast)}</span>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default async function ReportsPage() {
   const user = await requireUser();
@@ -29,6 +65,8 @@ export default async function ReportsPage() {
       select: {
         price: true,
         requiredDate: true,
+        category: true,
+        project: { select: { name: true } },
         expenses: { select: { amount: true } },
       },
     }),
@@ -37,23 +75,33 @@ export default async function ReportsPage() {
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
+  // Skutečné výdaje podle projektu / kategorie.
+  const acProject = new Map<string, number>();
+  const acCategory = new Map<string, number>();
+  for (const e of expenses) {
+    acProject.set(e.project.name, (acProject.get(e.project.name) ?? 0) + Number(e.amount));
+    acCategory.set(e.category, (acCategory.get(e.category) ?? 0) + Number(e.amount));
+  }
+
   // Forecast: zbývající částka potvrzené žádanky (cena − již navázané reálné
-  // výdaje), zařazená podle požadovaného data. Bez data → mimo časovou osu.
+  // výdaje). Pro časovou osu se řadí podle požadovaného data (bez data → mimo
+  // osu); do rozpadu podle projektu/kategorie se počítá vždy.
   const forecastRows: { date: string; amount: number }[] = [];
   let undatedForecast = 0;
+  const fcProject = new Map<string, number>();
+  const fcCategory = new Map<string, number>();
   for (const r of forecastReqs) {
     const price = Number(r.price ?? 0);
     const spent = r.expenses.reduce((s, e) => s + Number(e.amount), 0);
     const remaining = Math.max(0, price - spent);
     if (remaining <= 0) continue;
     if (r.requiredDate) {
-      forecastRows.push({
-        date: r.requiredDate.toISOString().slice(0, 10),
-        amount: remaining,
-      });
+      forecastRows.push({ date: r.requiredDate.toISOString().slice(0, 10), amount: remaining });
     } else {
       undatedForecast += remaining;
     }
+    fcProject.set(r.project.name, (fcProject.get(r.project.name) ?? 0) + remaining);
+    fcCategory.set(r.category, (fcCategory.get(r.category) ?? 0) + remaining);
   }
   const totalForecast =
     forecastRows.reduce((s, r) => s + r.amount, 0) + undatedForecast;
@@ -63,27 +111,17 @@ export default async function ReportsPage() {
     amount: Number(e.amount),
   }));
 
-  const byProjectMap = new Map<string, number>();
-  for (const e of expenses) {
-    byProjectMap.set(
-      e.project.name,
-      (byProjectMap.get(e.project.name) ?? 0) + Number(e.amount),
-    );
-  }
-  const byProject = [...byProjectMap.entries()]
-    .map(([name, total]) => ({ name, total }))
-    .sort((a, b) => b.total - a.total);
+  const byProject: BreakRow[] = [...new Set([...acProject.keys(), ...fcProject.keys()])]
+    .map((name) => ({ name, actual: acProject.get(name) ?? 0, forecast: fcProject.get(name) ?? 0 }))
+    .sort((a, b) => b.actual + b.forecast - (a.actual + a.forecast));
 
-  const byCategoryMap = new Map<string, number>();
-  for (const e of expenses) {
-    byCategoryMap.set(
-      e.category,
-      (byCategoryMap.get(e.category) ?? 0) + Number(e.amount),
-    );
-  }
-  const byCategory = [...byCategoryMap.entries()]
-    .map(([cat, total]) => ({ name: catMap.get(cat) ?? cat, total }))
-    .sort((a, b) => b.total - a.total);
+  const byCategory: BreakRow[] = [...new Set([...acCategory.keys(), ...fcCategory.keys()])]
+    .map((key) => ({
+      name: catMap.get(key) ?? key,
+      actual: acCategory.get(key) ?? 0,
+      forecast: fcCategory.get(key) ?? 0,
+    }))
+    .sort((a, b) => b.actual + b.forecast - (a.actual + a.forecast));
 
   if (expenses.length === 0 && totalForecast === 0) {
     return (
@@ -137,9 +175,8 @@ export default async function ReportsPage() {
           <CardHeader>
             <CardTitle>Podle projektu</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <ProjectPieChart data={byProject} />
-            <ChartLegend data={byProject} />
+          <CardContent>
+            <BreakdownList rows={byProject} />
           </CardContent>
         </Card>
 
@@ -148,27 +185,7 @@ export default async function ReportsPage() {
             <CardTitle>Podle kategorie</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-4">
-              {byCategory.map((c) => {
-                const pct = total > 0 ? (c.total / total) * 100 : 0;
-                return (
-                  <li key={c.name} className="space-y-1.5">
-                    <div className="flex items-baseline justify-between text-sm">
-                      <span className="text-stone-600">{c.name}</span>
-                      <span className="font-mono text-stone-950">
-                        {formatCurrency(c.total)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden bg-stone-200">
-                      <div
-                        className="h-full bg-stone-950"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <BreakdownList rows={byCategory} />
           </CardContent>
         </Card>
       </div>
