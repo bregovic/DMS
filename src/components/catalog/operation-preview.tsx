@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { calcOperation, type CalcOperation } from "@/lib/process-calc";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ParamField } from "@/components/catalog/param-field";
 import { formatCurrency } from "@/lib/utils";
 
 export type PreviewParam = { key: string; label: string; unit: string | null; defaultValue: number | null };
@@ -33,23 +32,16 @@ export function OperationPreview({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {params.map((p) => (
-          <div key={p.key} className="w-32 space-y-1">
-            <Label htmlFor={`pv-${p.key}`}>
-              {p.label}
-              {p.unit ? ` (${p.unit})` : ""}
-            </Label>
-            <Input
-              id={`pv-${p.key}`}
-              type="number"
-              step="any"
-              value={Number.isFinite(values[p.key]) ? values[p.key] : 0}
-              onChange={(e) =>
-                setValues((s) => ({ ...s, [p.key]: parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </div>
+          <ParamField
+            key={p.key}
+            idBase={`pv-${p.key}`}
+            label={p.label}
+            unit={p.unit}
+            value={values[p.key]}
+            onChange={(v) => setValues((s) => ({ ...s, [p.key]: v }))}
+          />
         ))}
       </div>
 
