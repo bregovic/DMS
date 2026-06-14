@@ -112,7 +112,7 @@ export default async function ProjectPlanningPage({
     userId: user.id,
     email,
     mine,
-    withSubprojectName: !subId, // ve složce už název složky neopakujeme
+    withSubprojectName: false, // v rámci projektu název složky neopakujeme
     strictScope: true,
   });
 

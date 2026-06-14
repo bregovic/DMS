@@ -98,6 +98,7 @@ model Vendor {
   projects Project[] @relation("ProjectVendors")
   requests Request[]
   offers   Offer[]
+  tasks    Task[]
 
   @@unique([ownerId, email])
   @@index([ownerId])
@@ -265,6 +266,7 @@ model Task {
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech
+  vendorId      String? // přiřazený dodavatel (lookup)
   createdById   String
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -274,6 +276,7 @@ model Task {
   parent     Task?       @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
   children   Task[]      @relation("TaskTree")
   createdBy  User        @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
   // Závislosti mezi fázemi (kind=phase): "tato fáze navazuje na…".
   dependsOn   TaskDependency[] @relation("TaskDepFrom")
@@ -282,6 +285,7 @@ model Task {
   @@index([projectId])
   @@index([subProjectId])
   @@index([parentId])
+  @@index([vendorId])
 }
 
 // Vazba "fáze A navazuje na fázi B" (taskId závisí na dependsOnId).

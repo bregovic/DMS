@@ -161,25 +161,25 @@ export async function updateTask(formData: FormData) {
   });
   // Závislosti (jen u fází) – nahradí celou množinu.
   if (task.kind === "phase") {
-    await savePhaseDependencies(task.id, task.projectId, formData.getAll("dependsOnId"));
+    await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), true);
   }
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
 
-/** Nastaví množinu závislostí fáze (nahradí stávající). */
-async function savePhaseDependencies(
+/** Nastaví množinu závislostí (nahradí stávající). kind="phase" → jen fáze. */
+async function saveDeps(
   taskId: string,
   projectId: string,
-  raw: FormDataEntryValue[]
+  raw: FormDataEntryValue[],
+  onlyPhases: boolean
 ) {
   const ids = [
     ...new Set(raw.map((v) => String(v || "").trim()).filter(Boolean)),
   ].filter((id) => id !== taskId);
-  // jen existující fáze ve stejném projektu
   const valid = ids.length
     ? await prisma.task.findMany({
-        where: { id: { in: ids }, projectId, kind: "phase" },
+        where: { id: { in: ids }, projectId, ...(onlyPhases ? { kind: "phase" } : {}) },
         select: { id: true },
       })
     : [];
@@ -191,6 +191,109 @@ async function savePhaseDependencies(
       skipDuplicates: true,
     });
   }
+}
+
+/** Detail prvku (fáze/úkol) pro dialog v plánování. */
+export async function getTaskDetail(id: string) {
+  const user = await requireUser();
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true, title: true, kind: true, description: true, status: true,
+      startDate: true, dueDate: true, assigneeEmail: true, vendorId: true,
+      priority: true, profession: true, estimateDays: true,
+      projectId: true, subProjectId: true, createdById: true,
+      dependsOn: { select: { dependsOnId: true } },
+      project: { select: { ownerId: true } },
+    },
+  });
+  if (!task) throw new Error("Prvek nenalezen.");
+  const access = await getProjectAccess(task.projectId, user);
+  if (!access) throw new Error("Nemáš přístup.");
+  const canEdit = access.role === "owner" || task.createdById === user.id || false;
+
+  const [candidates, vendors, requests, expenses] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        projectId: task.projectId,
+        id: { not: task.id },
+        ...(task.kind === "phase" ? { kind: "phase" } : { kind: "task" }),
+      },
+      select: { id: true, title: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.vendor.findMany({
+      where: { ownerId: task.project.ownerId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.request.findMany({
+      where: { projectId: task.projectId, subProjectId: task.subProjectId },
+      select: { id: true, title: true, status: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.expense.findMany({
+      where: { projectId: task.projectId, subProjectId: task.subProjectId },
+      select: { id: true, title: true, amount: true },
+      orderBy: { date: "desc" },
+      take: 30,
+    }),
+  ]);
+
+  return {
+    id: task.id,
+    title: task.title,
+    kind: task.kind,
+    description: task.description,
+    status: task.status,
+    startDate: task.startDate ? task.startDate.toISOString().slice(0, 10) : null,
+    dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+    assigneeEmail: task.assigneeEmail,
+    vendorId: task.vendorId,
+    priority: task.priority,
+    profession: task.profession,
+    estimateDays: task.estimateDays,
+    projectId: task.projectId,
+    subProjectId: task.subProjectId,
+    canEdit,
+    deps: task.dependsOn.map((d) => d.dependsOnId),
+    candidates,
+    vendors,
+    requests,
+    expenses: expenses.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
+  };
+}
+
+/** Uloží z dialogu: datumy, dodavatele a závislosti. */
+export async function updateTaskPlan(formData: FormData) {
+  const id = String(formData.get("id"));
+  const { task, isOwner, isCreator } = await taskCtx(id);
+  if (!isOwner && !isCreator) throw new Error("Tento prvek nemůžeš upravit.");
+
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (vendorId) {
+    const project = await prisma.project.findUnique({
+      where: { id: task.projectId },
+      select: { ownerId: true },
+    });
+    const v = await prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId: project?.ownerId },
+      select: { id: true },
+    });
+    if (!v) vendorId = null;
+  }
+
+  await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      startDate: toDate(formData.get("startDate")),
+      dueDate: toDate(formData.get("dueDate")),
+      vendorId,
+    },
+  });
+  await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
+  revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/planning");
 }
 
 export async function setTaskStatus(formData: FormData) {

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronRight, Check, Lock } from "lucide-react";
 import { setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
+import { TaskDetailDialog } from "@/components/planning/task-detail-dialog";
 
 export type GanttChild = {
   id: string;
@@ -43,7 +45,8 @@ function ChildCheck({ id, done }: { id: string; done: boolean }) {
       type="button"
       disabled={pending}
       title={done ? "Označit jako nehotové" : "Označit jako hotové"}
-      onClick={() => {
+      onClick={(ev) => {
+        ev.stopPropagation();
         const fd = new FormData();
         fd.set("id", id);
         fd.set("status", done ? "todo" : "done");
@@ -67,6 +70,8 @@ function ChildCheck({ id, done }: { id: string; done: boolean }) {
 }
 
 export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }) {
+  const router = useRouter();
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
     setOpen((p) => {
@@ -125,7 +130,10 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     return "bg-stone-800";
   }
   function color(it: GanttItem) {
-    if (it.kind === "phase" && (it.prereqMet === false || it.blocked)) return "bg-red-500";
+    // Fáze v budoucnu (ještě nezačala) se kvůli blokaci/prerekvizitám nebarví červeně.
+    const future = !!it.start && startOfDay(it.start).getTime() > t0;
+    if (it.kind === "phase" && (it.prereqMet === false || it.blocked) && !future)
+      return "bg-red-500";
     if (it.kind === "request" && !it.done) return "bg-red-500";
     return colorFor(it.end ?? null, !!it.done);
   }
@@ -198,9 +206,9 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
               <div key={it.id}>
                 <div
                   className={`group relative flex items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80 ${
-                    isPhase && kids.length ? "cursor-pointer" : ""
+                    it.kind !== "request" ? "cursor-pointer" : ""
                   }`}
-                  onClick={isPhase && kids.length ? () => toggle(it.id) : undefined}
+                  onClick={it.kind !== "request" ? () => setDetailId(it.id) : undefined}
                 >
                   <div
                     className="flex shrink-0 items-center gap-1 truncate py-2.5 pr-3 text-sm"
@@ -208,12 +216,21 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                     title={it.name}
                   >
                     {isPhase && kids.length > 0 ? (
-                      <ChevronRight className={`size-3.5 shrink-0 text-stone-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          toggle(it.id);
+                        }}
+                        title={expanded ? "Sbalit úkoly" : "Rozbalit úkoly"}
+                        className="flex size-4 shrink-0 items-center justify-center text-stone-400 hover:text-stone-900 cursor-pointer"
+                      >
+                        <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                      </button>
                     ) : (
                       <span className="w-3.5 shrink-0" />
                     )}
                     <span className={`truncate ${isPhase ? "font-semibold text-stone-900" : "text-stone-800"}`}>
-                      {isPhase && <span className="kicker mr-1 !text-stone-400">Fáze</span>}
                       {it.kind === "request" && (
                         <span className="kicker mr-1 !text-red-500">VŘ</span>
                       )}
@@ -276,7 +293,8 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         return (
                           <div
                             key={k.id}
-                            className="flex items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
+                            onClick={() => setDetailId(k.id)}
+                            className="flex cursor-pointer items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
                           >
                             <div
                               className="flex shrink-0 items-center gap-1.5 py-1.5 pl-8 pr-3 text-xs"
@@ -327,6 +345,14 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-300" /> hotovo</span>
         </div>
       </div>
+
+      {detailId && (
+        <TaskDetailDialog
+          id={detailId}
+          onClose={() => setDetailId(null)}
+          onSaved={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
