@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { parseAnyDate, type ProjectPlan } from "@/lib/plan";
 import { getExpenseCategories, slugifyCategory } from "@/server/expense-categories";
+import { getProjectAccess, canImportProject, fullAccessProjectIds } from "@/server/access";
 
 export type PlanImportSummary = {
   projekt: string;
@@ -90,20 +91,37 @@ export async function importPlanJson(
   };
 
   // --- Projekt (podle id, jinak podle názvu, jinak založ) ---
+  // Importovat smí vlastník i plný člen projektu (active). Dodavatelé patří
+  // vlastníkovi projektu (ne nutně importujícímu).
   let projectId: string | null = null;
+  let projectOwnerId = user.id;
   if (plan.projekt.id) {
-    const p = await prisma.project.findFirst({
-      where: { id: plan.projekt.id, ownerId: user.id },
-      select: { id: true },
+    const p = await prisma.project.findUnique({
+      where: { id: plan.projekt.id },
+      select: { id: true, ownerId: true },
     });
-    if (p) projectId = p.id;
+    if (p) {
+      const access = await getProjectAccess(p.id, user);
+      if (!canImportProject(access)) {
+        return { error: "Do tohoto projektu nemáš oprávnění importovat." };
+      }
+      projectId = p.id;
+      projectOwnerId = p.ownerId;
+    }
   }
   if (!projectId) {
-    const existing = await prisma.project.findFirst({
-      where: { ownerId: user.id, name: plan.projekt.nazev },
-      select: { id: true },
-    });
-    if (existing) projectId = existing.id;
+    // shoda názvu mezi projekty s plným přístupem (vlastní + členství)
+    const accessibleIds = [...(await fullAccessProjectIds(user))];
+    const existing = accessibleIds.length
+      ? await prisma.project.findFirst({
+          where: { id: { in: accessibleIds }, name: plan.projekt.nazev },
+          select: { id: true, ownerId: true },
+        })
+      : null;
+    if (existing) {
+      projectId = existing.id;
+      projectOwnerId = existing.ownerId;
+    }
   }
   if (!projectId) {
     const p = await prisma.project.create({
@@ -115,6 +133,7 @@ export async function importPlanJson(
       select: { id: true },
     });
     projectId = p.id;
+    projectOwnerId = user.id;
     sum.newProjects++;
   }
   const PID = projectId;
@@ -137,7 +156,7 @@ export async function importPlanJson(
 
     if (ico) {
       const v = await prisma.vendor.findFirst({
-        where: { ownerId: user.id, ico },
+        where: { ownerId: projectOwnerId, ico },
         select: { id: true, email: true },
       });
       if (v) {
@@ -149,7 +168,7 @@ export async function importPlanJson(
     }
     if (email) {
       const v = await prisma.vendor.findFirst({
-        where: { ownerId: user.id, email },
+        where: { ownerId: projectOwnerId, email },
         select: { id: true, ico: true },
       });
       if (v) {
@@ -184,7 +203,7 @@ export async function importPlanJson(
     try {
       const v = await prisma.vendor.create({
         data: {
-          ownerId: user.id,
+          ownerId: projectOwnerId,
           email: finalEmail,
           name,
           ico,

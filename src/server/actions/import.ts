@@ -8,6 +8,7 @@ import {
   getExpenseCategories,
   slugifyCategory,
 } from "@/server/expense-categories";
+import { fullAccessProjectIds } from "@/server/access";
 
 export type ImportSummary = {
   created: number;
@@ -50,6 +51,10 @@ export async function importExpensesCsv(
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Vyber CSV soubor." };
   }
+
+  // Projekty s plným přístupem (vlastní + členství) + jejich vlastníci.
+  const accessIds = await fullAccessProjectIds(user);
+  const projectOwner = new Map<string, string>(); // projectId -> ownerId
 
   // UTF-8 s fallbackem na Windows-1250 (české Excel CSV).
   const buf = Buffer.from(await file.arrayBuffer());
@@ -133,21 +138,25 @@ export async function importExpensesCsv(
     let projectId = projectCache.get(pKey);
     if (!projectId) {
       const existing = await prisma.project.findFirst({
-        where: { ownerId: user.id, name: projectName },
-        select: { id: true },
+        where: { id: { in: [...accessIds] }, name: projectName },
+        select: { id: true, ownerId: true },
       });
       if (existing) {
         projectId = existing.id;
+        projectOwner.set(projectId, existing.ownerId);
       } else {
         const p = await prisma.project.create({
           data: { ownerId: user.id, name: projectName, type: "other" },
           select: { id: true },
         });
         projectId = p.id;
+        projectOwner.set(projectId, user.id);
+        accessIds.add(projectId);
         newProjects++;
       }
       projectCache.set(pKey, projectId);
     }
+    const ownerId = projectOwner.get(projectId) ?? user.id;
 
     // Subprojekt (volitelně) – najdi nebo vytvoř pod projektem
     let subProjectId: string | null = null;
@@ -182,7 +191,7 @@ export async function importExpensesCsv(
       vendorId = vendorCache.get(vKey) ?? null;
       if (!vendorId) {
         const existing = await prisma.vendor.findFirst({
-          where: { ownerId: user.id, email },
+          where: { ownerId, email },
           select: { id: true },
         });
         if (existing) {
@@ -190,7 +199,7 @@ export async function importExpensesCsv(
         } else {
           const v = await prisma.vendor.create({
             data: {
-              ownerId: user.id,
+              ownerId,
               email,
               name: get(r, ci.vendor) || email,
               category: "other",
@@ -227,7 +236,7 @@ export async function importExpensesCsv(
     let didUpdate = false;
     if (rowId) {
       const existing = await prisma.expense.findFirst({
-        where: { id: rowId, project: { ownerId: user.id } },
+        where: { id: rowId, projectId: { in: [...accessIds] } },
         select: { id: true },
       });
       if (existing) {

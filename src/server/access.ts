@@ -116,6 +116,29 @@ export async function getProjectRole(
   return (await getProjectAccess(projectId, user))?.role ?? null;
 }
 
+/** ID projektů, kde má uživatel plný přístup (vlastník nebo projektové členství).
+ *  Slouží pro import/export celého projektu (složkové členství nestačí). */
+export async function fullAccessProjectIds(user: SessionUser): Promise<Set<string>> {
+  const email = user.email?.toLowerCase() ?? null;
+  const [owned, mems] = await Promise.all([
+    prisma.project.findMany({ where: { ownerId: user.id }, select: { id: true } }),
+    email
+      ? prisma.projectMembership.findMany({ where: { email }, select: { projectId: true } })
+      : Promise.resolve([]),
+  ]);
+  return new Set([...owned.map((o) => o.id), ...mems.map((m) => m.projectId)]);
+}
+
+/** Smí uživatel exportovat celý projekt? (vlastník nebo plný člen, i reader) */
+export function canExportProject(access: ProjectAccess | null): boolean {
+  return !!access && access.scopeSubIds === null;
+}
+
+/** Smí uživatel importovat do celého projektu? (vlastník nebo plný člen active) */
+export function canImportProject(access: ProjectAccess | null): boolean {
+  return !!access && access.scopeSubIds === null && access.role !== "reader";
+}
+
 /** Rozbalí rozsah subprojektů o všechny jejich pod-složky. */
 export async function expandScope(
   projectId: string,

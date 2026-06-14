@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
+import { fullAccessProjectIds } from "@/server/access";
 
 const COLUMNS = [
   "ID",
@@ -73,9 +74,10 @@ export async function GET(
   }
 
   if (type === "expenses") {
+    const ids = [...(await fullAccessProjectIds(session.user))];
     const [expenses, catMap] = await Promise.all([
       prisma.expense.findMany({
-        where: { project: { ownerId: session.user.id } },
+        where: { projectId: { in: ids } },
         orderBy: { date: "desc" },
         include: {
           project: { select: { name: true } },

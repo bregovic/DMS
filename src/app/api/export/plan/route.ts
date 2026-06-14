@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getProjectAccess, canExportProject } from "@/server/access";
 import {
   PLAN_VERSION,
   isoDate,
@@ -16,11 +17,15 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
 
   const projectId = req.nextUrl.searchParams.get("projectId") ?? "";
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: session.user.id },
-    select: { id: true, name: true, type: true },
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, name: true, type: true, ownerId: true },
   });
   if (!project) return new Response("Projekt nenalezen.", { status: 404 });
+  const access = await getProjectAccess(project.id, session.user);
+  if (!canExportProject(access)) {
+    return new Response("Na tento projekt nemáš přístup.", { status: 403 });
+  }
 
   const [subs, requests, tasks, expenses] = await Promise.all([
     prisma.subProject.findMany({
@@ -65,7 +70,7 @@ export async function GET(req: NextRequest) {
   for (const e of expenses) if (e.vendorId) vendorIds.add(e.vendorId);
   const vendors = vendorIds.size
     ? await prisma.vendor.findMany({
-        where: { id: { in: [...vendorIds] }, ownerId: session.user.id },
+        where: { id: { in: [...vendorIds] }, ownerId: project.ownerId },
         select: { ico: true, name: true, dic: true, email: true, address: true },
       })
     : [];

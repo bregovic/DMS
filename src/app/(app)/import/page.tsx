@@ -1,15 +1,17 @@
 import { Download, FileText, FileJson } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { fullAccessProjectIds } from "@/server/access";
 import { ImportForm } from "@/components/import/import-form";
 import { PlanImportForm } from "@/components/import/plan-import-form";
 
 export default async function ImportPage() {
   const user = await requireUser();
+  const ids = [...(await fullAccessProjectIds(user))];
   const projects = await prisma.project.findMany({
-    where: { ownerId: user.id },
+    where: { id: { in: ids } },
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, ownerId: true },
   });
 
   return (
@@ -45,7 +47,12 @@ export default async function ImportPage() {
             <ul className="divide-y divide-stone-200 border border-stone-200">
               {projects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
-                  <span className="truncate text-sm text-stone-800">{p.name}</span>
+                  <span className="flex items-center gap-2 truncate text-sm text-stone-800">
+                    {p.name}
+                    {p.ownerId !== user.id && (
+                      <span className="kicker !text-stone-400">člen</span>
+                    )}
+                  </span>
                   <a
                     href={`/api/export/plan?projectId=${p.id}`}
                     className="inline-flex items-center gap-1.5 text-sm text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline"
