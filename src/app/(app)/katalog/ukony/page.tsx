@@ -7,9 +7,8 @@ import { OperationForm } from "@/components/catalog/operation-form";
 import { deleteOperation } from "@/server/actions/process-tables";
 
 export default async function OperationsPage() {
-  const user = await requireUser();
+  await requireUser();
   const operations = await prisma.operation.findMany({
-    where: { ownerId: user.id },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     include: { _count: { select: { params: true, materials: true } } },
   });

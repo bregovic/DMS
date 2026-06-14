@@ -7,9 +7,8 @@ import { deleteMaterial } from "@/server/actions/process-tables";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function MaterialsPage() {
-  const user = await requireUser();
+  await requireUser();
   const materials = await prisma.material.findMany({
-    where: { ownerId: user.id },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     include: { _count: { select: { recipes: true } } },
   });

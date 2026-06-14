@@ -452,7 +452,7 @@ model Material {
   owner   User                @relation("MaterialOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   recipes OperationMaterial[]
 
-  @@unique([ownerId, code])
+  @@unique([code])
   @@index([ownerId])
 }
 
@@ -477,7 +477,7 @@ model Operation {
   params    OperationParam[]
   materials OperationMaterial[]
 
-  @@unique([ownerId, code])
+  @@unique([code])
   @@index([ownerId])
 }
 

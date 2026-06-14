@@ -7,9 +7,8 @@ import { WishForm } from "@/components/catalog/wish-form";
 import { deleteCatalogWish, setCatalogWishDone } from "@/server/actions/process-tables";
 
 export default async function WishesPage() {
-  const user = await requireUser();
+  await requireUser();
   const wishes = await prisma.catalogWish.findMany({
-    where: { ownerId: user.id },
     orderBy: [{ done: "asc" }, { createdAt: "desc" }],
   });
   const open = wishes.filter((w) => !w.done);

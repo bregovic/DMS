@@ -51,7 +51,7 @@ export async function createMaterial(_prev: FormState, formData: FormData): Prom
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
 
   const dup = await prisma.material.findFirst({
-    where: { ownerId: user.id, code: parsed.data.code },
+    where: { code: parsed.data.code },
     select: { id: true },
   });
   if (dup) return { error: "Materiál s tímto kódem už existuje." };
@@ -74,16 +74,16 @@ export async function createMaterial(_prev: FormState, formData: FormData): Prom
 }
 
 export async function updateMaterial(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
   const parsed = parseMaterial(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
 
-  const existing = await prisma.material.findFirst({ where: { id, ownerId: user.id }, select: { id: true } });
+  const existing = await prisma.material.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return { error: "Materiál nenalezen." };
 
   const dup = await prisma.material.findFirst({
-    where: { ownerId: user.id, code: parsed.data.code, NOT: { id } },
+    where: { code: parsed.data.code, NOT: { id } },
     select: { id: true },
   });
   if (dup) return { error: "Jiný materiál s tímto kódem už existuje." };
@@ -106,13 +106,13 @@ export async function updateMaterial(_prev: FormState, formData: FormData): Prom
 }
 
 export async function deleteMaterial(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  const used = await prisma.operationMaterial.count({ where: { materialId: id, material: { ownerId: user.id } } });
+  const used = await prisma.operationMaterial.count({ where: { materialId: id } });
   if (used > 0) {
     throw new Error("Materiál je použitý v receptu úkonu – nejdřív ho odeber z receptů.");
   }
-  await prisma.material.deleteMany({ where: { id, ownerId: user.id } });
+  await prisma.material.deleteMany({ where: { id } });
   revalidatePath("/katalog/materialy");
 }
 
@@ -161,7 +161,7 @@ export async function createOperation(_prev: FormState, formData: FormData): Pro
   if (fErr) return { error: fErr };
 
   const dup = await prisma.operation.findFirst({
-    where: { ownerId: user.id, code: parsed.data.code },
+    where: { code: parsed.data.code },
     select: { id: true },
   });
   if (dup) return { error: "Úkon s tímto kódem už existuje." };
@@ -184,18 +184,18 @@ export async function createOperation(_prev: FormState, formData: FormData): Pro
 }
 
 export async function updateOperation(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
   const parsed = parseOperation(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
   const fErr = checkFormulas(parsed.data.quantityFormula, parsed.data.laborFormula);
   if (fErr) return { error: fErr };
 
-  const existing = await prisma.operation.findFirst({ where: { id, ownerId: user.id }, select: { id: true } });
+  const existing = await prisma.operation.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return { error: "Úkon nenalezen." };
 
   const dup = await prisma.operation.findFirst({
-    where: { ownerId: user.id, code: parsed.data.code, NOT: { id } },
+    where: { code: parsed.data.code, NOT: { id } },
     select: { id: true },
   });
   if (dup) return { error: "Jiný úkon s tímto kódem už existuje." };
@@ -219,16 +219,16 @@ export async function updateOperation(_prev: FormState, formData: FormData): Pro
 }
 
 export async function deleteOperation(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  await prisma.operation.deleteMany({ where: { id, ownerId: user.id } });
+  await prisma.operation.deleteMany({ where: { id } });
   revalidatePath("/katalog/ukony");
   redirect("/katalog/ukony");
 }
 
-/** Ověří vlastnictví úkonu přihlášeným uživatelem. */
-async function ownedOperation(id: string, userId: string) {
-  const op = await prisma.operation.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
+/** Ověří, že úkon existuje (katalog je sdílený). */
+async function ownedOperation(id: string) {
+  const op = await prisma.operation.findUnique({ where: { id }, select: { id: true } });
   return op?.id ?? null;
 }
 
@@ -239,9 +239,9 @@ async function ownedOperation(id: string, userId: string) {
 const PARAM_KEY = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 export async function addParam(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser();
+  await requireUser();
   const operationId = String(formData.get("operationId"));
-  if (!(await ownedOperation(operationId, user.id))) return { error: "Úkon nenalezen." };
+  if (!(await ownedOperation(operationId))) return { error: "Úkon nenalezen." };
 
   const key = String(formData.get("key") || "").trim();
   const label = String(formData.get("label") || "").trim();
@@ -272,10 +272,10 @@ export async function addParam(_prev: FormState, formData: FormData): Promise<Fo
 }
 
 export async function deleteParam(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  const param = await prisma.operationParam.findFirst({
-    where: { id, operation: { ownerId: user.id } },
+  const param = await prisma.operationParam.findUnique({
+    where: { id },
     select: { operationId: true },
   });
   if (!param) return;
@@ -288,12 +288,12 @@ export async function deleteParam(formData: FormData) {
 // ---------------------------------------------------------------------------
 
 export async function addRecipe(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser();
+  await requireUser();
   const operationId = String(formData.get("operationId"));
-  if (!(await ownedOperation(operationId, user.id))) return { error: "Úkon nenalezen." };
+  if (!(await ownedOperation(operationId))) return { error: "Úkon nenalezen." };
 
   const materialId = String(formData.get("materialId") || "");
-  const material = await prisma.material.findFirst({ where: { id: materialId, ownerId: user.id }, select: { id: true } });
+  const material = await prisma.material.findUnique({ where: { id: materialId }, select: { id: true } });
   if (!material) return { error: "Vyber materiál." };
 
   const quantityFormula = String(formData.get("quantityFormula") || "").trim() || "0";
@@ -317,16 +317,16 @@ export async function addRecipe(_prev: FormState, formData: FormData): Promise<F
 }
 
 export async function updateRecipe(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  const row = await prisma.operationMaterial.findFirst({
-    where: { id, operation: { ownerId: user.id } },
+  const row = await prisma.operationMaterial.findUnique({
+    where: { id },
     select: { id: true, operationId: true },
   });
   if (!row) return { error: "Řádek receptu nenalezen." };
 
   const materialId = String(formData.get("materialId") || "");
-  const material = await prisma.material.findFirst({ where: { id: materialId, ownerId: user.id }, select: { id: true } });
+  const material = await prisma.material.findUnique({ where: { id: materialId }, select: { id: true } });
   if (!material) return { error: "Vyber materiál." };
 
   const quantityFormula = String(formData.get("quantityFormula") || "").trim() || "0";
@@ -350,10 +350,10 @@ export async function updateRecipe(_prev: FormState, formData: FormData): Promis
 }
 
 export async function deleteRecipe(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  const row = await prisma.operationMaterial.findFirst({
-    where: { id, operation: { ownerId: user.id } },
+  const row = await prisma.operationMaterial.findUnique({
+    where: { id },
     select: { operationId: true },
   });
   if (!row) return;
@@ -372,9 +372,8 @@ export type CalcOperationDTO = CalcOperation & {
 
 /** Vrátí katalog úkonů ve formě pro klientskou kalkulačku/dialog. */
 export async function listOperationsForCalc(): Promise<CalcOperationDTO[]> {
-  const user = await requireUser();
+  await requireUser();
   const ops = await prisma.operation.findMany({
-    where: { ownerId: user.id },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     include: {
       params: { orderBy: { sort: "asc" } },
@@ -462,7 +461,7 @@ export async function generateFromCatalog(
   // Načti úkony a přepočítej na serveru (klientovi nevěříme čísla).
   const opIds = [...new Set(input.lines.map((l) => l.operationId))];
   const ops = await prisma.operation.findMany({
-    where: { id: { in: opIds }, ownerId: user.id },
+    where: { id: { in: opIds } },
     include: {
       params: { orderBy: { sort: "asc" } },
       materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true, category: true } } } },
@@ -716,7 +715,7 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
         note,
       };
       await prisma.material.upsert({
-        where: { ownerId_code: { ownerId: user.id, code } },
+        where: { code },
         create: { ownerId: user.id, code, ...data },
         update: data,
       });
@@ -765,7 +764,7 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
         category,
       };
       const op = await prisma.operation.upsert({
-        where: { ownerId_code: { ownerId: user.id, code } },
+        where: { code },
         create: { ownerId: user.id, code, ...data },
         update: data,
       });
@@ -806,7 +805,7 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
 
     for (const [taskCode, lines] of byTask) {
       const op = await prisma.operation.findFirst({
-        where: { ownerId: user.id, code: taskCode },
+        where: { code: taskCode },
         select: { id: true, unit: true },
       });
       if (!op) {
@@ -828,7 +827,7 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
       for (const f of lines) {
         const matCode = f[ci.material]?.trim();
         const material = matCode
-          ? await prisma.material.findFirst({ where: { ownerId: user.id, code: matCode }, select: { id: true } })
+          ? await prisma.material.findFirst({ where: { code: matCode }, select: { id: true } })
           : null;
         if (!material) {
           warnings.push(`Recept ${taskCode}: materiál „${matCode}" neexistuje – řádek přeskočen.`);
@@ -884,16 +883,16 @@ export async function createCatalogWish(_prev: FormState, formData: FormData): P
 }
 
 export async function deleteCatalogWish(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
-  await prisma.catalogWish.deleteMany({ where: { id, ownerId: user.id } });
+  await prisma.catalogWish.deleteMany({ where: { id } });
   revalidatePath("/katalog/chybejici");
 }
 
 export async function setCatalogWishDone(formData: FormData) {
-  const user = await requireUser();
+  await requireUser();
   const id = String(formData.get("id"));
   const done = String(formData.get("done")) === "1";
-  await prisma.catalogWish.updateMany({ where: { id, ownerId: user.id }, data: { done } });
+  await prisma.catalogWish.updateMany({ where: { id }, data: { done } });
   revalidatePath("/katalog/chybejici");
 }

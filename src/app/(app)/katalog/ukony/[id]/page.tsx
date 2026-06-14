@@ -15,11 +15,11 @@ export default async function OperationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireUser();
+  await requireUser();
 
   const [operation, materials] = await Promise.all([
     prisma.operation.findFirst({
-      where: { id, ownerId: user.id },
+      where: { id },
       include: {
         params: { orderBy: { sort: "asc" } },
         materials: {
@@ -29,7 +29,6 @@ export default async function OperationDetailPage({
       },
     }),
     prisma.material.findMany({
-      where: { ownerId: user.id },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, unit: true },
     }),

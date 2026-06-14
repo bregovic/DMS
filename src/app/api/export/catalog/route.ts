@@ -65,12 +65,10 @@ stejném formátu, které pak v DMS naimportuješ (Import & export → Katalog).
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
-  const ownerId = session.user.id;
 
   const [materials, operations] = await Promise.all([
-    prisma.material.findMany({ where: { ownerId }, orderBy: [{ category: "asc" }, { name: "asc" }] }),
+    prisma.material.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
     prisma.operation.findMany({
-      where: { ownerId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       include: { materials: { include: { material: { select: { code: true } } } } },
     }),

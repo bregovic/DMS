@@ -11,12 +11,11 @@ const row = (v: (string | number | null | undefined)[]) =>
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
-  const ownerId = session.user.id;
 
   const [wishes, materials, operations] = await Promise.all([
-    prisma.catalogWish.findMany({ where: { ownerId, done: false }, orderBy: { createdAt: "asc" } }),
-    prisma.material.findMany({ where: { ownerId }, orderBy: [{ category: "asc" }, { name: "asc" }] }),
-    prisma.operation.findMany({ where: { ownerId }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
+    prisma.catalogWish.findMany({ where: { done: false }, orderBy: { createdAt: "asc" } }),
+    prisma.material.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
+    prisma.operation.findMany({ orderBy: { code: "asc" }, select: { code: true, name: true } }),
   ]);
 
   const wishList = wishes.length
