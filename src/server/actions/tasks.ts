@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, expandScope } from "@/server/access";
-import { REQUEST_HANDLED_STATUSES } from "@/lib/constants";
+import { REQUEST_HANDLED_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 
 function toDate(v: FormDataEntryValue | null): Date | null {
   const s = String(v || "").trim();
@@ -328,6 +328,96 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
     }
   }
   await recomputePhaseDates(projectId);
+}
+
+/** Přepočítá termíny celé složky/projektu z fázových návazností a délek úkolů.
+ *  Hotové úkoly (status done) drží svá data = kotvy; ostatní se počítají dopředu. */
+export async function recomputeSchedule(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const subProjectId = String(formData.get("subProjectId") || "") || null;
+  const access = await getProjectAccess(projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
+    throw new Error("Nemáš oprávnění plánovat.");
+  }
+
+  const tasks = await prisma.task.findMany({
+    where: { projectId, ...(subProjectId ? { subProjectId } : {}) },
+    select: {
+      id: true, kind: true, parentId: true, estimateDays: true, status: true,
+      startDate: true, dueDate: true, createdAt: true,
+      dependsOn: { select: { dependsOnId: true } },
+    },
+  });
+  const phases = tasks.filter((t) => t.kind === "phase");
+  const phaseIds = new Set(phases.map((p) => p.id));
+  const childrenOf = new Map<string, typeof tasks>();
+  for (const t of tasks)
+    if (t.kind === "task" && t.parentId) {
+      const a = childrenOf.get(t.parentId) ?? [];
+      a.push(t);
+      childrenOf.set(t.parentId, a);
+    }
+  for (const [, arr] of childrenOf)
+    arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  // fázové návaznosti (jen mezi fázemi)
+  const pred = new Map<string, string[]>(
+    phases.map((p) => [p.id, p.dependsOn.map((d) => d.dependsOnId).filter((x) => phaseIds.has(x))]),
+  );
+  // topo (Kahn)
+  const indeg = new Map(phases.map((p) => [p.id, pred.get(p.id)!.length]));
+  const radj = new Map<string, string[]>(phases.map((p) => [p.id, []]));
+  for (const p of phases) for (const pr of pred.get(p.id)!) radj.get(pr)?.push(p.id);
+  const queue = phases.filter((p) => indeg.get(p.id) === 0).map((p) => p.id);
+  const order: string[] = [];
+  while (queue.length) {
+    const x = queue.shift()!;
+    order.push(x);
+    for (const n of radj.get(x) ?? []) { indeg.set(n, indeg.get(n)! - 1); if (indeg.get(n) === 0) queue.push(n); }
+  }
+  for (const p of phases) if (!order.includes(p.id)) order.push(p.id); // cyklus → na konec
+
+  const done = (s: string) => TASK_DONE_STATUSES.includes(s);
+  const now = new Date();
+  const TODAY = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const phaseStart = new Map<string, number>();
+  const phaseDue = new Map<string, number>();
+  const upd: { id: string; start: Date; due: Date }[] = [];
+
+  for (const pid of order) {
+    const kids = childrenOf.get(pid) ?? [];
+    const preds = pred.get(pid) ?? [];
+    const predEnd = preds.length ? Math.max(...preds.map((x) => phaseDue.get(x) ?? TODAY)) : null;
+    let cursor = predEnd != null ? predEnd + DAY_MS : TODAY;
+    const dates: { start: number; end: number }[] = [];
+    for (const k of kids) {
+      let s: number, e: number;
+      if (done(k.status) && k.dueDate) {
+        s = (k.startDate ?? k.dueDate).getTime();
+        e = k.dueDate.getTime();
+        cursor = Math.max(cursor, e + DAY_MS);
+      } else {
+        const dur = Math.max(k.estimateDays ?? 1, 1);
+        s = cursor;
+        e = s + (dur - 1) * DAY_MS;
+        cursor = e + DAY_MS;
+        upd.push({ id: k.id, start: new Date(s), due: new Date(e) });
+      }
+      dates.push({ start: s, end: e });
+    }
+    if (dates.length) {
+      phaseStart.set(pid, Math.min(...dates.map((d) => d.start)));
+      phaseDue.set(pid, Math.max(...dates.map((d) => d.end)));
+      upd.push({ id: pid, start: new Date(phaseStart.get(pid)!), due: new Date(phaseDue.get(pid)!) });
+    }
+  }
+
+  for (const u of upd)
+    await prisma.task.update({ where: { id: u.id }, data: { startDate: u.start, dueDate: u.due } });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/planning");
 }
 
 /** Detail prvku (fáze/úkol) pro dialog v plánování. */

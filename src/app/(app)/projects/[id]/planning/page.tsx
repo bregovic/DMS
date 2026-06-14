@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getProjectAccess, expandScope } from "@/server/access";
 import { GanttChart } from "@/components/planning/gantt-chart";
 import { buildProjectGantt } from "@/server/planning";
+import { recomputeSchedule } from "@/server/actions/tasks";
 
 export const dynamic = "force-dynamic";
 
@@ -149,7 +150,20 @@ export default async function ProjectPlanningPage({
             Termíny a stavy se nastavují u úkolů.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {(access.role === "owner" || access.role === "active") && (
+            <form action={recomputeSchedule}>
+              <input type="hidden" name="projectId" value={project.id} />
+              <input type="hidden" name="subProjectId" value={subId ?? ""} />
+              <button
+                type="submit"
+                className="border border-stone-300 px-3 py-1.5 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+                title="Přepočítat termíny z návazností a délek úkolů (hotové úkoly drží data)"
+              >
+                ⟳ Přepočítat termíny
+              </button>
+            </form>
+          )}
           <Link href={planHref(false)} className={tabClass(!mine)}>
             Vše
           </Link>
