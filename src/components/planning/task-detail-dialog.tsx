@@ -8,6 +8,7 @@ import {
   updateTaskPlan,
   scheduleTaskByAvailability,
   createTask,
+  deleteTask,
 } from "@/server/actions/tasks";
 import {
   createRequestForTask,
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
-import { taskStatusLabel, REQUEST_STATUSES, requestStatusLabel } from "@/lib/constants";
+import { taskStatusLabel, TASK_STATUSES, REQUEST_STATUSES, requestStatusLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
 type Detail = Awaited<ReturnType<typeof getTaskDetail>>;
@@ -95,6 +96,26 @@ export function TaskDetailDialog({
       window.alert(e instanceof Error ? e.message : "Naplánování selhalo.");
     }
     setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!d) return;
+    const what =
+      d.kind === "phase"
+        ? "tuto fázi (smažou se i její dílčí úkoly)"
+        : "tento úkol";
+    if (!window.confirm(`Opravdu smazat ${what}?`)) return;
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.set("id", d.id);
+      await deleteTask(fd);
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Smazání selhalo.");
+      setSaving(false);
+    }
   }
 
   const folderHref = d
@@ -171,6 +192,27 @@ export function TaskDetailDialog({
                 disabled={!d.canEdit}
                 className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950 disabled:opacity-60"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="dd-status">Stav</Label>
+              {d.canEdit ? (
+                <select
+                  key={`st-${d.id}-${d.status}`}
+                  id="dd-status"
+                  name="status"
+                  defaultValue={d.status}
+                  className={fieldClass}
+                >
+                  {TASK_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-stone-700">{taskStatusLabel(d.status)}</p>
+              )}
             </div>
 
             {(() => {
@@ -442,10 +484,22 @@ export function TaskDetailDialog({
               )}
             </div>
 
-            <div className="flex justify-between gap-2 pt-2">
-              <Link href={folderHref} className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline self-center">
-                Otevřít ve složce →
-              </Link>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <div className="flex items-center gap-3">
+                {d.canDelete && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleDelete}
+                    className="text-xs text-red-600 underline-offset-4 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    Smazat
+                  </button>
+                )}
+                <Link href={folderHref} className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline">
+                  Otevřít ve složce →
+                </Link>
+              </div>
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" onClick={onClose}>
                   Zavřít

@@ -473,6 +473,7 @@ export async function getTaskDetail(id: string) {
     { projectId: task.projectId, createdById: task.createdById, subProjectId: task.subProjectId },
     user
   );
+  const canDelete = access.role === "owner" || task.createdById === user.id;
 
   const [candidates, vendors, linkedReqs, linkedExps, candReqs, candExps] = await Promise.all([
     prisma.task.findMany({
@@ -547,6 +548,7 @@ export async function getTaskDetail(id: string) {
     projectId: task.projectId,
     subProjectId: task.subProjectId,
     canEdit,
+    canDelete,
     deps: task.dependsOn.map((d) => d.dependsOnId),
     candidates,
     vendors,
@@ -592,6 +594,7 @@ export async function updateTaskPlan(formData: FormData) {
           }),
       vendorId,
       description: toText(formData.get("description")),
+      status: String(formData.get("status") || "todo").trim() || "todo",
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
