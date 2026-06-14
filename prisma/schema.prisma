@@ -35,6 +35,7 @@ model User {
   tasksCreated      Task[]       @relation("TaskCreatedBy")
   materials         Material[]   @relation("MaterialOwner")
   operations        Operation[]  @relation("OperationOwner")
+  catalogWishes     CatalogWish[] @relation("CatalogWishOwner")
 }
 
 model Account {
@@ -510,4 +511,18 @@ model OperationMaterial {
 
   @@index([operationId])
   @@index([materialId])
+}
+
+// Poznámka o chybějící činnosti/úkonu v katalogu (wishlist k doplnění přes AI).
+model CatalogWish {
+  id        String   @id @default(cuid())
+  ownerId   String
+  title     String
+  note      String?
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  owner User @relation("CatalogWishOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
 }

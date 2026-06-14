@@ -867,3 +867,33 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
   revalidatePath("/katalog/ukony");
   return { summary: { materials, operations, recipes, warnings } };
 }
+
+// ---------------------------------------------------------------------------
+// Chybějící činnosti v katalogu (wishlist k doplnění)
+// ---------------------------------------------------------------------------
+
+export async function createCatalogWish(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return { error: "Zadej, jaká činnost chybí." };
+  await prisma.catalogWish.create({
+    data: { ownerId: user.id, title, note: String(formData.get("note") || "").trim() || null },
+  });
+  revalidatePath("/katalog/chybejici");
+  return { ok: true };
+}
+
+export async function deleteCatalogWish(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  await prisma.catalogWish.deleteMany({ where: { id, ownerId: user.id } });
+  revalidatePath("/katalog/chybejici");
+}
+
+export async function setCatalogWishDone(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const done = String(formData.get("done")) === "1";
+  await prisma.catalogWish.updateMany({ where: { id, ownerId: user.id }, data: { done } });
+  revalidatePath("/katalog/chybejici");
+}

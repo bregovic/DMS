@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { href: "/katalog/materialy", label: "Materiály" },
   { href: "/katalog/ukony", label: "Úkony" },
+  { href: "/katalog/chybejici", label: "Chybějící" },
 ];
 
 export function CatalogNav() {

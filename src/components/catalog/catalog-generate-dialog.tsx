@@ -6,6 +6,7 @@ import { Boxes, Trash2, X } from "lucide-react";
 import {
   listOperationsForCalc,
   generateFromCatalog,
+  createCatalogWish,
   type CalcOperationDTO,
 } from "@/server/actions/process-tables";
 import { calcOperation, calcTotals } from "@/lib/process-calc";
@@ -43,7 +44,19 @@ export function CatalogGenerateDialog({
   const [lines, setLines] = useState<Line[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wishText, setWishText] = useState("");
+  const [wishSaved, setWishSaved] = useState(false);
   const counter = useRef(0);
+
+  async function noteWish() {
+    const t = wishText.trim();
+    if (!t) return;
+    const fd = new FormData();
+    fd.set("title", t);
+    await createCatalogWish(undefined, fd);
+    setWishText("");
+    setWishSaved(true);
+  }
 
   useEffect(() => {
     if (open && ops === null) {
@@ -173,6 +186,29 @@ export function CatalogGenerateDialog({
             {ops && ops.length === 0 && (
               <p className="text-[11px] text-stone-400">
                 Katalog je prázdný – přidej nejdřív úkony v Katalogu.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5 border border-dashed border-stone-300 p-3">
+            <Label htmlFor="cg-wish">Nenašel jsi činnost? Zapiš si ji k doplnění</Label>
+            <div className="flex items-end gap-2">
+              <Input
+                id="cg-wish"
+                value={wishText}
+                onChange={(e) => {
+                  setWishText(e.target.value);
+                  setWishSaved(false);
+                }}
+                placeholder="Např. Montáž sádrokartonového podhledu"
+              />
+              <Button type="button" variant="outline" disabled={!wishText.trim()} onClick={noteWish}>
+                Zapsat
+              </Button>
+            </div>
+            {wishSaved && (
+              <p className="text-[11px] text-stone-500">
+                Uloženo do Katalog → Chybějící. Tam stáhneš šablonu s promptem pro AI.
               </p>
             )}
           </div>
