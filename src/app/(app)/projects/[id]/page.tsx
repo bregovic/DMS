@@ -1005,6 +1005,7 @@ export default async function ProjectDetailPage({
                           "bez termínu"
                         )}
                         {t.estimateDays ? ` · odhad ${t.estimateDays} d` : ""}
+                        {!done && t.percentDone ? ` · ${t.percentDone} %` : ""}
                         {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
                       </p>
                       {prereqs.length > 0 && (
@@ -1053,6 +1054,7 @@ export default async function ProjectDetailPage({
                             priority: t.priority,
                             profession: t.profession,
                             estimateDays: t.estimateDays,
+                            percentDone: t.percentDone,
                             dependsOnIds: prereqs.map((p) => p.id),
                           }}
                           statuses={taskStatuses}

@@ -23,6 +23,7 @@ export type TaskEdit = {
   priority: string | null;
   profession: string | null;
   estimateDays: number | null;
+  percentDone: number;
   dependsOnIds: string[];
 };
 
@@ -152,6 +153,11 @@ export function EditTaskForm({
               <Label htmlFor="et-est">Odhad (dny)</Label>
               <Input id="et-est" name="estimateDays" type="number" min={0} defaultValue={task.estimateDays ?? ""} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="et-pct">Hotovo (%)</Label>
+            <Input id="et-pct" name="percentDone" type="number" min={0} max={100} defaultValue={task.percentDone ?? 0} />
           </div>
 
           {task.kind === "phase" && phases.filter((p) => p.id !== task.id).length > 0 && (

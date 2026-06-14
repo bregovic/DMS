@@ -119,6 +119,7 @@ export function TaskDetailDialog({
               <p className="text-base font-medium text-stone-950">{d.title}</p>
               <p className="kicker mt-0.5">
                 {taskStatusLabel(d.status)}
+                {` · hotovo ${d.percentDone} %`}
                 {d.profession ? ` · ${d.profession}` : ""}
                 {d.estimateDays ? ` · odhad ${d.estimateDays} d` : ""}
               </p>
@@ -136,6 +137,11 @@ export function TaskDetailDialog({
                 <Label htmlFor="dd-due">Termín</Label>
                 <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={!d.canEdit} />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="dd-pct">Hotovo (%)</Label>
+              <Input id="dd-pct" name="percentDone" type="number" min={0} max={100} defaultValue={d.percentDone ?? 0} disabled={!d.canEdit} />
             </div>
 
             <div className="space-y-1.5">

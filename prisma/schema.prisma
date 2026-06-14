@@ -277,6 +277,7 @@ model Task {
   startDate     DateTime?
   dueDate       DateTime?
   status        String    @default("todo") // editovatelný číselník scope "task"
+  percentDone   Int       @default(0) // 0–100 % dokončení
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech

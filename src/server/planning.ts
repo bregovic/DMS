@@ -12,6 +12,7 @@ export type PlanTaskRow = {
   subProjectId: string | null;
   parentId: string | null;
   kind: string;
+  percentDone: number;
   subProject: { name: string } | null;
   dependsOn: { dependsOn: { id: string; title: string; status: string } }[];
 };
@@ -92,12 +93,16 @@ export function buildProjectGantt(
 
   const items: GanttItem[] = topRows
     .map((t): GanttItem => {
+      const effPct = (k: PlanTaskRow) => (done(k.status) ? 100 : k.percentDone ?? 0);
       if (t.kind === "phase") {
         const kids = childrenByPhase.get(t.id) ?? [];
         const allDone = kids.length > 0 && kids.every((k) => done(k.status));
         const blockers = (t.dependsOn ?? [])
           .map((d) => d.dependsOn)
           .filter((p) => !(phaseDone.get(p.id) ?? done(p.status)));
+        const pct = kids.length
+          ? Math.round(kids.reduce((s, k) => s + effPct(k), 0) / kids.length)
+          : effPct(t);
         return {
           id: t.id,
           name: name(t),
@@ -105,6 +110,7 @@ export function buildProjectGantt(
           end: t.dueDate,
           done: done(t.status),
           kind: "phase",
+          percentDone: pct,
           prereqMet: kids.length === 0 ? true : allDone,
           blocked: blockers.length > 0,
           blockedBy: blockers.map((p) => p.title),
@@ -114,6 +120,7 @@ export function buildProjectGantt(
             start: k.startDate,
             end: k.dueDate,
             done: done(k.status),
+            percentDone: effPct(k),
             statusLabel: taskStatusLabel(k.status),
             assigneeEmail: k.assigneeEmail,
           })),
@@ -126,6 +133,7 @@ export function buildProjectGantt(
         end: t.dueDate,
         done: done(t.status),
         kind: "task",
+        percentDone: effPct(t),
       };
     })
     .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());

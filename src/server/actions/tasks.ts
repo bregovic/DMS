@@ -156,6 +156,7 @@ export async function updateTask(formData: FormData) {
       priority: toPriority(formData.get("priority")),
       profession: toText(formData.get("profession")),
       estimateDays: toInt(formData.get("estimateDays")),
+      percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       ...parentUpdate,
     },
   });
@@ -163,6 +164,7 @@ export async function updateTask(formData: FormData) {
   if (task.kind === "phase") {
     await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), true);
   }
+  await cascadeReschedule(task.projectId, task.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
@@ -335,7 +337,7 @@ export async function getTaskDetail(id: string) {
     select: {
       id: true, title: true, kind: true, description: true, status: true,
       startDate: true, dueDate: true, assigneeEmail: true, vendorId: true,
-      priority: true, profession: true, estimateDays: true,
+      priority: true, profession: true, estimateDays: true, percentDone: true,
       projectId: true, subProjectId: true, createdById: true,
       dependsOn: { select: { dependsOnId: true } },
       project: { select: { ownerId: true } },
@@ -390,6 +392,7 @@ export async function getTaskDetail(id: string) {
     priority: task.priority,
     profession: task.profession,
     estimateDays: task.estimateDays,
+    percentDone: task.percentDone,
     projectId: task.projectId,
     subProjectId: task.subProjectId,
     canEdit,
@@ -426,6 +429,7 @@ export async function updateTaskPlan(formData: FormData) {
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
       vendorId,
+      percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");

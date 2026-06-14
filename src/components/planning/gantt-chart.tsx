@@ -13,6 +13,7 @@ export type GanttChild = {
   start: Date | null;
   end: Date | null;
   done: boolean;
+  percentDone?: number;
   statusLabel: string;
   assigneeEmail: string | null;
 };
@@ -23,6 +24,7 @@ export type GanttItem = {
   start: Date | null;
   end: Date | null;
   done?: boolean;
+  percentDone?: number; // 0–100
   kind?: "phase" | "task" | "request";
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
   blocked?: boolean; // fáze: některá fáze, na kterou navazuje, není hotová
@@ -121,22 +123,37 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const todayLeft = pct(t0);
   const todayInRange = todayLeft >= 0 && todayLeft <= 100;
 
-  function colorFor(end: Date | null, done: boolean) {
-    if (done) return "bg-stone-300";
-    if (!end) return "bg-stone-500";
-    const e = startOfDay(end).getTime();
-    if (e < t0) return "bg-red-500";
-    if (e - t0 <= 14 * DAY) return "bg-amber-500";
+  // Barva podle skutečného postupu vs. plánu: červená jen když je % dokončení
+  // k dnešku menší, než odpovídá uplynulému času (víc než ~1 den pozadu).
+  function colorFor(
+    start: Date | null,
+    end: Date | null,
+    done: boolean,
+    percentDone?: number,
+  ) {
+    const p = done ? 100 : percentDone ?? 0;
+    if (p >= 100) return "bg-stone-300";
+    const s = start ? startOfDay(start).getTime() : null;
+    const e = end ? startOfDay(end).getTime() : null;
+    if (s != null && e != null && e > s) {
+      if (t0 < s) return "bg-stone-800"; // ještě nezačalo → nikdy červené
+      const total = e - s;
+      const expected = Math.min(1, Math.max(0, (t0 - s) / total)) * 100;
+      const dayPct = 100 / (total / DAY); // tolerance 1 den
+      if (p < expected - dayPct) return "bg-red-500"; // pozadu
+      if (e - t0 <= 14 * DAY) return "bg-amber-500";
+      return "bg-stone-800";
+    }
+    // jen termín (milník) – červená když je po termínu a nehotovo
+    if (e != null && e < t0) return "bg-red-500";
+    if (e != null && e - t0 <= 14 * DAY) return "bg-amber-500";
     return "bg-stone-800";
   }
   function color(it: GanttItem) {
-    // Fáze v budoucnu (ještě nezačala) se kvůli blokaci/prerekvizitám nebarví červeně.
-    const future = !!it.start && startOfDay(it.start).getTime() > t0;
-    if (it.kind === "phase" && (it.prereqMet === false || it.blocked) && !future)
-      return "bg-red-500";
-    if (it.kind === "request" && !it.done) return "bg-red-500";
-    return colorFor(it.end ?? null, !!it.done);
+    if (it.kind === "request") return it.done ? "bg-stone-300" : "bg-red-500";
+    return colorFor(it.start ?? null, it.end ?? null, !!it.done, it.percentDone);
   }
+  const effPct = (done?: boolean, pct?: number) => (done ? 100 : pct ?? 0);
 
   const LABEL = "13rem";
 
@@ -190,6 +207,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
             const bar = s != null && e != null && e > s;
             const point = !bar ? e ?? s : null;
             const c = color(it);
+            const itpct = it.kind === "request" ? 0 : effPct(it.done, it.percentDone);
             const isPhase = it.kind === "phase";
             const expanded = open.has(it.id);
             const range =
@@ -251,11 +269,14 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                   <div className="relative h-10 flex-1">
                     {bar && s != null && e != null && (
                       <div
-                        className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center rounded-sm ${c} shadow-sm`}
+                        className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-sm ${c} shadow-sm`}
                         style={{ left: `${pct(s)}%`, width: `${Math.max(pct(e) - pct(s), 1.2)}%` }}
-                        title={`${it.name}: ${range}`}
+                        title={`${it.name}: ${range} · ${itpct} %`}
                       >
-                        <span className="truncate px-1.5 text-[10px] font-medium text-white">{range}</span>
+                        {itpct > 0 && (
+                          <span className="absolute inset-y-0 left-0 bg-black/25" style={{ width: `${itpct}%` }} />
+                        )}
+                        <span className="relative truncate px-1.5 text-[10px] font-medium text-white">{range}</span>
                       </div>
                     )}
                     {point != null && (
@@ -281,7 +302,8 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         const ke = k.end ? startOfDay(k.end).getTime() : null;
                         const kbar = ks != null && ke != null && ke > ks;
                         const kpoint = !kbar ? ke ?? ks : null;
-                        const kc = colorFor(k.end ?? null, k.done);
+                        const kc = colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
+                        const kpct = effPct(k.done, k.percentDone);
                         const krange = kbar
                           ? `${formatDate(k.start!)} – ${formatDate(k.end!)}`
                           : k.end
@@ -289,7 +311,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                             : k.start
                               ? formatDate(k.start)
                               : "bez termínu";
-                        const tip = `${k.title} · ${krange} · ${k.statusLabel}${k.assigneeEmail ? ` · ${k.assigneeEmail}` : ""}`;
+                        const tip = `${k.title} · ${krange} · ${k.statusLabel} · ${kpct} %${k.assigneeEmail ? ` · ${k.assigneeEmail}` : ""}`;
                         return (
                           <div
                             key={k.id}
@@ -311,10 +333,14 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                             <div className="relative h-7 flex-1">
                               {kbar && ks != null && ke != null && (
                                 <div
-                                  className={`absolute top-1/2 h-3.5 -translate-y-1/2 rounded-sm ${kc} shadow-sm`}
+                                  className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-sm ${kc} shadow-sm`}
                                   style={{ left: `${pct(ks)}%`, width: `${Math.max(pct(ke) - pct(ks), 0.8)}%` }}
                                   title={tip}
-                                />
+                                >
+                                  {kpct > 0 && (
+                                    <span className="absolute inset-y-0 left-0 bg-black/25" style={{ width: `${kpct}%` }} />
+                                  )}
+                                </div>
                               )}
                               {kpoint != null && (
                                 <div
@@ -338,7 +364,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / blokováno / nedokončené VŘ</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> pozadu oproti plánu (% &lt; čas)</span>
           <span className="flex items-center gap-1.5"><Lock className="size-3 text-red-500" /> čeká na jinou fázi</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
