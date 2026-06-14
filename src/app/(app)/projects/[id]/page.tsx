@@ -33,7 +33,10 @@ import {
   roleLabel,
   taskStatusLabel,
   unitLabel,
+  priorityLabel,
+  priorityColor,
 } from "@/lib/constants";
+import { colorClasses } from "@/lib/status-colors";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
@@ -114,7 +117,14 @@ export default async function ProjectDetailPage({
         },
         tasks: {
           orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
-          include: { createdBy: { select: { name: true, email: true } } },
+          include: {
+            createdBy: { select: { name: true, email: true } },
+            dependsOn: {
+              include: {
+                dependsOn: { select: { id: true, title: true, status: true } },
+              },
+            },
+          },
         },
       },
     }),
@@ -412,6 +422,8 @@ export default async function ProjectDetailPage({
     ]);
   const reqStatusMap = new Map(reqStatuses.map((s) => [s.key, s.label]));
   const taskStatusMap = new Map(taskStatuses.map((s) => [s.key, s.label]));
+  const taskColorMap = new Map(taskStatuses.map((s) => [s.key, s.color]));
+  const statusColor = (st: string) => taskColorMap.get(st) ?? "stone";
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
   return (
@@ -936,6 +948,9 @@ export default async function ProjectDetailPage({
                 kidsDone < kids.length &&
                 !!t.startDate &&
                 new Date(t.startDate) <= todayStart;
+              const prereqs = (t.dependsOn ?? []).map((d) => d.dependsOn);
+              const blockedBy = prereqs.filter((p) => !isTaskDone(p.status));
+              const col = colorClasses(statusColor(t.status));
               return (
                 <li
                   key={t.id}
@@ -947,7 +962,11 @@ export default async function ProjectDetailPage({
                   <div className="flex min-w-0 items-start gap-2.5">
                     {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
                     <div className="min-w-0">
-                      <p className={`flex items-center gap-2 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
+                      <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
+                        <span
+                          className={`size-2 shrink-0 rounded-full ${col.dot}`}
+                          title={taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
+                        />
                         {isPhase && (
                           <span className="kicker !text-stone-500">Fáze</span>
                         )}
@@ -955,6 +974,16 @@ export default async function ProjectDetailPage({
                         {isPhase && kids.length > 0 && (
                           <span className="text-[11px] font-normal text-stone-500">
                             {kidsDone}/{kids.length} hotovo
+                          </span>
+                        )}
+                        {t.priority && (
+                          <span className={`border px-1.5 py-px text-[10px] font-medium uppercase tracking-wide ${colorClasses(priorityColor(t.priority)).chip}`}>
+                            {priorityLabel(t.priority)}
+                          </span>
+                        )}
+                        {t.profession && (
+                          <span className="border border-stone-200 bg-stone-50 px-1.5 py-px text-[10px] font-normal uppercase tracking-wide text-stone-500">
+                            {t.profession}
                           </span>
                         )}
                       </p>
@@ -967,8 +996,15 @@ export default async function ProjectDetailPage({
                         ) : (
                           "bez termínu"
                         )}
+                        {t.estimateDays ? ` · odhad ${t.estimateDays} d` : ""}
                         {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
                       </p>
+                      {isPhase && prereqs.length > 0 && (
+                        <p className={`mt-1 text-xs ${blockedBy.length ? "text-red-600" : "text-stone-500"}`}>
+                          {blockedBy.length ? "⛔ Čeká na: " : "↳ Navazuje na: "}
+                          {prereqs.map((p) => p.title).join(", ")}
+                        </p>
+                      )}
                       {phaseWarn && (
                         <p className="mt-1 text-xs text-amber-700">
                           ⚠ Fáze začíná, ale dílčí úkoly ještě nejsou hotové.
@@ -985,7 +1021,7 @@ export default async function ProjectDetailPage({
                     {canStatusTask ? (
                       <TaskStatusSelect id={t.id} status={t.status} statuses={taskStatuses} />
                     ) : (
-                      <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                      <span className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${col.chip}`}>
                         {taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
                       </span>
                     )}
@@ -1006,6 +1042,10 @@ export default async function ProjectDetailPage({
                             description: t.description,
                             kind: t.kind,
                             parentId: t.parentId,
+                            priority: t.priority,
+                            profession: t.profession,
+                            estimateDays: t.estimateDays,
+                            dependsOnIds: prereqs.map((p) => p.id),
                           }}
                           statuses={taskStatuses}
                           phases={phaseOptions}

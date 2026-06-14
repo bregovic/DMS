@@ -64,6 +64,11 @@ export default async function PlanningPage({
               parentId: true,
               kind: true,
               subProject: { select: { name: true } },
+              dependsOn: {
+                select: {
+                  dependsOn: { select: { id: true, title: true, status: true } },
+                },
+              },
             },
           },
           requests: {
@@ -132,6 +137,17 @@ export default async function PlanningPage({
         }
       const done = (st: string) => TASK_DONE_STATUSES.includes(st);
 
+      // Efektivní "hotovost" fáze: vlastní stav done/cancelled NEBO všechny
+      // dílčí úkoly hotové. Slouží pro vyhodnocení blokace závislostí.
+      const phaseDone = new Map<string, boolean>();
+      for (const ph of tasks.filter((t) => t.kind === "phase")) {
+        const kids = childrenByPhase.get(ph.id) ?? [];
+        phaseDone.set(
+          ph.id,
+          done(ph.status) || (kids.length > 0 && kids.every((k) => done(k.status))),
+        );
+      }
+
       const topRows = tasks.filter((t) =>
         t.kind === "phase"
           ? !!(t.startDate || t.dueDate)
@@ -144,6 +160,9 @@ export default async function PlanningPage({
           if (t.kind === "phase") {
             const kids = childrenByPhase.get(t.id) ?? [];
             const allDone = kids.length > 0 && kids.every((k) => done(k.status));
+            const blockers = (t.dependsOn ?? [])
+              .map((d) => d.dependsOn)
+              .filter((p) => !(phaseDone.get(p.id) ?? done(p.status)));
             return {
               id: t.id,
               name: baseName,
@@ -152,6 +171,8 @@ export default async function PlanningPage({
               done: done(t.status),
               kind: "phase",
               prereqMet: kids.length === 0 ? true : allDone,
+              blocked: blockers.length > 0,
+              blockedBy: blockers.map((p) => p.title),
               children: kids.map((k) => ({
                 id: k.id,
                 title: k.title,

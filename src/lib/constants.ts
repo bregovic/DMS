@@ -124,6 +124,7 @@ export function expenseStatusLabel(value: string) {
 
 // Stavy úkolů (vestavěné). Vlastní v číselníku StatusOption scope "task".
 export const TASK_STATUSES = [
+  { value: "rozhodnout", label: "Rozhodnout" },
   { value: "todo", label: "K udělání" },
   { value: "in_progress", label: "Probíhá" },
   { value: "done", label: "Hotovo" },
@@ -135,6 +136,20 @@ export const TASK_DONE_STATUSES = ["done", "cancelled"];
 
 export function taskStatusLabel(value: string) {
   return TASK_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
+// Priorita úkolů (volitelná).
+export const PRIORITIES = [
+  { value: "high", label: "Vysoká", color: "rose" },
+  { value: "medium", label: "Střední", color: "amber" },
+  { value: "low", label: "Nízká", color: "stone" },
+] as const;
+
+export function priorityLabel(value?: string | null) {
+  return PRIORITIES.find((p) => p.value === value)?.label ?? null;
+}
+export function priorityColor(value?: string | null) {
+  return PRIORITIES.find((p) => p.value === value)?.color ?? "stone";
 }
 
 export const DOCUMENT_TYPES = [

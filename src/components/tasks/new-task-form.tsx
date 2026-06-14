@@ -134,6 +134,26 @@ export function NewTaskForm({
             </div>
           </div>
 
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="t-priority">Priorita</Label>
+              <select id="t-priority" name="priority" defaultValue="" className={fieldClass}>
+                <option value="">— neurčeno —</option>
+                <option value="high">Vysoká</option>
+                <option value="medium">Střední</option>
+                <option value="low">Nízká</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="t-prof">Profese</Label>
+              <Input id="t-prof" name="profession" placeholder="Elektrikář…" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="t-est">Odhad (dny)</Label>
+              <Input id="t-est" name="estimateDays" type="number" min={0} />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="t-desc">Poznámka (volitelné)</Label>
             <textarea

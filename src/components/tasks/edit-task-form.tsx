@@ -20,7 +20,18 @@ export type TaskEdit = {
   description: string | null;
   kind: string;
   parentId: string | null;
+  priority: string | null;
+  profession: string | null;
+  estimateDays: number | null;
+  dependsOnIds: string[];
 };
+
+const PRIORITY_OPTIONS = [
+  { value: "", label: "— neurčeno —" },
+  { value: "high", label: "Vysoká" },
+  { value: "medium", label: "Střední" },
+  { value: "low", label: "Nízká" },
+];
 
 export function EditTaskForm({
   task,
@@ -121,6 +132,49 @@ export function EditTaskForm({
               <Input id="et-due" name="dueDate" type="date" defaultValue={task.dueDate ?? ""} />
             </div>
           </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="et-priority">Priorita</Label>
+              <select id="et-priority" name="priority" defaultValue={task.priority ?? ""} className={fieldClass}>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="et-prof">Profese</Label>
+              <Input id="et-prof" name="profession" defaultValue={task.profession ?? ""} placeholder="Elektrikář…" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="et-est">Odhad (dny)</Label>
+              <Input id="et-est" name="estimateDays" type="number" min={0} defaultValue={task.estimateDays ?? ""} />
+            </div>
+          </div>
+
+          {task.kind === "phase" && phases.filter((p) => p.id !== task.id).length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Navazuje na fáze</Label>
+              <div className="max-h-40 space-y-1 overflow-y-auto border border-stone-200 p-2">
+                {phases
+                  .filter((p) => p.id !== task.id)
+                  .map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 text-sm text-stone-700">
+                      <input
+                        type="checkbox"
+                        name="dependsOnId"
+                        value={p.id}
+                        defaultChecked={task.dependsOnIds.includes(p.id)}
+                        className="size-4 accent-stone-900"
+                      />
+                      {p.title}
+                    </label>
+                  ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="et-desc">Poznámka</Label>

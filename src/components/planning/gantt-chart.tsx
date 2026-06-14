@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronRight, Check } from "lucide-react";
+import { ChevronRight, Check, Lock } from "lucide-react";
 import { setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 
@@ -23,6 +23,8 @@ export type GanttItem = {
   done?: boolean;
   kind?: "phase" | "task" | "request";
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
+  blocked?: boolean; // fáze: některá fáze, na kterou navazuje, není hotová
+  blockedBy?: string[]; // názvy fází, na které čeká
   children?: GanttChild[];
 };
 
@@ -125,7 +127,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const todayInRange = todayLeft >= 0 && todayLeft <= 100;
 
   function color(it: GanttItem) {
-    if (it.kind === "phase" && it.prereqMet === false) return "bg-red-500";
+    if (it.kind === "phase" && (it.prereqMet === false || it.blocked)) return "bg-red-500";
     if (it.kind === "request" && !it.done) return "bg-red-500";
     if (it.done) return "bg-stone-300";
     if (!it.end) return "bg-stone-500";
@@ -227,6 +229,14 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                     {isPhase && kids.length > 0 && (
                       <span className="ml-1 shrink-0 text-[11px] text-stone-400">{doneKids}/{kids.length}</span>
                     )}
+                    {it.blocked && (
+                      <span
+                        className="ml-1 shrink-0"
+                        title={`Čeká na: ${(it.blockedBy ?? []).join(", ")}`}
+                      >
+                        <Lock className="size-3 text-red-500" />
+                      </span>
+                    )}
                   </div>
                   <div className="relative h-10 flex-1">
                     {bar && s != null && e != null && (
@@ -264,7 +274,8 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / nesplněné prerekvizity / nedokončené VŘ</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / blokováno / nedokončené VŘ</span>
+          <span className="flex items-center gap-1.5"><Lock className="size-3 text-red-500" /> čeká na jinou fázi</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-300" /> hotovo</span>

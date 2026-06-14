@@ -15,6 +15,19 @@ function normEmail(v: FormDataEntryValue | null): string | null {
   const s = String(v || "").trim().toLowerCase();
   return s || null;
 }
+function toPriority(v: FormDataEntryValue | null): string | null {
+  const s = String(v || "").trim();
+  return ["high", "medium", "low"].includes(s) ? s : null;
+}
+function toInt(v: FormDataEntryValue | null): number | null {
+  const s = String(v || "").trim().replace(",", ".");
+  if (!s) return null;
+  const n = Math.round(Number(s));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+function toText(v: FormDataEntryValue | null): string | null {
+  return String(v || "").trim() || null;
+}
 
 export async function createTask(formData: FormData) {
   const user = await requireUser();
@@ -72,6 +85,9 @@ export async function createTask(formData: FormData) {
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
       status: String(formData.get("status") || "todo").trim() || "todo",
+      priority: toPriority(formData.get("priority")),
+      profession: toText(formData.get("profession")),
+      estimateDays: toInt(formData.get("estimateDays")),
       createdById: user.id,
     },
   });
@@ -137,11 +153,44 @@ export async function updateTask(formData: FormData) {
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
       status: String(formData.get("status") || "todo").trim() || "todo",
+      priority: toPriority(formData.get("priority")),
+      profession: toText(formData.get("profession")),
+      estimateDays: toInt(formData.get("estimateDays")),
       ...parentUpdate,
     },
   });
+  // Závislosti (jen u fází) – nahradí celou množinu.
+  if (task.kind === "phase") {
+    await savePhaseDependencies(task.id, task.projectId, formData.getAll("dependsOnId"));
+  }
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
+}
+
+/** Nastaví množinu závislostí fáze (nahradí stávající). */
+async function savePhaseDependencies(
+  taskId: string,
+  projectId: string,
+  raw: FormDataEntryValue[]
+) {
+  const ids = [
+    ...new Set(raw.map((v) => String(v || "").trim()).filter(Boolean)),
+  ].filter((id) => id !== taskId);
+  // jen existující fáze ve stejném projektu
+  const valid = ids.length
+    ? await prisma.task.findMany({
+        where: { id: { in: ids }, projectId, kind: "phase" },
+        select: { id: true },
+      })
+    : [];
+  const validIds = new Set(valid.map((t) => t.id));
+  await prisma.taskDependency.deleteMany({ where: { taskId } });
+  if (validIds.size) {
+    await prisma.taskDependency.createMany({
+      data: [...validIds].map((dependsOnId) => ({ taskId, dependsOnId })),
+      skipDuplicates: true,
+    });
+  }
 }
 
 export async function setTaskStatus(formData: FormData) {
