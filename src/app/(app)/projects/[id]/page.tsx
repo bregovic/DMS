@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Folder } from "lucide-react";
+import { ArrowLeft, Folder, CalendarRange } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -469,6 +469,14 @@ export default async function ProjectDetailPage({
           </div>
         </div>
         <div className="flex items-stretch gap-3">
+          <Link
+            href={`/projects/${project.id}/planning${sub ? `?sub=${sub}` : ""}`}
+            className="flex items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+            title="Plánování (Gantt) pro tuto úroveň"
+          >
+            <CalendarRange className="size-4" />
+            Plánování
+          </Link>
           <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
             <p className="kicker !text-stone-400">
               {currentSub ? "Složka celkem" : "Celkem"}

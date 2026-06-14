@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Folder, CalendarRange, Wallet } from "lucide-react";
+import { Home, Folder, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/dashboard", label: "Přehled", Icon: Home },
   { href: "/projects", label: "Projekty", Icon: Folder },
-  { href: "/planning", label: "Plán", Icon: CalendarRange },
   { href: "/payments", label: "Platby", Icon: Wallet },
 ];
 

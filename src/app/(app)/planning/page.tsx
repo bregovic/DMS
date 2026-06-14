@@ -2,8 +2,8 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
-import { TASK_DONE_STATUSES, taskStatusLabel } from "@/lib/constants";
+import { GanttChart } from "@/components/planning/gantt-chart";
+import { buildProjectGantt } from "@/server/planning";
 
 export const dynamic = "force-dynamic";
 
@@ -111,105 +111,12 @@ export default async function PlanningPage({
           (childrenOf.get(x) ?? []).forEach((ch) => stack.push(ch));
         }
       }
-      const sc = scope;
-      const visible = (
-        subProjectId: string | null,
-        createdById: string,
-        assignee?: string | null,
-      ) =>
-        (!sc ||
-          (!!subProjectId && sc.has(subProjectId)) ||
-          createdById === user.id ||
-          assignee === email) &&
-        (!mine || createdById === user.id || assignee === email);
-
-      const tasks = p.tasks.filter((t) =>
-        visible(t.subProjectId, t.createdById, t.assigneeEmail),
-      );
-
-      // Dílčí úkoly pod fázemi (zobrazí se po kliknutí, ne samostatně)
-      const childrenByPhase = new Map<string, typeof tasks>();
-      for (const t of tasks)
-        if (t.parentId) {
-          const a = childrenByPhase.get(t.parentId) ?? [];
-          a.push(t);
-          childrenByPhase.set(t.parentId, a);
-        }
-      const done = (st: string) => TASK_DONE_STATUSES.includes(st);
-
-      // Efektivní "hotovost" fáze: vlastní stav done/cancelled NEBO všechny
-      // dílčí úkoly hotové. Slouží pro vyhodnocení blokace závislostí.
-      const phaseDone = new Map<string, boolean>();
-      for (const ph of tasks.filter((t) => t.kind === "phase")) {
-        const kids = childrenByPhase.get(ph.id) ?? [];
-        phaseDone.set(
-          ph.id,
-          done(ph.status) || (kids.length > 0 && kids.every((k) => done(k.status))),
-        );
-      }
-
-      const topRows = tasks.filter((t) =>
-        t.kind === "phase"
-          ? !!(t.startDate || t.dueDate)
-          : !t.parentId && !!(t.startDate || t.dueDate),
-      );
-
-      const items: GanttItem[] = topRows
-        .map((t): GanttItem => {
-          const baseName = t.subProject ? `${t.subProject.name}: ${t.title}` : t.title;
-          if (t.kind === "phase") {
-            const kids = childrenByPhase.get(t.id) ?? [];
-            const allDone = kids.length > 0 && kids.every((k) => done(k.status));
-            const blockers = (t.dependsOn ?? [])
-              .map((d) => d.dependsOn)
-              .filter((p) => !(phaseDone.get(p.id) ?? done(p.status)));
-            return {
-              id: t.id,
-              name: baseName,
-              start: t.startDate,
-              end: t.dueDate,
-              done: done(t.status),
-              kind: "phase",
-              prereqMet: kids.length === 0 ? true : allDone,
-              blocked: blockers.length > 0,
-              blockedBy: blockers.map((p) => p.title),
-              children: kids.map((k) => ({
-                id: k.id,
-                title: k.title,
-                start: k.startDate,
-                end: k.dueDate,
-                done: done(k.status),
-                statusLabel: taskStatusLabel(k.status),
-                assigneeEmail: k.assigneeEmail,
-              })),
-            };
-          }
-          return {
-            id: t.id,
-            name: baseName,
-            start: t.startDate,
-            end: t.dueDate,
-            done: done(t.status),
-            kind: "task",
-          };
-        })
-        .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
-
-      // Žádanky (výběrová řízení) jako milníky; červené, dokud nejsou dokončené
-      const reqItems: GanttItem[] = p.requests
-        .filter((r) => visible(r.subProjectId, r.createdById))
-        .map((r): GanttItem => ({
-          id: `req-${r.id}`,
-          name: `Žádanka: ${r.subProject ? `${r.subProject.name}: ` : ""}${r.title}`,
-          start: null,
-          end: r.requiredDate,
-          done: r.status === "schvaleno" || r.status === "zruseno",
-          kind: "request",
-        }));
-
-      const allItems = [...items, ...reqItems].sort(
-        (a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime(),
-      );
+      const allItems = buildProjectGantt(p.tasks, p.requests, {
+        scope,
+        userId: user.id,
+        email,
+        mine,
+      });
       return { project: p, items: allItems };
     })
     .filter((x) => x.items.length > 0);

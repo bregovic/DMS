@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/dashboard", label: "Přehled" },
   { href: "/projects", label: "Projekty" },
-  { href: "/planning", label: "Plánování" },
   { href: "/vendors", label: "Dodavatelé" },
   { href: "/payments", label: "Platby" },
   { href: "/reports", label: "Reporty" },
