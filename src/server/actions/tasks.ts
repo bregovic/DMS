@@ -296,6 +296,68 @@ export async function updateTaskPlan(formData: FormData) {
   revalidatePath("/planning");
 }
 
+/** Naplánuje úkol podle dostupnosti přiřazeného dodavatele a počtu dní. */
+export async function scheduleTaskByAvailability(formData: FormData) {
+  const id = String(formData.get("id"));
+  const user = await requireUser();
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true, projectId: true, createdById: true, vendorId: true,
+      estimateDays: true,
+      dependsOn: { select: { dependsOn: { select: { dueDate: true } } } },
+    },
+  });
+  if (!task) throw new Error("Úkol nenalezen.");
+  const access = await getProjectAccess(task.projectId, user);
+  if (!access || (access.role !== "owner" && task.createdById !== user.id)) {
+    throw new Error("Tento úkol nemůžeš plánovat.");
+  }
+  if (!task.vendorId) throw new Error("Úkol nemá přiřazeného dodavatele.");
+  const need = task.estimateDays ?? 0;
+  if (need <= 0) throw new Error("Úkol nemá zadaný odhad dní.");
+
+  // nejdřívější možný začátek: dnes, případně po termínu předchůdců
+  const now = new Date();
+  let earliest = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  for (const d of task.dependsOn) {
+    const due = d.dependsOn.dueDate;
+    if (due) {
+      const next = new Date(due);
+      next.setUTCDate(next.getUTCDate() + 1);
+      if (next > earliest) earliest = next;
+    }
+  }
+
+  const avail = await prisma.vendorAvailability.findMany({
+    where: { vendorId: task.vendorId, available: true, date: { gte: earliest } },
+    orderBy: { date: "asc" },
+    take: need,
+    select: { date: true },
+  });
+  if (avail.length === 0) {
+    throw new Error(
+      "Dodavatel nemá v kalendáři žádné dostupné dny od plánovaného začátku. Doplň mu dostupnost.",
+    );
+  }
+  const start = avail[0].date;
+  const due = avail[avail.length - 1].date;
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { startDate: start, dueDate: due },
+  });
+  revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/planning");
+  return {
+    ok: true,
+    start: start.toISOString().slice(0, 10),
+    due: due.toISOString().slice(0, 10),
+    enough: avail.length >= need,
+    got: avail.length,
+    need,
+  };
+}
+
 export async function setTaskStatus(formData: FormData) {
   const id = String(formData.get("id"));
   const status = String(formData.get("status") || "todo").trim() || "todo";

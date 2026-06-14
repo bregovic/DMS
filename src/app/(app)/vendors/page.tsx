@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { NewVendorForm } from "@/components/vendors/new-vendor-form";
 import { EditVendorForm } from "@/components/vendors/edit-vendor-form";
+import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
 import { deleteVendor } from "@/server/actions/vendors";
 import { vendorCategoryLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -95,6 +96,7 @@ export default async function VendorsPage() {
                     </p>
                   </div>
                   <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <VendorAvailabilityDialog vendorId={v.id} vendorName={v.name} />
                     <EditVendorForm
                       vendor={{
                         id: v.id,

@@ -99,9 +99,23 @@ model Vendor {
   requests Request[]
   offers   Offer[]
   tasks    Task[]
+  availability VendorAvailability[]
 
   @@unique([ownerId, email])
   @@index([ownerId])
+}
+
+// Dostupnost dodavatele po dnech (kalendář). available=true: může pracovat.
+model VendorAvailability {
+  id        String   @id @default(cuid())
+  vendorId  String
+  date      DateTime @db.Date
+  available Boolean  @default(true)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, date])
+  @@index([vendorId])
 }
 
 // Poptávka (procurement). Dodavatel může být prázdný – doplní se po výběru.

@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { X, ExternalLink } from "lucide-react";
-import { getTaskDetail, updateTaskPlan } from "@/server/actions/tasks";
+import {
+  getTaskDetail,
+  updateTaskPlan,
+  scheduleTaskByAvailability,
+} from "@/server/actions/tasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +41,25 @@ export function TaskDetailDialog({
       live = false;
     };
   }, [id]);
+
+  async function scheduleByAvailability() {
+    if (!d) return;
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.set("id", d.id);
+      const r = await scheduleTaskByAvailability(fd);
+      setD(await getTaskDetail(d.id));
+      onSaved?.();
+      if (!r.enough)
+        window.alert(
+          `Dodavatel má od plánovaného začátku jen ${r.got} z ${r.need} potřebných dní. Termín jsem dal na poslední dostupný den (${r.due}). Doplň mu dostupnost a spusť znovu.`,
+        );
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Naplánování selhalo.");
+    }
+    setSaving(false);
+  }
 
   const folderHref = d
     ? `/projects/${d.projectId}${d.subProjectId ? `?sub=${d.subProjectId}` : ""}`
@@ -100,11 +123,11 @@ export function TaskDetailDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="dd-start">Začátek</Label>
-                <Input id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
+                <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dd-due">Termín</Label>
-                <Input id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={!d.canEdit} />
+                <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={!d.canEdit} />
               </div>
             </div>
 
@@ -118,6 +141,20 @@ export function TaskDetailDialog({
                   </option>
                 ))}
               </select>
+              {d.canEdit && d.vendorId && d.estimateDays ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={scheduleByAvailability}
+                  className="mt-1 text-xs text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline cursor-pointer disabled:opacity-50"
+                >
+                  ⟳ Naplánovat dle dostupnosti dodavatele ({d.estimateDays} d)
+                </button>
+              ) : d.canEdit && !d.estimateDays ? (
+                <p className="text-[11px] text-stone-400">
+                  Pro plánování dle dostupnosti zadej odhad dní (v úpravě úkolu).
+                </p>
+              ) : null}
             </div>
 
             {d.candidates.length > 0 && (
