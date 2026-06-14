@@ -25,6 +25,14 @@ export function CatalogImportForm() {
         <label className="kicker">Recepty (task_materials.csv)</label>
         <input type="file" name="taskMaterials" accept=".csv,text/csv" className={inputClass} />
       </div>
+      <div className="space-y-1.5">
+        <label className="kicker">Balíčky (packages.csv)</label>
+        <input type="file" name="packages" accept=".csv,text/csv" className={inputClass} />
+      </div>
+      <div className="space-y-1.5">
+        <label className="kicker">Obsah balíčků (package_items.csv)</label>
+        <input type="file" name="packageItems" accept=".csv,text/csv" className={inputClass} />
+      </div>
 
       <Button type="submit" disabled={pending}>
         {pending ? "Importuji katalog…" : "Importovat katalog (CSV)"}
@@ -39,10 +47,12 @@ export function CatalogImportForm() {
       {s && (
         <div className="space-y-3 border border-stone-300 bg-white p-4 text-sm text-stone-700">
           <p className="kicker">Hotovo</p>
-          <ul className="grid grid-cols-3 gap-x-6 gap-y-1">
+          <ul className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
             <li>Materiály: <span className="font-mono text-stone-950">{s.materials}</span></li>
             <li>Úkony: <span className="font-mono text-stone-950">{s.operations}</span></li>
             <li>Recepty: <span className="font-mono text-stone-950">{s.recipes}</span></li>
+            <li>Balíčky: <span className="font-mono text-stone-950">{s.packages}</span></li>
+            <li>Položky balíčků: <span className="font-mono text-stone-950">{s.packageItems}</span></li>
           </ul>
           {s.warnings.length > 0 && (
             <ul className="max-h-40 space-y-0.5 overflow-y-auto border-t border-stone-200 pt-2 text-xs text-stone-500">

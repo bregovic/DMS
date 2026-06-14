@@ -36,6 +36,7 @@ model User {
   materials         Material[]   @relation("MaterialOwner")
   operations        Operation[]  @relation("OperationOwner")
   catalogWishes     CatalogWish[] @relation("CatalogWishOwner")
+  packages          Package[]    @relation("PackageOwner")
 }
 
 model Account {
@@ -473,9 +474,10 @@ model Operation {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  owner     User                @relation("OperationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  params    OperationParam[]
-  materials OperationMaterial[]
+  owner        User                @relation("OperationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  params       OperationParam[]
+  materials    OperationMaterial[]
+  packageItems PackageItem[]
 
   @@unique([code])
   @@index([ownerId])
@@ -511,6 +513,39 @@ model OperationMaterial {
 
   @@index([operationId])
   @@index([materialId])
+}
+
+// Balíček procesů „na klíč" – pojmenovaná sestava úkonů (sdílený katalog).
+model Package {
+  id        String   @id @default(cuid())
+  ownerId   String
+  code      String
+  name      String
+  unit      String   @default("m2")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User          @relation("PackageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  items PackageItem[]
+
+  @@unique([code])
+  @@index([ownerId])
+}
+
+// Položka balíčku: úkon a jeho množství na 1 MJ balíčku.
+model PackageItem {
+  id          String   @id @default(cuid())
+  packageId   String
+  operationId String
+  qtyPerUnit  Decimal  @default(1) @db.Decimal(12, 4)
+  note        String?
+
+  package   Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  operation Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@index([operationId])
 }
 
 // Poznámka o chybějící činnosti/úkonu v katalogu (wishlist k doplnění přes AI).

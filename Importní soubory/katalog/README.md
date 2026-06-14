@@ -1,76 +1,109 @@
-# Datová sada pro modul stavebních procesů a materiálů
+# Datová sada pro modul stavebních procesů a materiálů (ROZŠÍŘENÁ verze)
 
-Tato sada obsahuje reálná data k naplnění modulu: měrné jednotky, materiály, stavební
-procesy a spotřebu materiálu na procesy. Pokrývá kompletní průřez stavbou rodinného domu
-od zemních prací a základů přes hrubou stavbu, zateplení a izolace až po dokončovací práce
-(omítky, potěry, obklady, podlahy, malby).
+Kompletní průřez stavbou rodinného domu i rekonstrukcí: od bouracích prací a odvozu suti,
+přes základy, hrubou stavbu, krov a střechu, okna a dveře, zateplení, rozvody (elektro,
+voda, kanalizace, podlahové topení) až po koupelny, podlahy, obklady a malby.
 
 ## Soubory
 
 | Soubor | Obsah | Počet záznamů |
 |--------|-------|----------------|
-| `units.csv` | Měrné jednotky | 11 |
-| `materials.csv` | Materiály vč. orientačních cen | ~50 |
-| `tasks.csv` | Stavební procesy / úkony | ~28 |
-| `task_materials.csv` | Spotřeba materiálu na proces | ~70 vazeb |
+| `units.csv` | Měrné jednotky | 13 |
+| `materials.csv` | Materiály vč. orientačních cen | 111 |
+| `tasks.csv` | Stavební procesy / úkony | 67 |
+| `task_materials.csv` | Spotřeba materiálu na proces (recepty) | 121 vazeb |
+| `packages.csv` | Balíčky procesů (složené sestavy „na klíč") | 13 |
+| `package_items.csv` | Obsah balíčků (které procesy je tvoří) | 36 vazeb |
+| `dms-katalog-naplneni.md` | Vše v jednom, ve formátu DMS šablony k importu | — |
 
-## Pokryté kategorie procesů
+## Balíčky procesů (packages)
 
-1. **Zemní práce a základy** — výkop rýh, betonáž pásů a desky, hydroizolace spodní stavby
-2. **Svislé konstrukce** — nosné zdivo Porotherm 30/24, příčky Porotherm 11.5, Ytong, SDK příčky
-3. **Vodorovné konstrukce** — strop Porotherm (nosníky + MIAKO), nadbetonávka, ztužující věnec
-4. **Zateplení a fasáda** — ETICS, fasádní omítka, zateplení střechy
-5. **Vnitřní úpravy povrchů** — jádrová omítka + štuk, litý potěr, podlahová izolace
-6. **Obklady, dlažby, podlahy** — keramika, plovoucí podlahy
-7. **Malby a dokončení** — interiérová malba, finální úprava SDK
+Balíček je pojmenovaná sestava procesů, která se počítá jako celek „na klíč" — např.
+`PKG-KOUPELNA` (hydroizolace + dlažba + obklad), `PKG-PODLAHA` (izolace + potěr + krytina),
+`PKG-STRECHA` (krov + fólie + latě + krytina), `PKG-OKNO` (montáž + parapety). Tabulka
+`package_items` určuje, které úkony balíček obsahuje a v jakém poměru (`qty_per_unit` =
+množství úkonu na 1 měrnou jednotku balíčku).
+
+Výpočet balíčku = pro každý jeho úkon spočítej množství (`qty_per_unit × množství balíčku`),
+dosaď do běžného výpočtu úkonu (materiál + práce) a sečti. Kontrolní propočty: koupelna 4 m²
+vyšla ~12 500 Kč bez sanity, skladba podlahy ~1 060 Kč/m² — odpovídá tržní realitě.
+
+Balíčky jsou volitelná nadstavba: model funguje i bez nich, jen umožňují rychle nacenit
+typické celky místo skládání jednotlivých procesů ručně.
+
+## Pronájem strojů (jednotka = den)
+
+Doplněny položky pronájmu s jednotkou času (`den`, příp. `m2/měsíc` u lešení) — míchačka,
+bourací a vrtací kladivo, vibrační deska/lišta, ponorný vibrátor, minibagr, lešení, pila,
+vysoušeč. Ceny jsou **tržní průměr** z viditelných ceníků (Boels uvádí ceny až po přihlášení,
+proto průměr z DEK/izomat/menších půjčoven): bourací kladivo ~450 Kč/den, vibrační deska
+~650 Kč/den, minibagr ~3 200 Kč/den, lešení ~25 Kč/m²/měsíc.
+
+Pronájem se zadává buď jako materiál v receptu úkonu, nebo přes samostatné „položkové" úkony
+(`PRON-*-P`), kde množství = počet dní. Ceny jsou bez DPH, bez dopravy, paliva a kauce.
+
+## Pokryté kategorie
+
+**Materiály:** zdivo a malty, beton a výztuž, stropy, izolace, omítky a potěry, obklady a
+dlažby, sádrokarton, podlahy, malby, bourání/kontejnery, okna a dveře, krov a střecha
+(taška Bramac, lepenka, asfaltový nátěr, řezivo KVH, latě, střešní okna), elektroinstalace
+(kabely, zásuvky, rozvaděč, anténa, data), podlahové topení, sanita a koupelny (WC, sprcha,
+vana, umyvadlo), rozvody vody a kanalizace.
+
+**Procesy:** bourací práce, výkopy (strojně i ručně), základy a ztracené bednění, zdění,
+SDK příčky, stropy a věnce, krov a pokrývání, natavení lepenky, montáž oken/dveří/střešních
+oken, zateplení ETICS, omítky a stěrky, potěry, podlahové topení, elektroinstalace (rozvody,
+body, kompletace, rozvaděč), rozvody vody a kanalizace, hydroizolace koupelen, obklady a
+dlažby, montáž sanity, pokládka podlah (laminát, vinyl, parkety), malby.
 
 ## Zdroj a platnost cen
 
-Ceny jsou **orientační, bez DPH**, k datu cca červen 2026. Hlavní referenční body byly
-ověřeny z veřejných zdrojů:
+Ceny jsou **orientační, bez DPH**, k cca červnu 2026. Ověřené referenční body z veřejných
+zdrojů (DEK a další dodavatelé/ceníky):
 
-- **Cihly Porotherm 30 Profi** — cca 65 Kč/ks, spotřeba 16 ks/m² (dek.cz, červen 2026)
-- **Cihly Porotherm 24 Profi** — cca 42 Kč/ks, spotřeba 10,7 ks/m²
-- **Ytong Klasik 100** — spotřeba 6,7 ks/m² (dek.cz)
-- **Beton C20/25** — cca 2 500–4 000 Kč/m³, v datech použito 2 900 Kč/m³ (transportbeton.cz)
-- **Beton C16/20** — cca 2 650 Kč/m³
+- Porotherm 30 Profi ~65 Kč/ks (16 ks/m²), Porotherm 24 ~42 Kč/ks (10,7 ks/m²)
+- Ytong Klasik 100 ~38 Kč/ks (6,7 ks/m²)
+- Beton C20/25 ~2 900 Kč/m³, C16/20 ~2 650 Kč/m³ (transportbeton)
+- Plastová okna trojsklo: 100×100 ~4 470 Kč, 120×120 ~5 590 Kč, 150×150 dvoukřídlé ~10 050 Kč (VPO)
+- Interiérové dveře křídlo ~3 290 Kč, obložková zárubeň ~2 880 Kč (DEK/Hornbach)
+- Taška Bramac Classic ~75 Kč/ks (10 ks/m², 43 kg/m²)
+- Řezivo KVH ~7 200 Kč/m³
+- Kontejner na suť 5 m³ vč. odvozu ~4 200 Kč (firmy na odvoz odpadu)
+- Kabel CYKY 3×2,5 ~18 Kč/m, 3×1,5 ~10 Kč/m
 
-Ceny ostatních materiálů (SDK, izolace, dlažby, omítky, malby) vycházejí z běžné tržní
-úrovně roku 2026. U těchto položek se cena liší podle konkrétního výrobku a dodavatele
-více než u komoditních materiálů, proto je ber jako rozumný výchozí odhad.
+Položky bez tvrdého referenčního bodu (část sanity, střešní okna, vchodové dveře,
+rozvaděč, podlahové topení) jsou označeny jako "orientačně" a vycházejí z běžné tržní
+úrovně 2026. U nich očekávej největší rozptyl.
 
-> **Doporučení:** ceny u klíčových/objemově významných materiálů aktualizuj podle aktuálního
-> ceníku DEK (nebo vašeho dodavatele) před ostrým použitím. Sloupec `price_updated` slouží
-> ke sledování stáří ceny.
+> **Upozornění:** ceny oken, dveří, sanity a střešních oken silně závisí na konkrétním
+> výrobku, rozměru a provedení. Ber je jako výchozí odhad a u reálných zakázek nahraď
+> cenou z konkrétní nabídky.
 
-## Důležitá upozornění k importu
+## Důležité k importu
 
-1. **Komentářové řádky** — soubory `materials.csv`, `tasks.csv` a `task_materials.csv`
-   obsahují pro přehlednost řádky začínající znakem `#` (oddělovače kategorií).
-   Tyto řádky je nutné při importu **přeskočit**, nebo je před importem smazat.
+1. **Komentářové řádky `#`** — slouží jako oddělovače kategorií, při importu je přeskoč.
+2. **Oddělovač** středník `;`, kódování UTF-8, desetinná tečka.
+3. **Pořadí importu:** units → materials + tasks → task_materials.
+4. **`consumption_basis`:** `AREA` (na m²), `BASE_LENGTH` (na bm spodní řady), `FIXED`
+   (na zadané množství/kus), `PER_COURSE` (na řadu).
+5. **Položky FIXED za kus** (okna, dveře, sanita, střešní okna, kontejnery) — množství se
+   zadává jako počet kusů v položce projektu. Cena za montáž je v normohodinách úkonu.
 
-2. **Oddělovač** — středník (`;`), kódování UTF-8, desetinná tečka.
+## Poznámky k rozsahu
 
-3. **Pořadí importu** — nejdříve `units.csv`, poté `materials.csv` a `tasks.csv`,
-   nakonec `task_materials.csv` (kvůli vazbám přes `code`).
+- **Pronájem strojů a lešení** — nově zahrnut s jednotkou času (den / m²-měsíc). Ber jako
+  tržní průměr; u konkrétní zakázky nahraď cenou své půjčovny. Kauce, doprava stroje a palivo
+  nejsou v ceně.
+- **Doprava materiálu** — přidána jako položka (závoz + cena za km); uprav dle vzdálenosti.
+- **Komplexní celky „na klíč"** — řešeny přes balíčky (packages), které skládají dílčí
+  procesy. To dává přesnější odhad než paušál, ale vyžaduje zadat reálné množství (m², ks, bm).
+- **Revize, projektová dokumentace, správní poplatky** — nejsou stavební proces se spotřebou,
+  veď je mimo katalog.
+- Ceny oken, dveří, sanity a střešních oken nejvíc kolísají podle provedení — jsou to tržní
+  průměry k pozdější aktualizaci reálnou nabídkou, přesně jak jsi chtěl.
 
-4. **Vztažná základna spotřeby (`consumption_basis`)**:
-   - `AREA` — spotřeba na m² plochy (většina případů)
-   - `BASE_LENGTH` — spotřeba na bm spodní řady (zakládací malta)
-   - `FIXED` — pevná spotřeba, násobí se 1× (objemové položky: pásy, věnce)
-   - `PER_COURSE` — na každou řadu (v této sadě zatím nevyužito)
+## Kalibrace
 
-5. **Položky typu FIXED s objemem** — u `ZAK-PASY` a `VENEC-ZB` se spotřeba betonu zadává
-   přes objem/délku v položce projektu (`quantity`), protože závisí na konkrétním průřezu
-   konstrukce. Hodnota `consumption` u FIXED je vztažena na jednotku zadanou v projektu.
-
-## Upozornění k přesnosti spotřeb
-
-Hodnoty spotřeb a normohodin odpovídají běžným stavebním zvyklostem a technickým listům
-výrobců, ale konkrétní spotřeba se liší podle technologie, formátu materiálu, zkušenosti
-party a podmínek stavby. Před nasazením na reálné zakázky doporučuji hodnoty zkalibrovat
-podle vlastních zkušeností z dokončených staveb — k tomu modul přímo vybízí (data se dají
-kdykoli přepsat importem).
-
-Normohodiny (`labor_hours`) a hodinové sazby (`labor_rate`) jsou orientační; sazby se
-výrazně liší podle regionu a typu firmy (subdodávka vs. vlastní parta).
+Normohodiny a sazby jsou orientační a liší se podle regionu, party a podmínek. Sazby práce
+(`labor_rate`) jsou v rozmezí 280–480 Kč/h podle náročnosti profese. Doporučuji po prvních
+dokončených zakázkách hodnoty přepsat podle vlastní reality — k tomu modul přímo slouží.

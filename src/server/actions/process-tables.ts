@@ -652,6 +652,8 @@ export type ImportSummary = {
   materials: number;
   operations: number;
   recipes: number;
+  packages: number;
+  packageItems: number;
   warnings: string[];
 };
 
@@ -662,15 +664,21 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
   const fMat = formData.get("materials");
   const fTasks = formData.get("tasks");
   const fTm = formData.get("taskMaterials");
+  const fPkg = formData.get("packages");
+  const fPkgItems = formData.get("packageItems");
   const matText = fMat instanceof File && fMat.size ? await fMat.text() : null;
   const taskText = fTasks instanceof File && fTasks.size ? await fTasks.text() : null;
   const tmText = fTm instanceof File && fTm.size ? await fTm.text() : null;
+  const pkgText = fPkg instanceof File && fPkg.size ? await fPkg.text() : null;
+  const pkgItemsText = fPkgItems instanceof File && fPkgItems.size ? await fPkgItems.text() : null;
 
-  if (!matText && !taskText && !tmText) {
-    return { error: "Nahraj alespoň jeden CSV soubor (materiály, úkony nebo recepty)." };
+  if (!matText && !taskText && !tmText && !pkgText && !pkgItemsText) {
+    return { error: "Nahraj alespoň jeden CSV soubor." };
   }
 
   const warnings: string[] = [];
+  let packages = 0;
+  let packageItems = 0;
   let materials = 0;
   let operations = 0;
   let recipes = 0;
@@ -862,9 +870,105 @@ export async function importCatalog(_prev: ImportState, formData: FormData): Pro
     }
   }
 
+  // --- Balíčky ---
+  if (pkgText) {
+    const { header, rows } = parseCsv(pkgText);
+    const ci = {
+      code: colIndex(header, "code", "kod", "kód"),
+      name: colIndex(header, "name", "nazev", "název"),
+      unit: colIndex(header, "unit_code", "unit", "mj"),
+      note: colIndex(header, "note", "poznamka", "poznámka"),
+    };
+    for (const r of rows) {
+      if (r.comment) continue;
+      const f = r.fields!;
+      const code = f[ci.code]?.trim();
+      const name = f[ci.name]?.trim();
+      if (!code || !name) {
+        warnings.push(`Balíček bez kódu/názvu přeskočen: ${f.join(";")}`);
+        continue;
+      }
+      const data = {
+        name,
+        unit: (ci.unit >= 0 ? f[ci.unit]?.trim() : "") || "m2",
+        note: ci.note >= 0 ? f[ci.note]?.trim() || null : null,
+      };
+      await prisma.package.upsert({
+        where: { code },
+        create: { ownerId: user.id, code, ...data },
+        update: data,
+      });
+      packages++;
+    }
+  }
+
+  // --- Položky balíčků --- (přestaví obsah dotčených balíčků)
+  if (pkgItemsText) {
+    const { header, rows } = parseCsv(pkgItemsText);
+    const ci = {
+      pkg: colIndex(header, "package_code", "package", "balicek"),
+      task: colIndex(header, "task_code", "task", "ukon"),
+      qty: colIndex(header, "qty_per_unit", "qty", "mnozstvi"),
+      note: colIndex(header, "note", "poznamka", "poznámka"),
+    };
+    const byPkg = new Map<string, string[][]>();
+    for (const r of rows) {
+      if (r.comment) continue;
+      const f = r.fields!;
+      const pc = f[ci.pkg]?.trim();
+      if (!pc) continue;
+      const arr = byPkg.get(pc) ?? [];
+      arr.push(f);
+      byPkg.set(pc, arr);
+    }
+    for (const [pkgCode, lines] of byPkg) {
+      const pkg = await prisma.package.findFirst({ where: { code: pkgCode }, select: { id: true } });
+      if (!pkg) {
+        warnings.push(`Balíček „${pkgCode}" neexistuje – položky přeskočeny.`);
+        continue;
+      }
+      await prisma.packageItem.deleteMany({ where: { packageId: pkg.id } });
+      for (const f of lines) {
+        const taskCode = f[ci.task]?.trim();
+        const op = taskCode
+          ? await prisma.operation.findFirst({ where: { code: taskCode }, select: { id: true } })
+          : null;
+        if (!op) {
+          warnings.push(`Balíček ${pkgCode}: úkon „${taskCode}" neexistuje – řádek přeskočen.`);
+          continue;
+        }
+        await prisma.packageItem.create({
+          data: {
+            packageId: pkg.id,
+            operationId: op.id,
+            qtyPerUnit: num(f[ci.qty]) ?? 1,
+            note: ci.note >= 0 ? f[ci.note]?.trim() || null : null,
+          },
+        });
+        packageItems++;
+      }
+    }
+  }
+
   revalidatePath("/katalog/materialy");
   revalidatePath("/katalog/ukony");
-  return { summary: { materials, operations, recipes, warnings } };
+  return { summary: { materials, operations, recipes, packages, packageItems, warnings } };
+}
+
+/** Balíčky pro dialog – s položkami (operationId + qtyPerUnit). */
+export async function listPackagesForCalc() {
+  await requireUser();
+  const pkgs = await prisma.package.findMany({
+    orderBy: [{ name: "asc" }],
+    include: { items: { select: { operationId: true, qtyPerUnit: true } } },
+  });
+  return pkgs.map((p) => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    unit: p.unit,
+    items: p.items.map((it) => ({ operationId: it.operationId, qtyPerUnit: Number(it.qtyPerUnit) })),
+  }));
 }
 
 // ---------------------------------------------------------------------------

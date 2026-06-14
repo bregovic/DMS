@@ -5,10 +5,19 @@ import { useRouter } from "next/navigation";
 import { Boxes, Trash2, X } from "lucide-react";
 import {
   listOperationsForCalc,
+  listPackagesForCalc,
   generateFromCatalog,
   createCatalogWish,
   type CalcOperationDTO,
 } from "@/server/actions/process-tables";
+
+type PackageDTO = {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  items: { operationId: string; qtyPerUnit: number }[];
+};
 import { calcOperation, calcTotals } from "@/lib/process-calc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +50,9 @@ export function CatalogGenerateDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [ops, setOps] = useState<CalcOperationDTO[] | null>(null);
+  const [packages, setPackages] = useState<PackageDTO[]>([]);
+  const [pkgSel, setPkgSel] = useState("");
+  const [pkgQty, setPkgQty] = useState("1");
   const [phaseName, setPhaseName] = useState("");
   const [dependsOnPhaseId, setDependsOnPhaseId] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
@@ -65,6 +77,9 @@ export function CatalogGenerateDialog({
       listOperationsForCalc()
         .then(setOps)
         .catch(() => setError("Načtení katalogu selhalo."));
+      listPackagesForCalc()
+        .then(setPackages)
+        .catch(() => {});
     }
   }, [open, ops]);
 
@@ -78,6 +93,26 @@ export function CatalogGenerateDialog({
     counter.current += 1;
     setLines((ls) => [...ls, { lineId: counter.current, operationId, values, multiplier: 1 }]);
     if (!phase && !phaseName) setPhaseName(op.name ?? "");
+  }
+
+  function addPackage() {
+    const pkg = packages.find((p) => p.id === pkgSel);
+    if (!pkg) return;
+    const qty = parseFloat(pkgQty.replace(",", ".")) || 0;
+    if (qty <= 0) return;
+    const newLines: Line[] = [];
+    for (const it of pkg.items) {
+      const op = opMap.get(it.operationId);
+      if (!op) continue;
+      const values: Record<string, number> = {};
+      for (const p of op.paramsMeta) values[p.key] = Number(p.defaultValue ?? 0);
+      values.mnozstvi = it.qtyPerUnit * qty;
+      counter.current += 1;
+      newLines.push({ lineId: counter.current, operationId: it.operationId, values, multiplier: 1 });
+    }
+    if (newLines.length) setLines((ls) => [...ls, ...newLines]);
+    if (!phase && !phaseName) setPhaseName(`${pkg.name} (${qty} ${pkg.unit})`);
+    setPkgSel("");
   }
 
   function close() {
@@ -206,6 +241,45 @@ export function CatalogGenerateDialog({
               </p>
             )}
           </div>
+
+          {packages.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="cg-pkg">Nebo přidat balíček „na klíč"</Label>
+              <div className="flex items-end gap-2">
+                <select
+                  id="cg-pkg"
+                  className={fieldClass + " flex-1"}
+                  value={pkgSel}
+                  onChange={(e) => setPkgSel(e.target.value)}
+                >
+                  <option value="">— vyber balíček —</option>
+                  {packages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.unit})
+                    </option>
+                  ))}
+                </select>
+                <div className="w-24 space-y-1">
+                  <Label htmlFor="cg-pkg-qty">Množství</Label>
+                  <Input
+                    id="cg-pkg-qty"
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={pkgQty}
+                    onChange={(e) => setPkgQty(e.target.value)}
+                  />
+                </div>
+                <Button type="button" variant="outline" disabled={!pkgSel} onClick={addPackage}>
+                  Rozbalit
+                </Button>
+              </div>
+              <p className="text-[11px] text-stone-400">
+                Balíček přidá své úkony s množstvím = poměr × zadané množství; dál se dají
+                upravit.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1.5 border border-dashed border-stone-300 p-3">
             <Label htmlFor="cg-wish">Nenašel jsi činnost? Zapiš si ji k doplnění</Label>
