@@ -290,7 +290,7 @@ export function TaskDetailDialog({
                   </Button>
                 </div>
                 <p className="text-[11px] text-stone-400">
-                  Nový úkol nemá termín — po přidání dej v plánování „Přepočítat termíny".
+                  Po přidání se rozvrh automaticky přepočítá podle návazností a délek.
                 </p>
               </div>
             )}

@@ -93,6 +93,9 @@ export async function createTask(formData: FormData) {
     },
   });
 
+  // Nový dílčí úkol pod fází → rovnou přepočítat rozvrh (zařadí ho podle délky).
+  if (parentId) await scheduleProject(projectId, subProjectId);
+
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/planning");
 }
