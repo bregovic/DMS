@@ -231,7 +231,7 @@ export function NewExpenseForm({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="hours">Hodiny</Label>
                   <Input id="hours" name="hours" type="number" step="0.25" min="0" placeholder="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
@@ -271,7 +271,7 @@ export function NewExpenseForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="dueDate">Splatnost</Label>
               <Input id="dueDate" name="dueDate" type="date" />

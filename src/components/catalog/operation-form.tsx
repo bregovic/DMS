@@ -71,7 +71,7 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
         </div>
         <form ref={formRef} action={action} className="space-y-5 p-5">
           {editing && <input type="hidden" name="id" value={operation.id} />}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="o-code">Kód</Label>
               <Input id="o-code" name="code" defaultValue={operation?.code} placeholder="ZD-PRICKA" required />

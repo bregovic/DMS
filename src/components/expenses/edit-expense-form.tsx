@@ -220,7 +220,7 @@ export function EditExpenseForm({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="ee-hours">Hodiny</Label>
                   <Input id="ee-hours" name="hours" type="number" step="0.25" min="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
@@ -244,7 +244,7 @@ export function EditExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="ee-date">Datum</Label>
               <Input id="ee-date" name="date" type="date" defaultValue={expense.date} required />

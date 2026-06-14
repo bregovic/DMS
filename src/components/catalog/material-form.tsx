@@ -71,7 +71,7 @@ export function MaterialForm({ material }: { material?: MaterialInput }) {
         </div>
         <form ref={formRef} action={action} className="space-y-5 p-5">
           {editing && <input type="hidden" name="id" value={material.id} />}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="code">Kód</Label>
               <Input id="code" name="code" defaultValue={material?.code} placeholder="DEK-12345" required />
@@ -81,7 +81,7 @@ export function MaterialForm({ material }: { material?: MaterialInput }) {
               <Input id="name" name="name" defaultValue={material?.name} placeholder="Cihla Porotherm 11,5" required />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="unit">MJ</Label>
               <Input id="unit" name="unit" list="material-units" defaultValue={material?.unit ?? "ks"} />

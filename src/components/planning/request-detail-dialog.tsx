@@ -83,7 +83,7 @@ export function RequestDetailDialog({
               className="space-y-4"
             >
               <input type="hidden" name="id" value={d.id} />
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="rq-start">Začátek VŘ</Label>
                   <Input id="rq-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />

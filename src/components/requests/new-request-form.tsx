@@ -67,7 +67,7 @@ export function NewRequestForm({
             <Input id="title" name="title" placeholder="Např. Cihly Porotherm 30" required autoFocus />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="quantity">Množství</Label>
               <Input id="quantity" name="quantity" type="number" step="0.01" min="0" placeholder="0" />
