@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { ParamField } from "@/components/catalog/param-field";
 import { formatCurrency } from "@/lib/utils";
 
 type Line = {
@@ -193,31 +194,26 @@ export function CatalogGenerateDialog({
                     <Trash2 className="size-4" />
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {op.paramsMeta.map((p) => (
-                    <div key={p.key} className="w-28 space-y-1">
-                      <Label htmlFor={`l${l.lineId}-${p.key}`}>
-                        {p.label}
-                        {p.unit ? ` (${p.unit})` : ""}
-                      </Label>
-                      <Input
-                        id={`l${l.lineId}-${p.key}`}
-                        type="number"
-                        step="any"
-                        value={Number.isFinite(l.values[p.key]) ? l.values[p.key] : 0}
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((x) =>
-                              x.lineId === l.lineId
-                                ? { ...x, values: { ...x.values, [p.key]: parseFloat(e.target.value) || 0 } }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
+                    <ParamField
+                      key={p.key}
+                      idBase={`l${l.lineId}-${p.key}`}
+                      label={p.label}
+                      unit={p.unit}
+                      value={l.values[p.key]}
+                      onChange={(v) =>
+                        setLines((ls) =>
+                          ls.map((x) =>
+                            x.lineId === l.lineId
+                              ? { ...x, values: { ...x.values, [p.key]: v } }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
                   ))}
-                  <div className="w-20 space-y-1">
+                  <div className="space-y-1">
                     <Label htmlFor={`l${l.lineId}-mult`}>Počet</Label>
                     <Input
                       id={`l${l.lineId}-mult`}
