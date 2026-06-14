@@ -8,6 +8,7 @@ import { selectOffer } from "@/server/actions/offers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { REQUEST_STATUSES } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
@@ -56,11 +57,8 @@ export function RequestDetailDialog({
     : "#";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12"
-      onClick={onClose}
-    >
-      <div className="w-full max-w-xl border border-stone-300 bg-white shadow-lift" onClick={(e) => e.stopPropagation()}>
+    <ModalBackdrop onClose={onClose}>
+      <div className="w-full max-w-xl border border-stone-300 bg-white shadow-lift">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <h3 className="kicker">Výběrové řízení</h3>
           <button type="button" onClick={onClose} className="text-stone-400 hover:text-stone-950 cursor-pointer">
@@ -150,6 +148,6 @@ export function RequestDetailDialog({
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
