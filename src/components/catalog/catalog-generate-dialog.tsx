@@ -28,14 +28,17 @@ const fieldClass =
 export function CatalogGenerateDialog({
   projectId,
   subProjectId,
+  phases = [],
 }: {
   projectId: string;
   subProjectId?: string | null;
+  phases?: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [ops, setOps] = useState<CalcOperationDTO[] | null>(null);
   const [phaseName, setPhaseName] = useState("");
+  const [dependsOnPhaseId, setDependsOnPhaseId] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +76,7 @@ export function CatalogGenerateDialog({
         projectId,
         subProjectId: subProjectId ?? null,
         phaseName,
+        dependsOnPhaseId: dependsOnPhaseId || null,
         lines: lines.map((l) => ({ operationId: l.operationId, values: l.values, multiplier: l.multiplier })),
       });
       if ("error" in res) {
@@ -81,6 +85,7 @@ export function CatalogGenerateDialog({
         setOpen(false);
         setLines([]);
         setPhaseName("");
+        setDependsOnPhaseId("");
         router.refresh();
       }
     } catch (e) {
@@ -122,9 +127,27 @@ export function CatalogGenerateDialog({
         </div>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="cg-phase">Název fáze</Label>
-            <Input id="cg-phase" value={phaseName} onChange={(e) => setPhaseName(e.target.value)} placeholder="Např. Hrubá stavba 1.NP" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="cg-phase">Název fáze</Label>
+              <Input id="cg-phase" value={phaseName} onChange={(e) => setPhaseName(e.target.value)} placeholder="Např. Hrubá stavba 1.NP" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cg-dep">Navazuje na fázi (volitelné)</Label>
+              <select
+                id="cg-dep"
+                className={fieldClass}
+                value={dependsOnPhaseId}
+                onChange={(e) => setDependsOnPhaseId(e.target.value)}
+              >
+                <option value="">— bez návaznosti —</option>
+                {phases.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="space-y-1.5">

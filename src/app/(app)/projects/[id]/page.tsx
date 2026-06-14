@@ -946,7 +946,7 @@ export default async function ProjectDetailPage({
         actions={
           canAdd && (
             <div className="flex items-center gap-2">
-              <CatalogGenerateDialog projectId={project.id} subProjectId={sub ?? undefined} />
+              <CatalogGenerateDialog projectId={project.id} subProjectId={sub ?? undefined} phases={phaseOptions} />
               <NewTaskForm
                 projectId={project.id}
                 subProjectId={sub ?? undefined}

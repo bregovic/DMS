@@ -414,6 +414,7 @@ export type GenerateInput = {
   subProjectId?: string | null;
   phaseId?: string | null; // přidat do existující fáze; jinak vznikne nová
   phaseName?: string;
+  dependsOnPhaseId?: string | null; // nová fáze navazuje na tuto fázi
   lines: { operationId: string; values: Record<string, number>; multiplier?: number }[];
 };
 
@@ -483,6 +484,20 @@ export async function generateFromCatalog(
       },
     });
     phaseId = phase.id;
+
+    // Návaznost na předchozí fázi (musí být fáze ve stejném projektu).
+    const predId = input.dependsOnPhaseId || null;
+    if (predId && predId !== phaseId) {
+      const pred = await prisma.task.findFirst({
+        where: { id: predId, projectId: input.projectId, kind: "phase" },
+        select: { id: true },
+      });
+      if (pred) {
+        await prisma.taskDependency.create({
+          data: { taskId: phaseId, dependsOnId: pred.id },
+        });
+      }
+    }
   }
 
   for (const line of input.lines) {
