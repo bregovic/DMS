@@ -999,7 +999,7 @@ export default async function ProjectDetailPage({
                         {t.estimateDays ? ` · odhad ${t.estimateDays} d` : ""}
                         {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
                       </p>
-                      {isPhase && prereqs.length > 0 && (
+                      {prereqs.length > 0 && (
                         <p className={`mt-1 text-xs ${blockedBy.length ? "text-red-600" : "text-stone-500"}`}>
                           {blockedBy.length ? "⛔ Čeká na: " : "↳ Navazuje na: "}
                           {prereqs.map((p) => p.title).join(", ")}

@@ -35,44 +35,34 @@ function startOfDay(d: Date) {
   return x;
 }
 
-// Řádek dílčího úkolu s klikacím odškrtnutím (splnit / vrátit).
-function ChildRow({ k }: { k: GanttChild }) {
+// Klikací odškrtnutí dílčího úkolu (splnit / vrátit).
+function ChildCheck({ id, done }: { id: string; done: boolean }) {
   const [pending, start] = useTransition();
   return (
-    <li className="flex items-center gap-2 text-xs">
-      <button
-        type="button"
-        disabled={pending}
-        title={k.done ? "Označit jako nehotové" : "Označit jako hotové"}
-        onClick={() => {
-          const fd = new FormData();
-          fd.set("id", k.id);
-          fd.set("status", k.done ? "todo" : "done");
-          start(async () => {
-            try {
-              await setTaskStatus(fd);
-            } catch {
-              window.alert("Změna se nezdařila (nemáš oprávnění?).");
-            }
-          });
-        }}
-        className={`flex size-4 shrink-0 items-center justify-center border transition-colors disabled:opacity-50 cursor-pointer ${
-          k.done
-            ? "border-stone-900 bg-stone-900 text-white"
-            : "border-stone-300 text-transparent hover:border-stone-950"
-        }`}
-      >
-        <Check className="size-2.5" />
-      </button>
-      <span className={`min-w-0 flex-1 truncate ${k.done ? "text-stone-400 line-through" : "text-stone-800"}`}>
-        {k.title}
-      </span>
-      {k.assigneeEmail && <span className="shrink-0 text-stone-400">{k.assigneeEmail}</span>}
-      {k.end && <span className="shrink-0 text-stone-500">do {formatDate(k.end)}</span>}
-      <span className="shrink-0 border border-stone-300 px-1 text-[10px] uppercase tracking-wide text-stone-500">
-        {k.statusLabel}
-      </span>
-    </li>
+    <button
+      type="button"
+      disabled={pending}
+      title={done ? "Označit jako nehotové" : "Označit jako hotové"}
+      onClick={() => {
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("status", done ? "todo" : "done");
+        start(async () => {
+          try {
+            await setTaskStatus(fd);
+          } catch {
+            window.alert("Změna se nezdařila (nemáš oprávnění?).");
+          }
+        });
+      }}
+      className={`flex size-4 shrink-0 items-center justify-center border transition-colors disabled:opacity-50 cursor-pointer ${
+        done
+          ? "border-stone-900 bg-stone-900 text-white"
+          : "border-stone-300 text-transparent hover:border-stone-950"
+      }`}
+    >
+      <Check className="size-2.5" />
+    </button>
   );
 }
 
@@ -126,15 +116,18 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const todayLeft = pct(t0);
   const todayInRange = todayLeft >= 0 && todayLeft <= 100;
 
-  function color(it: GanttItem) {
-    if (it.kind === "phase" && (it.prereqMet === false || it.blocked)) return "bg-red-500";
-    if (it.kind === "request" && !it.done) return "bg-red-500";
-    if (it.done) return "bg-stone-300";
-    if (!it.end) return "bg-stone-500";
-    const e = startOfDay(it.end).getTime();
+  function colorFor(end: Date | null, done: boolean) {
+    if (done) return "bg-stone-300";
+    if (!end) return "bg-stone-500";
+    const e = startOfDay(end).getTime();
     if (e < t0) return "bg-red-500";
     if (e - t0 <= 14 * DAY) return "bg-amber-500";
     return "bg-stone-800";
+  }
+  function color(it: GanttItem) {
+    if (it.kind === "phase" && (it.prereqMet === false || it.blocked)) return "bg-red-500";
+    if (it.kind === "request" && !it.done) return "bg-red-500";
+    return colorFor(it.end ?? null, !!it.done);
   }
 
   const LABEL = "13rem";
@@ -257,14 +250,67 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                   </div>
                 </div>
 
-                {/* rozbalený seznam dílčích úkolů */}
+                {/* rozbalená fáze = Gantt posloupnost dílčích úkolů na stejné ose */}
                 {isPhase && expanded && kids.length > 0 && (
-                  <div className="border-b border-stone-100 bg-stone-50/60 py-2 pl-8 pr-3">
-                    <ul className="space-y-1.5">
-                      {kids.map((k) => (
-                        <ChildRow key={k.id} k={k} />
-                      ))}
-                    </ul>
+                  <div className="border-b border-stone-200 bg-stone-50/50">
+                    {[...kids]
+                      .sort(
+                        (a, b) =>
+                          ((a.start ?? a.end)?.getTime() ?? 0) -
+                          ((b.start ?? b.end)?.getTime() ?? 0),
+                      )
+                      .map((k) => {
+                        const ks = k.start ? startOfDay(k.start).getTime() : null;
+                        const ke = k.end ? startOfDay(k.end).getTime() : null;
+                        const kbar = ks != null && ke != null && ke > ks;
+                        const kpoint = !kbar ? ke ?? ks : null;
+                        const kc = colorFor(k.end ?? null, k.done);
+                        const krange = kbar
+                          ? `${formatDate(k.start!)} – ${formatDate(k.end!)}`
+                          : k.end
+                            ? formatDate(k.end)
+                            : k.start
+                              ? formatDate(k.start)
+                              : "bez termínu";
+                        const tip = `${k.title} · ${krange} · ${k.statusLabel}${k.assigneeEmail ? ` · ${k.assigneeEmail}` : ""}`;
+                        return (
+                          <div
+                            key={k.id}
+                            className="flex items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
+                          >
+                            <div
+                              className="flex shrink-0 items-center gap-1.5 py-1.5 pl-8 pr-3 text-xs"
+                              style={{ width: LABEL }}
+                            >
+                              <ChildCheck id={k.id} done={k.done} />
+                              <span
+                                className={`truncate ${k.done ? "text-stone-400 line-through" : "text-stone-700"}`}
+                                title={k.title}
+                              >
+                                {k.title}
+                              </span>
+                            </div>
+                            <div className="relative h-7 flex-1">
+                              {kbar && ks != null && ke != null && (
+                                <div
+                                  className={`absolute top-1/2 h-3.5 -translate-y-1/2 rounded-sm ${kc} shadow-sm`}
+                                  style={{ left: `${pct(ks)}%`, width: `${Math.max(pct(ke) - pct(ks), 0.8)}%` }}
+                                  title={tip}
+                                />
+                              )}
+                              {kpoint != null && (
+                                <div
+                                  className="absolute top-1/2 -translate-y-1/2"
+                                  style={{ left: `${pct(kpoint)}%` }}
+                                  title={tip}
+                                >
+                                  <span className={`block size-2.5 -translate-x-1/2 rotate-45 rounded-[2px] ${kc} shadow-sm`} />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
               </div>
