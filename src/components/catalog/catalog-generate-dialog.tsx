@@ -106,7 +106,15 @@ export function CatalogGenerateDialog({
       if (!op) continue;
       const values: Record<string, number> = {};
       for (const p of op.paramsMeta) values[p.key] = Number(p.defaultValue ?? 0);
-      values.mnozstvi = it.qtyPerUnit * qty;
+      const mnozstvi = it.qtyPerUnit * qty;
+      values.mnozstvi = mnozstvi;
+      // Odhad dalších parametrů z množství (předpoklad výšky stěny 2,7 m);
+      // uživatel může v rozbaleném řádku upravit.
+      const ASSUMED_H = 2.7;
+      for (const p of op.paramsMeta) {
+        if (p.key === "delka_radu" && !p.defaultValue) values.delka_radu = mnozstvi / ASSUMED_H;
+        else if (p.key === "vyska" && !p.defaultValue) values.vyska = ASSUMED_H;
+      }
       counter.current += 1;
       newLines.push({ lineId: counter.current, operationId: it.operationId, values, multiplier: 1 });
     }

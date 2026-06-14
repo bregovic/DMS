@@ -1000,3 +1000,110 @@ export async function setCatalogWishDone(formData: FormData) {
   await prisma.catalogWish.updateMany({ where: { id }, data: { done } });
   revalidatePath("/katalog/chybejici");
 }
+
+// ---------------------------------------------------------------------------
+// Naplnění existujícího úkolu z katalogu (odhad dní + žádanky)
+// ---------------------------------------------------------------------------
+
+export async function fillTaskFromCatalog(input: {
+  taskId: string;
+  operationId: string;
+  values: Record<string, number>;
+  multiplier?: number;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await requireUser();
+  const task = await prisma.task.findUnique({
+    where: { id: input.taskId },
+    select: { id: true, projectId: true, subProjectId: true, createdById: true },
+  });
+  if (!task) return { error: "Úkol nenalezen." };
+
+  const access = await getProjectAccess(task.projectId, user);
+  if (!access) return { error: "Nemáš přístup k projektu." };
+  let canEdit = access.role === "owner" || task.createdById === user.id;
+  if (!canEdit && access.role === "active") {
+    if (!access.scopeSubIds) canEdit = true;
+    else {
+      const scope = await expandScope(task.projectId, access.scopeSubIds);
+      canEdit = !!task.subProjectId && scope.has(task.subProjectId);
+    }
+  }
+  if (!canEdit) return { error: "Tento úkol nemůžeš upravit." };
+
+  const op = await prisma.operation.findUnique({
+    where: { id: input.operationId },
+    include: {
+      params: { orderBy: { sort: "asc" } },
+      materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true, category: true } } } },
+    },
+  });
+  if (!op) return { error: "Úkon z katalogu nenalezen." };
+
+  const catById = new Map<string, string>();
+  for (const r of op.materials) catById.set(r.material.id, r.material.category);
+
+  const calcOp: CalcOperation = {
+    id: op.id,
+    name: op.name,
+    unit: op.unit,
+    quantityFormula: op.quantityFormula,
+    laborFormula: op.laborFormula,
+    laborRate: op.laborRate != null ? Number(op.laborRate) : null,
+    params: op.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
+    materials: op.materials.map((r) => ({
+      materialId: r.material.id,
+      name: r.material.name,
+      unit: r.material.unit,
+      unitPrice: Number(r.material.unitPrice),
+      quantityFormula: r.quantityFormula,
+      wastePct: r.wastePct != null ? Number(r.wastePct) : null,
+    })),
+  };
+  const res = calcOperation(calcOp, input.values || {}, input.multiplier ?? 1);
+  const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
+
+  await prisma.task.update({ where: { id: task.id }, data: { estimateDays } });
+
+  for (const mat of res.materials) {
+    if (mat.quantity <= 0) continue;
+    await prisma.request.create({
+      data: {
+        projectId: task.projectId,
+        subProjectId: task.subProjectId,
+        taskId: task.id,
+        title: mat.name,
+        quantity: mat.quantity,
+        unit: mat.unit,
+        price: mat.cost,
+        category: catById.get(mat.materialId) || "other",
+        status: "poptavka",
+        createdById: user.id,
+      },
+    });
+  }
+  if (res.laborCost > 0) {
+    await prisma.request.create({
+      data: {
+        projectId: task.projectId,
+        subProjectId: task.subProjectId,
+        taskId: task.id,
+        title: `Práce: ${op.name}`,
+        quantity: res.laborHours,
+        unit: "Nh",
+        price: res.laborCost,
+        category: "prace",
+        status: "poptavka",
+        createdById: user.id,
+      },
+    });
+  }
+
+  const fd = new FormData();
+  fd.set("projectId", task.projectId);
+  if (task.subProjectId) fd.set("subProjectId", task.subProjectId);
+  await recomputeSchedule(fd);
+
+  revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/planning");
+  return { ok: true };
+}

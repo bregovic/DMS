@@ -20,6 +20,7 @@ import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form"
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
+import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
@@ -1056,15 +1057,18 @@ export default async function ProjectDetailPage({
                         {taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
                       </span>
                     )}
+                    {canEditTask && isPhase && (
+                      <CatalogGenerateDialog
+                        projectId={project.id}
+                        subProjectId={sub ?? undefined}
+                        phase={{ id: t.id, title: t.title }}
+                      />
+                    )}
+                    {canEditTask && !isPhase && (
+                      <TaskCatalogFillDialog taskId={t.id} taskTitle={t.title} />
+                    )}
                     {canEditTask && (
                       <span className="flex items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                        {isPhase && (
-                          <CatalogGenerateDialog
-                            projectId={project.id}
-                            subProjectId={sub ?? undefined}
-                            phase={{ id: t.id, title: t.title }}
-                          />
-                        )}
                         <EditTaskForm
                           task={{
                             id: t.id,

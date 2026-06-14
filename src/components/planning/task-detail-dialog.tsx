@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
+import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { taskStatusLabel, TASK_STATUSES, REQUEST_STATUSES, requestStatusLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
@@ -129,13 +131,25 @@ export function TaskDetailDialog({
           <h3 className="kicker">
             {d ? (d.kind === "phase" ? "Detail fáze" : "Detail úkolu") : "Detail"}
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            {d && d.canEdit && d.kind === "phase" && (
+              <CatalogGenerateDialog
+                projectId={d.projectId}
+                subProjectId={d.subProjectId}
+                phase={{ id: d.id, title: d.title }}
+              />
+            )}
+            {d && d.canEdit && d.kind !== "phase" && (
+              <TaskCatalogFillDialog taskId={d.id} taskTitle={d.title} />
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-stone-400 hover:text-stone-950 cursor-pointer"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
 
         {err && <p className="p-5 text-sm text-red-600">{err}</p>}
