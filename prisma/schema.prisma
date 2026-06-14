@@ -131,6 +131,7 @@ model Request {
   vendorId     String?
   subProjectId String?
   taskId       String? // navázáno na úkol/fázi (procurement prerekvizita)
+  startDate    DateTime? // začátek výběrového řízení
   requiredDate DateTime?
   leadDays     Int? // dodací lhůta ve dnech (objednat do = potřeba − leadDays)
   status       String    @default("poptavka") // poptavka | nabidka | vyhovuje | objednano | schvaleno | zruseno

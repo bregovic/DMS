@@ -2,6 +2,7 @@ import {
   TASK_DONE_STATUSES,
   taskStatusLabel,
   REQUEST_HANDLED_STATUSES,
+  requestStatusLabel,
 } from "@/lib/constants";
 import type { GanttItem } from "@/components/planning/gantt-chart";
 
@@ -25,8 +26,10 @@ export type PlanTaskRow = {
 export type PlanRequestRow = {
   id: string;
   title: string;
+  startDate: Date | null;
   requiredDate: Date | null;
   status: string;
+  taskId: string | null;
   createdById: string;
   subProjectId: string | null;
   subProject: { name: string } | null;
@@ -109,6 +112,26 @@ export function buildProjectGantt(
       return orderBy < t0;
     });
 
+  // výběrová řízení (žádanky) navázaná na fázi → zobrazí se jako součást fáze
+  const phaseIdSet = new Set(vtasks.filter((t) => t.kind === "phase").map((t) => t.id));
+  const reqByPhase = new Map<string, PlanRequestRow[]>();
+  for (const r of requests)
+    if (r.taskId && phaseIdSet.has(r.taskId)) {
+      const a = reqByPhase.get(r.taskId) ?? [];
+      a.push(r);
+      reqByPhase.set(r.taskId, a);
+    }
+  const reqChild = (r: PlanRequestRow) => ({
+    id: `req-${r.id}`,
+    requestId: r.id,
+    title: r.title,
+    start: r.startDate,
+    end: r.requiredDate,
+    done: REQUEST_HANDLED_STATUSES.includes(r.status),
+    statusLabel: requestStatusLabel(r.status),
+    assigneeEmail: null,
+  });
+
   const items: GanttItem[] = topRows
     .map((t): GanttItem => {
       const effPct = (k: PlanTaskRow) => (done(k.status) ? 100 : k.percentDone ?? 0);
@@ -133,17 +156,20 @@ export function buildProjectGantt(
           prereqMet: kids.length === 0 ? true : allDone,
           blocked: blockers.length > 0,
           blockedBy: blockers.map((p) => p.title),
-          children: kids.map((k) => ({
-            id: k.id,
-            title: k.title,
-            start: k.startDate,
-            end: k.dueDate,
-            done: done(k.status),
-            percentDone: effPct(k),
-            procurementLate: procLate(k),
-            statusLabel: taskStatusLabel(k.status),
-            assigneeEmail: k.assigneeEmail,
-          })),
+          children: [
+            ...kids.map((k) => ({
+              id: k.id,
+              title: k.title,
+              start: k.startDate,
+              end: k.dueDate,
+              done: done(k.status),
+              percentDone: effPct(k),
+              procurementLate: procLate(k),
+              statusLabel: taskStatusLabel(k.status),
+              assigneeEmail: k.assigneeEmail,
+            })),
+            ...(reqByPhase.get(t.id) ?? []).map(reqChild),
+          ],
         };
       }
       return {
@@ -161,12 +187,14 @@ export function buildProjectGantt(
 
   const reqItems: GanttItem[] = requests
     .filter((r) => visible(r.subProjectId, r.createdById))
+    .filter((r) => !(r.taskId && phaseIdSet.has(r.taskId))) // navázané na fázi jsou uvnitř fáze
     .map((r): GanttItem => ({
       id: `req-${r.id}`,
+      requestId: r.id,
       name: `Žádanka: ${withSubprojectName && r.subProject ? `${r.subProject.name}: ` : ""}${r.title}`,
-      start: null,
+      start: r.startDate,
       end: r.requiredDate,
-      done: r.status === "schvaleno" || r.status === "zruseno",
+      done: REQUEST_HANDLED_STATUSES.includes(r.status),
       kind: "request",
     }));
 

@@ -6,6 +6,7 @@ import { ChevronRight, Check, Lock } from "lucide-react";
 import { setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { TaskDetailDialog } from "@/components/planning/task-detail-dialog";
+import { RequestDetailDialog } from "@/components/planning/request-detail-dialog";
 
 export type GanttChild = {
   id: string;
@@ -15,6 +16,7 @@ export type GanttChild = {
   done: boolean;
   percentDone?: number;
   procurementLate?: boolean;
+  requestId?: string; // dílčí řádek je výběrové řízení (žádanka)
   statusLabel: string;
   assigneeEmail: string | null;
 };
@@ -27,6 +29,7 @@ export type GanttItem = {
   done?: boolean;
   percentDone?: number; // 0–100
   procurementLate?: boolean; // navázaná žádanka neobjednaná včas
+  requestId?: string; // u kind="request": id žádanky pro detail
   kind?: "phase" | "task" | "request";
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
   blocked?: boolean; // fáze: některá fáze, na kterou navazuje, není hotová
@@ -76,6 +79,7 @@ function ChildCheck({ id, done }: { id: string; done: boolean }) {
 export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }) {
   const router = useRouter();
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [reqId, setReqId] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
     setOpen((p) => {
@@ -226,10 +230,12 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
             return (
               <div key={it.id}>
                 <div
-                  className={`group relative flex items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80 ${
-                    it.kind !== "request" ? "cursor-pointer" : ""
-                  }`}
-                  onClick={it.kind !== "request" ? () => setDetailId(it.id) : undefined}
+                  className="group relative flex cursor-pointer items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80"
+                  onClick={() =>
+                    it.kind === "request"
+                      ? it.requestId && setReqId(it.requestId)
+                      : setDetailId(it.id)
+                  }
                 >
                   <div
                     className="flex shrink-0 items-center gap-1 truncate py-2.5 pr-3 text-sm"
@@ -320,14 +326,18 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         return (
                           <div
                             key={k.id}
-                            onClick={() => setDetailId(k.id)}
+                            onClick={() => (k.requestId ? setReqId(k.requestId) : setDetailId(k.id))}
                             className="flex cursor-pointer items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
                           >
                             <div
                               className="flex shrink-0 items-center gap-1.5 py-1.5 pl-8 pr-3 text-xs"
                               style={{ width: LABEL }}
                             >
-                              <ChildCheck id={k.id} done={k.done} />
+                              {k.requestId ? (
+                                <span className="kicker shrink-0 !text-red-500">VŘ</span>
+                              ) : (
+                                <ChildCheck id={k.id} done={k.done} />
+                              )}
                               <span
                                 className={`truncate ${k.done ? "text-stone-400 line-through" : "text-stone-700"}`}
                                 title={k.title}
@@ -381,6 +391,13 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
         <TaskDetailDialog
           id={detailId}
           onClose={() => setDetailId(null)}
+          onSaved={() => router.refresh()}
+        />
+      )}
+      {reqId && (
+        <RequestDetailDialog
+          id={reqId}
+          onClose={() => setReqId(null)}
           onSaved={() => router.refresh()}
         />
       )}

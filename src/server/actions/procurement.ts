@@ -109,6 +109,70 @@ export async function setLinkedRequestStatus(formData: FormData) {
   done(req.projectId);
 }
 
+// ---- DETAIL VÝBĚROVÉHO ŘÍZENÍ (žádanky) ----
+
+export async function getRequestDetail(id: string) {
+  const user = await requireUser();
+  const r = await prisma.request.findUnique({
+    where: { id },
+    select: {
+      id: true, title: true, status: true, startDate: true, requiredDate: true,
+      projectId: true, subProjectId: true, taskId: true,
+      offers: {
+        select: {
+          id: true, vendorName: true, price: true, score: true, rating: true,
+          note: true, selected: true, vendor: { select: { name: true } },
+        },
+        orderBy: [{ selected: "desc" }, { score: "desc" }, { price: "asc" }],
+      },
+    },
+  });
+  if (!r) throw new Error("Výběrové řízení nenalezeno.");
+  const access = await getProjectAccess(r.projectId, user);
+  if (!access) throw new Error("Nemáš přístup.");
+  return {
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : null,
+    requiredDate: r.requiredDate ? r.requiredDate.toISOString().slice(0, 10) : null,
+    projectId: r.projectId,
+    subProjectId: r.subProjectId,
+    canEdit: access.role === "owner" || access.role === "active",
+    isOwner: access.role === "owner",
+    offers: r.offers.map((o) => ({
+      id: o.id,
+      vendor: o.vendorName || o.vendor?.name || "—",
+      price: o.price != null ? Number(o.price) : null,
+      score: o.score,
+      rating: o.rating,
+      note: o.note,
+      selected: o.selected,
+    })),
+  };
+}
+
+export async function updateRequestDates(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const r = await prisma.request.findUnique({ where: { id }, select: { projectId: true } });
+  if (!r) throw new Error("Výběrové řízení nenalezeno.");
+  const access = await getProjectAccess(r.projectId, user);
+  if (!access || (access.role !== "owner" && access.role !== "active")) {
+    throw new Error("Nemáš oprávnění.");
+  }
+  const status = String(formData.get("status") || "").trim();
+  await prisma.request.update({
+    where: { id },
+    data: {
+      startDate: toDate(formData.get("startDate")),
+      requiredDate: toDate(formData.get("requiredDate")),
+      ...(status ? { status } : {}),
+    },
+  });
+  done(r.projectId);
+}
+
 // ---- VÝDAJE ----
 
 export async function createExpenseForTask(formData: FormData) {

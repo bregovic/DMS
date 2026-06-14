@@ -74,13 +74,15 @@ export default async function PlanningPage({
             },
           },
           requests: {
-            where: { requiredDate: { not: null } },
+            where: { OR: [{ requiredDate: { not: null } }, { startDate: { not: null } }] },
             orderBy: { requiredDate: "asc" },
             select: {
               id: true,
               title: true,
+              startDate: true,
               requiredDate: true,
               status: true,
+              taskId: true,
               createdById: true,
               subProjectId: true,
               subProject: { select: { name: true } },
