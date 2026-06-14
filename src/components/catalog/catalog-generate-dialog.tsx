@@ -85,6 +85,7 @@ export function CatalogGenerateDialog({
   }, [open, ops]);
 
   const opMap = new Map((ops ?? []).map((o) => [o.id, o]));
+  const pkgSelObj = packages.find((p) => p.id === pkgSel);
 
   function addLine(operationId: string) {
     const op = opMap.get(operationId);
@@ -232,36 +233,41 @@ export function CatalogGenerateDialog({
 
           {packages.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="cg-pkg">Nebo přidat balíček „na klíč“</Label>
-              <div className="flex items-end gap-2">
-                <select
-                  id="cg-pkg"
-                  className={fieldClass + " flex-1"}
-                  value={pkgSel}
-                  onChange={(e) => setPkgSel(e.target.value)}
-                >
-                  <option value="">— vyber balíček —</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.unit})
-                    </option>
-                  ))}
-                </select>
-                <div className="w-24 space-y-1">
-                  <Label htmlFor="cg-pkg-qty">Množství</Label>
-                  <Input
-                    id="cg-pkg-qty"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={pkgQty}
-                    onChange={(e) => setPkgQty(e.target.value)}
-                  />
+              <Label>Nebo přidat balíček „na klíč“</Label>
+              {pkgSelObj ? (
+                <div className="flex items-end gap-2">
+                  <p className="flex-1 text-sm text-stone-700">
+                    Balíček: <span className="font-medium text-stone-950">{pkgSelObj.name}</span>{" "}
+                    <button
+                      type="button"
+                      onClick={() => setPkgSel("")}
+                      className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
+                    >
+                      změnit
+                    </button>
+                  </p>
+                  <div className="w-24 space-y-1">
+                    <Label htmlFor="cg-pkg-qty">Množství</Label>
+                    <Input
+                      id="cg-pkg-qty"
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={pkgQty}
+                      onChange={(e) => setPkgQty(e.target.value)}
+                    />
+                  </div>
+                  <Button type="button" variant="outline" onClick={addPackage}>
+                    Rozbalit
+                  </Button>
                 </div>
-                <Button type="button" variant="outline" disabled={!pkgSel} onClick={addPackage}>
-                  Rozbalit
-                </Button>
-              </div>
+              ) : (
+                <OperationPicker
+                  ops={packages}
+                  onPick={(p) => setPkgSel(p.id)}
+                  placeholder="Hledat balíček… (název nebo kód)"
+                />
+              )}
               <p className="text-[11px] text-stone-400">
                 Balíček přidá své úkony s množstvím = poměr × zadané množství; dál se dají
                 upravit.

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { OperationPicker } from "@/components/catalog/operation-picker";
 
 export type MaterialOption = { id: string; code: string; name: string; unit: string };
 export type RecipeInput = {
@@ -16,9 +17,6 @@ export type RecipeInput = {
   wastePct: number | null;
   note: string | null;
 };
-
-const fieldClass =
-  "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
 
 export function RecipeForm({
   operationId,
@@ -31,6 +29,7 @@ export function RecipeForm({
 }) {
   const editing = !!recipe;
   const [open, setOpen] = useState(false);
+  const [materialId, setMaterialId] = useState(recipe?.materialId ?? "");
   const [state, action, pending] = useActionState(
     editing ? updateRecipe : addRecipe,
     undefined,
@@ -40,9 +39,12 @@ export function RecipeForm({
   useEffect(() => {
     if (state?.ok) {
       formRef.current?.reset();
+      setMaterialId(recipe?.materialId ?? "");
       setOpen(false);
     }
-  }, [state]);
+  }, [state, recipe?.materialId]);
+
+  const selMat = materials.find((m) => m.id === materialId);
 
   if (!open) {
     return editing ? (
@@ -82,17 +84,29 @@ export function RecipeForm({
             <input type="hidden" name="operationId" value={operationId} />
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="r-material">Materiál</Label>
-            <select id="r-material" name="materialId" defaultValue={recipe?.materialId ?? ""} className={fieldClass} required>
-              <option value="" disabled>
-                — vyber materiál —
-              </option>
-              {materials.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.unit}) · {m.code}
-                </option>
-              ))}
-            </select>
+            <Label>Materiál</Label>
+            <input type="hidden" name="materialId" value={materialId} />
+            {selMat ? (
+              <p className="flex items-center gap-2 text-sm text-stone-700">
+                <span className="font-medium text-stone-950">{selMat.name}</span>
+                <span className="text-xs text-stone-400">
+                  ({selMat.unit}) · {selMat.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMaterialId("")}
+                  className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
+                >
+                  změnit
+                </button>
+              </p>
+            ) : (
+              <OperationPicker
+                ops={materials}
+                onPick={(m) => setMaterialId(m.id)}
+                placeholder="Hledat materiál… (název nebo kód)"
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="col-span-2 space-y-1.5">
