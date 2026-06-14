@@ -98,9 +98,15 @@ export const REQUEST_STATUSES = [
 // Stavy žádanky považované za "vyřízené" (objednáno/uzavřeno) – kvůli procurement prerekvizitě.
 export const REQUEST_HANDLED_STATUSES = ["objednano", "schvaleno", "zruseno"];
 
-// Stavy žádanky, které představují potvrzený budoucí výdaj (forecast):
-// vybraná nabídka, objednáno nebo schváleno.
-export const REQUEST_FORECAST_STATUSES = ["vyhovuje", "objednano", "schvaleno"];
+// Stavy žádanky, které se počítají do forecastu budoucích výdajů – vše s cenou
+// kromě zrušených (tj. i poptávky, např. vygenerované z katalogu).
+export const REQUEST_FORECAST_STATUSES = [
+  "poptavka",
+  "nabidka",
+  "vyhovuje",
+  "objednano",
+  "schvaleno",
+];
 
 export function requestStatusLabel(value: string) {
   return REQUEST_STATUSES.find((s) => s.value === value)?.label ?? value;

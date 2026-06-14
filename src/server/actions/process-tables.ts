@@ -553,6 +553,24 @@ export async function generateFromCatalog(
         },
       });
     }
+
+    // Položka práce (cena = normohodiny × sazba) → také do forecastu.
+    if (res.laborCost > 0) {
+      await prisma.request.create({
+        data: {
+          projectId: input.projectId,
+          subProjectId,
+          taskId: subtask.id,
+          title: `Práce: ${op.name}`,
+          quantity: res.laborHours,
+          unit: "Nh",
+          price: res.laborCost,
+          category: "prace",
+          status: "poptavka",
+          createdById: user.id,
+        },
+      });
+    }
   }
 
   // Přepočítej rozvrh (dílčí úkoly dostanou termíny dle délek/návazností).

@@ -279,7 +279,8 @@ export function CatalogGenerateDialog({
 
         <div className="flex items-center justify-between gap-2 border-t border-stone-200 px-5 py-4">
           <p className="text-[11px] text-stone-400">
-            Vytvoří fázi s dílčími úkoly (pracnost → dny, 8 h/den) a žádankami na materiál ve stavu Poptávka.
+            Vytvoří fázi s dílčími úkoly (pracnost → dny, 8 h/den) a žádankami na
+            materiál i práci (Poptávka) – rovnou se počítají ve forecastu.
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={close}>
