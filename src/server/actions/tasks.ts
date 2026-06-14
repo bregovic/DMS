@@ -586,6 +586,7 @@ export async function updateTaskPlan(formData: FormData) {
             percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
           }),
       vendorId,
+      description: toText(formData.get("description")),
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");

@@ -155,9 +155,19 @@ export function TaskDetailDialog({
                 {d.profession ? ` · ${d.profession}` : ""}
                 {d.estimateDays ? ` · odhad ${d.estimateDays} d` : ""}
               </p>
-              {d.description && (
-                <p className="mt-1 text-sm text-stone-500">{d.description}</p>
-              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="dd-desc">Popis</Label>
+              <textarea
+                key={`d-${d.id}`}
+                id="dd-desc"
+                name="description"
+                rows={2}
+                defaultValue={d.description ?? ""}
+                disabled={!d.canEdit}
+                className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950 disabled:opacity-60"
+              />
             </div>
 
             {(() => {

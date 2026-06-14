@@ -155,8 +155,17 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     if (e != null && e - t0 <= 14 * DAY) return "bg-amber-500";
     return "bg-stone-800";
   }
+  // VŘ (žádanka) – běžící výběrko není červené; červené až po termínu rozhodnutí.
+  function reqColor(end: Date | null, done: boolean) {
+    if (done) return "bg-stone-300";
+    if (!end) return "bg-stone-800";
+    const e = startOfDay(end).getTime();
+    if (e < t0) return "bg-red-500";
+    if (e - t0 <= 14 * DAY) return "bg-amber-500";
+    return "bg-stone-800";
+  }
   function color(it: GanttItem) {
-    if (it.kind === "request") return it.done ? "bg-stone-300" : "bg-red-500";
+    if (it.kind === "request") return reqColor(it.end ?? null, !!it.done);
     if (it.procurementLate) return "bg-red-500"; // žádanka neobjednaná včas
     return colorFor(it.start ?? null, it.end ?? null, !!it.done, it.percentDone);
   }
@@ -311,9 +320,11 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         const ke = k.end ? startOfDay(k.end).getTime() : null;
                         const kbar = ks != null && ke != null && ke > ks;
                         const kpoint = !kbar ? ke ?? ks : null;
-                        const kc = k.procurementLate
-                          ? "bg-red-500"
-                          : colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
+                        const kc = k.requestId
+                          ? reqColor(k.end ?? null, k.done)
+                          : k.procurementLate
+                            ? "bg-red-500"
+                            : colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
                         const kpct = effPct(k.done, k.percentDone);
                         const krange = kbar
                           ? `${formatDate(k.start!)} – ${formatDate(k.end!)}`
