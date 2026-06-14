@@ -1,18 +1,16 @@
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  ChartLegend,
-  MonthlyBarChart,
-  ProjectPieChart,
-} from "@/components/reports/charts";
+import { ChartLegend, ProjectPieChart } from "@/components/reports/charts";
+import { ForecastReport } from "@/components/reports/forecast-report";
 import { formatCurrency } from "@/lib/utils";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
+import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
 
 export default async function ReportsPage() {
   const user = await requireUser();
 
-  const [expenses, catMap] = await Promise.all([
+  const [expenses, forecastReqs, catMap] = await Promise.all([
     prisma.expense.findMany({
       where: { project: { ownerId: user.id } },
       select: {
@@ -22,10 +20,48 @@ export default async function ReportsPage() {
         project: { select: { name: true } },
       },
     }),
+    prisma.request.findMany({
+      where: {
+        project: { ownerId: user.id },
+        status: { in: REQUEST_FORECAST_STATUSES },
+        price: { not: null },
+      },
+      select: {
+        price: true,
+        requiredDate: true,
+        expenses: { select: { amount: true } },
+      },
+    }),
     getExpenseCategoryMap(),
   ]);
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  // Forecast: zbývající částka potvrzené žádanky (cena − již navázané reálné
+  // výdaje), zařazená podle požadovaného data. Bez data → mimo časovou osu.
+  const forecastRows: { date: string; amount: number }[] = [];
+  let undatedForecast = 0;
+  for (const r of forecastReqs) {
+    const price = Number(r.price ?? 0);
+    const spent = r.expenses.reduce((s, e) => s + Number(e.amount), 0);
+    const remaining = Math.max(0, price - spent);
+    if (remaining <= 0) continue;
+    if (r.requiredDate) {
+      forecastRows.push({
+        date: r.requiredDate.toISOString().slice(0, 10),
+        amount: remaining,
+      });
+    } else {
+      undatedForecast += remaining;
+    }
+  }
+  const totalForecast =
+    forecastRows.reduce((s, r) => s + r.amount, 0) + undatedForecast;
+
+  const actualRows = expenses.map((e) => ({
+    date: e.date.toISOString().slice(0, 10),
+    amount: Number(e.amount),
+  }));
 
   const byProjectMap = new Map<string, number>();
   for (const e of expenses) {
@@ -49,31 +85,15 @@ export default async function ReportsPage() {
     .map(([cat, total]) => ({ name: catMap.get(cat) ?? cat, total }))
     .sort((a, b) => b.total - a.total);
 
-  const now = new Date();
-  const monthly: { label: string; total: number }[] = [];
-  const monthIndex = new Map<string, number>();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    const label = new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(d);
-    monthIndex.set(key, monthly.length);
-    monthly.push({ label, total: 0 });
-  }
-  for (const e of expenses) {
-    const d = new Date(e.date);
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    const idx = monthIndex.get(key);
-    if (idx !== undefined) monthly[idx].total += Number(e.amount);
-  }
-
-  if (expenses.length === 0) {
+  if (expenses.length === 0 && totalForecast === 0) {
     return (
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 border-b border-stone-300/80 pb-6">
           <h1 className="display text-4xl text-stone-950">Reporty</h1>
         </header>
         <p className="py-16 text-center text-sm text-stone-500">
-          Zatím nejsou žádná data. Přidej výdaje do projektů a uvidíš tu grafy.
+          Zatím nejsou žádná data. Přidej výdaje nebo potvrzené žádanky a uvidíš
+          tu grafy.
         </p>
       </div>
     );
@@ -81,22 +101,34 @@ export default async function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-7xl">
-      <header className="mb-8 flex items-end justify-between border-b border-stone-300/80 pb-6">
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <h1 className="display text-4xl text-stone-950">Reporty</h1>
-        <div className="text-right">
-          <p className="kicker">Celkové výdaje</p>
-          <p className="display mt-1 text-2xl text-stone-950">
-            {formatCurrency(total)}
-          </p>
+        <div className="flex gap-8">
+          <div className="text-right">
+            <p className="kicker">Skutečné výdaje</p>
+            <p className="display mt-1 text-2xl text-stone-950">
+              {formatCurrency(total)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="kicker">Forecast</p>
+            <p className="display mt-1 text-2xl text-stone-500">
+              {formatCurrency(totalForecast)}
+            </p>
+          </div>
         </div>
       </header>
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Výdaje v čase · 12 měsíců</CardTitle>
+          <CardTitle>Výdaje a forecast v čase</CardTitle>
         </CardHeader>
         <CardContent>
-          <MonthlyBarChart data={monthly} />
+          <ForecastReport
+            actual={actualRows}
+            forecast={forecastRows}
+            undatedForecast={undatedForecast}
+          />
         </CardContent>
       </Card>
 
