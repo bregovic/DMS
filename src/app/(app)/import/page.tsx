@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { fullAccessProjectIds } from "@/server/access";
 import { ImportForm } from "@/components/import/import-form";
 import { PlanImportForm } from "@/components/import/plan-import-form";
+import { CatalogImportForm } from "@/components/import/catalog-import-form";
 
 export default async function ImportPage() {
   const user = await requireUser();
@@ -105,6 +106,37 @@ export default async function ImportPage() {
         </p>
 
         <ImportForm />
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Katalog procesů (CSV) */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="border-t border-stone-300/80 pt-8">
+        <h2 className="display text-2xl text-stone-950">Katalog procesů (CSV)</h2>
+        <p className="mt-2 mb-5 text-sm text-stone-500">
+          Materiály, úkony a recepty (spotřeba materiálu) pro Procesní tabulky.
+          Oddělovač <span className="font-mono">;</span>, UTF-8, desetinná tečka;
+          řádky začínající <span className="font-mono">#</span> jsou kategorie.
+          Importuj v pořadí materiály → úkony → recepty (provazují se přes{" "}
+          <span className="font-mono">code</span>). Existující se podle kódu{" "}
+          <span className="text-stone-950">aktualizují</span>.
+        </p>
+
+        <div className="mb-6">
+          <a
+            href="/api/export/catalog"
+            className="inline-flex h-10 items-center gap-2 border border-stone-300 px-4 text-sm font-medium text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+          >
+            <FileText className="size-4" />
+            Stáhnout šablonu + AI prompt
+          </a>
+          <p className="mt-2 text-sm text-stone-500">
+            Šablona obsahuje stávající katalog ve formátu CSV a prompt pro AI –
+            předáš ho AI, ta doplní další položky a ty je naimportuješ zpět.
+          </p>
+        </div>
+
+        <CatalogImportForm />
       </section>
     </div>
   );

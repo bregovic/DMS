@@ -126,6 +126,7 @@ const operationSchema = z.object({
   unit: z.string().min(1).default("m2"),
   quantityFormula: z.string().min(1).default("1"),
   laborFormula: z.string().min(1).default("0"),
+  laborRate: z.coerce.number().min(0).optional(),
   description: z.string().optional(),
   category: z.string().optional(),
 });
@@ -137,6 +138,7 @@ function parseOperation(formData: FormData) {
     unit: formData.get("unit") || "m2",
     quantityFormula: String(formData.get("quantityFormula") || "").trim() || "1",
     laborFormula: String(formData.get("laborFormula") || "").trim() || "0",
+    laborRate: formData.get("laborRate") || undefined,
     description: formData.get("description") || undefined,
     category: formData.get("category") || undefined,
   });
@@ -172,6 +174,7 @@ export async function createOperation(_prev: FormState, formData: FormData): Pro
       unit: parsed.data.unit,
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
+      laborRate: parsed.data.laborRate ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
     },
@@ -205,6 +208,7 @@ export async function updateOperation(_prev: FormState, formData: FormData): Pro
       unit: parsed.data.unit,
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
+      laborRate: parsed.data.laborRate ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
     },
@@ -384,6 +388,7 @@ export async function listOperationsForCalc(): Promise<CalcOperationDTO[]> {
     unit: o.unit,
     quantityFormula: o.quantityFormula,
     laborFormula: o.laborFormula,
+    laborRate: o.laborRate != null ? Number(o.laborRate) : null,
     params: o.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
     paramsMeta: o.params.map((p) => ({
       key: p.key,
@@ -489,6 +494,7 @@ export async function generateFromCatalog(
       unit: op.unit,
       quantityFormula: op.quantityFormula,
       laborFormula: op.laborFormula,
+      laborRate: op.laborRate != null ? Number(op.laborRate) : null,
       params: op.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
       materials: op.materials.map((r) => ({
         materialId: r.material.id,
@@ -543,4 +549,288 @@ export async function generateFromCatalog(
   revalidatePath(`/projects/${input.projectId}`);
   revalidatePath("/planning");
   return { ok: true, phaseId };
+}
+
+// ---------------------------------------------------------------------------
+// CSV import katalogu (materials.csv, tasks.csv, task_materials.csv)
+// Oddělovač ';', UTF-8, desetinná tečka; řádky '#' = oddělovač kategorií.
+// ---------------------------------------------------------------------------
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else q = false;
+      } else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ";") {
+      out.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+type CsvRow = { comment?: string; fields?: string[] };
+
+function parseCsv(text: string): { header: string[]; rows: CsvRow[] } {
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  let header: string[] = [];
+  const rows: CsvRow[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith("#")) {
+      rows.push({ comment: line.replace(/^#+\s*/, "").trim() });
+      continue;
+    }
+    const fields = splitCsvLine(line);
+    if (!header.length) {
+      header = fields.map((f) => f.toLowerCase());
+      continue;
+    }
+    rows.push({ fields });
+  }
+  return { header, rows };
+}
+
+function colIndex(header: string[], ...names: string[]): number {
+  for (const n of names) {
+    const i = header.indexOf(n.toLowerCase());
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+function num(s: string | undefined): number | null {
+  if (s == null || s.trim() === "") return null;
+  const n = parseFloat(s.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+export type ImportSummary = {
+  materials: number;
+  operations: number;
+  recipes: number;
+  warnings: string[];
+};
+
+export type ImportState = { error?: string; summary?: ImportSummary } | undefined;
+
+export async function importCatalog(_prev: ImportState, formData: FormData): Promise<ImportState> {
+  const user = await requireUser();
+  const fMat = formData.get("materials");
+  const fTasks = formData.get("tasks");
+  const fTm = formData.get("taskMaterials");
+  const matText = fMat instanceof File && fMat.size ? await fMat.text() : null;
+  const taskText = fTasks instanceof File && fTasks.size ? await fTasks.text() : null;
+  const tmText = fTm instanceof File && fTm.size ? await fTm.text() : null;
+
+  if (!matText && !taskText && !tmText) {
+    return { error: "Nahraj alespoň jeden CSV soubor (materiály, úkony nebo recepty)." };
+  }
+
+  const warnings: string[] = [];
+  let materials = 0;
+  let operations = 0;
+  let recipes = 0;
+
+  // --- Materiály ---
+  if (matText) {
+    const { header, rows } = parseCsv(matText);
+    const ci = {
+      code: colIndex(header, "code", "kod", "kód"),
+      name: colIndex(header, "name", "nazev", "název"),
+      unit: colIndex(header, "unit_code", "unit", "mj"),
+      weight: colIndex(header, "weight_per_unit"),
+      price: colIndex(header, "price", "cena"),
+      supplier: colIndex(header, "supplier", "zdroj"),
+      updated: colIndex(header, "price_updated"),
+      note: colIndex(header, "note", "poznamka", "poznámka"),
+    };
+    let category = "other";
+    for (const r of rows) {
+      if (r.comment) {
+        category = r.comment;
+        continue;
+      }
+      const f = r.fields!;
+      const code = f[ci.code]?.trim();
+      const name = f[ci.name]?.trim();
+      if (!code || !name) {
+        warnings.push(`Materiál bez kódu/názvu přeskočen: ${f.join(";")}`);
+        continue;
+      }
+      const weight = ci.weight >= 0 ? num(f[ci.weight]) : null;
+      const baseNote = ci.note >= 0 ? f[ci.note]?.trim() || "" : "";
+      const note =
+        [baseNote, weight != null ? `hmotnost ${weight}/MJ` : ""].filter(Boolean).join(" · ") || null;
+      const data = {
+        name,
+        unit: (ci.unit >= 0 ? f[ci.unit]?.trim() : "") || "ks",
+        unitPrice: num(f[ci.price]) ?? 0,
+        priceSource: ci.supplier >= 0 ? f[ci.supplier]?.trim() || null : null,
+        priceDate: ci.updated >= 0 ? toDate(f[ci.updated]) : null,
+        category,
+        note,
+      };
+      await prisma.material.upsert({
+        where: { ownerId_code: { ownerId: user.id, code } },
+        create: { ownerId: user.id, code, ...data },
+        update: data,
+      });
+      materials++;
+    }
+  }
+
+  // --- Úkony --- (zapamatuj unit + course_height pro stavbu receptu)
+  const taskMeta = new Map<string, { unit: string; courseHeight: number | null }>();
+  if (taskText) {
+    const { header, rows } = parseCsv(taskText);
+    const ci = {
+      code: colIndex(header, "code", "kod", "kód"),
+      name: colIndex(header, "name", "nazev", "název"),
+      unit: colIndex(header, "unit_code", "unit", "mj"),
+      labor: colIndex(header, "labor_hours", "normohodiny"),
+      rate: colIndex(header, "labor_rate", "sazba"),
+      course: colIndex(header, "course_height"),
+      note: colIndex(header, "note", "poznamka", "poznámka"),
+    };
+    let category = "other";
+    for (const r of rows) {
+      if (r.comment) {
+        category = r.comment;
+        continue;
+      }
+      const f = r.fields!;
+      const code = f[ci.code]?.trim();
+      const name = f[ci.name]?.trim();
+      if (!code || !name) {
+        warnings.push(`Úkon bez kódu/názvu přeskočen: ${f.join(";")}`);
+        continue;
+      }
+      const unit = (ci.unit >= 0 ? f[ci.unit]?.trim() : "") || "m2";
+      const labor = num(f[ci.labor]) ?? 0;
+      const rate = ci.rate >= 0 ? num(f[ci.rate]) : null;
+      const courseHeight = ci.course >= 0 ? num(f[ci.course]) : null;
+      taskMeta.set(code, { unit, courseHeight });
+      const data = {
+        name,
+        unit,
+        quantityFormula: "mnozstvi",
+        laborFormula: labor > 0 ? `${labor} * mnozstvi` : "0",
+        laborRate: rate,
+        description: ci.note >= 0 ? f[ci.note]?.trim() || null : null,
+        category,
+      };
+      const op = await prisma.operation.upsert({
+        where: { ownerId_code: { ownerId: user.id, code } },
+        create: { ownerId: user.id, code, ...data },
+        update: data,
+      });
+      operations++;
+      const hasMn = await prisma.operationParam.findFirst({
+        where: { operationId: op.id, key: "mnozstvi" },
+        select: { id: true },
+      });
+      if (!hasMn) {
+        await prisma.operationParam.create({
+          data: { operationId: op.id, key: "mnozstvi", label: "Množství", unit, sort: 0 },
+        });
+      }
+    }
+  }
+
+  // --- Recepty --- (přestaví parametry i recept dotčených úkonů)
+  if (tmText) {
+    const { header, rows } = parseCsv(tmText);
+    const ci = {
+      task: colIndex(header, "task_code", "task", "ukon"),
+      material: colIndex(header, "material_code", "material"),
+      consumption: colIndex(header, "consumption", "spotreba", "spotřeba"),
+      basis: colIndex(header, "consumption_basis", "basis"),
+      waste: colIndex(header, "waste_factor", "prorez", "prořez"),
+      note: colIndex(header, "note", "poznamka", "poznámka"),
+    };
+    const byTask = new Map<string, string[][]>();
+    for (const r of rows) {
+      if (r.comment) continue;
+      const f = r.fields!;
+      const tc = f[ci.task]?.trim();
+      if (!tc) continue;
+      const arr = byTask.get(tc) ?? [];
+      arr.push(f);
+      byTask.set(tc, arr);
+    }
+
+    for (const [taskCode, lines] of byTask) {
+      const op = await prisma.operation.findFirst({
+        where: { ownerId: user.id, code: taskCode },
+        select: { id: true, unit: true },
+      });
+      if (!op) {
+        warnings.push(`Recept: úkon „${taskCode}" neexistuje – přeskočen.`);
+        continue;
+      }
+      const courseHeight = taskMeta.get(taskCode)?.courseHeight ?? null;
+      const needBaseLen = lines.some((f) => (f[ci.basis] || "").toUpperCase() === "BASE_LENGTH");
+      const needCourse = lines.some((f) => (f[ci.basis] || "").toUpperCase() === "PER_COURSE");
+
+      await prisma.operationParam.deleteMany({ where: { operationId: op.id } });
+      await prisma.operationParam.create({ data: { operationId: op.id, key: "mnozstvi", label: "Množství", unit: op.unit, sort: 0 } });
+      if (needBaseLen)
+        await prisma.operationParam.create({ data: { operationId: op.id, key: "delka_radu", label: "Délka spodní řady", unit: "bm", sort: 1 } });
+      if (needCourse)
+        await prisma.operationParam.create({ data: { operationId: op.id, key: "vyska", label: "Výška", unit: "m", sort: 2 } });
+
+      await prisma.operationMaterial.deleteMany({ where: { operationId: op.id } });
+      for (const f of lines) {
+        const matCode = f[ci.material]?.trim();
+        const material = matCode
+          ? await prisma.material.findFirst({ where: { ownerId: user.id, code: matCode }, select: { id: true } })
+          : null;
+        if (!material) {
+          warnings.push(`Recept ${taskCode}: materiál „${matCode}" neexistuje – řádek přeskočen.`);
+          continue;
+        }
+        const consumption = num(f[ci.consumption]) ?? 0;
+        const basis = (f[ci.basis] || "AREA").toUpperCase();
+        const wf = ci.waste >= 0 ? num(f[ci.waste]) : null;
+        const wastePct = wf != null && wf !== 1 ? Math.round((wf - 1) * 10000) / 100 : null;
+
+        let formula: string;
+        if (basis === "BASE_LENGTH") formula = `${consumption} * delka_radu`;
+        else if (basis === "PER_COURSE") {
+          if (courseHeight && courseHeight > 0) formula = `${consumption} * ceil(vyska / ${courseHeight})`;
+          else {
+            formula = `${consumption} * mnozstvi`;
+            warnings.push(`Recept ${taskCode}: PER_COURSE bez výšky řady – použito množství.`);
+          }
+        } else formula = `${consumption} * mnozstvi`; // AREA, FIXED
+
+        await prisma.operationMaterial.create({
+          data: {
+            operationId: op.id,
+            materialId: material.id,
+            quantityFormula: formula,
+            wastePct,
+            note: ci.note >= 0 ? f[ci.note]?.trim() || null : null,
+          },
+        });
+        recipes++;
+      }
+    }
+  }
+
+  revalidatePath("/katalog/materialy");
+  revalidatePath("/katalog/ukony");
+  return { summary: { materials, operations, recipes, warnings } };
 }

@@ -225,7 +225,7 @@ export function CatalogGenerateDialog({
           {totals && (
             <div className="border-t border-stone-300 pt-3 text-sm">
               <p className="kicker mb-2">Souhrn fáze</p>
-              <div className="flex flex-wrap gap-8">
+              <div className="flex flex-wrap gap-x-8 gap-y-1">
                 <span>
                   Pracnost:{" "}
                   <span className="font-mono text-stone-950">
@@ -235,6 +235,14 @@ export function CatalogGenerateDialog({
                 <span>
                   Materiál:{" "}
                   <span className="font-mono text-stone-950">{formatCurrency(totals.materialCost)}</span>
+                </span>
+                <span>
+                  Práce:{" "}
+                  <span className="font-mono text-stone-950">{formatCurrency(totals.laborCost)}</span>
+                </span>
+                <span>
+                  Celkem:{" "}
+                  <span className="font-mono text-stone-950">{formatCurrency(totals.totalCost)}</span>
                 </span>
                 <span className="text-stone-500">{lines.length} dílčích úkolů</span>
               </div>

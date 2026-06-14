@@ -15,6 +15,7 @@ export type OperationInput = {
   unit: string;
   quantityFormula: string;
   laborFormula: string;
+  laborRate: number | null;
   description: string | null;
   category: string | null;
 };
@@ -99,9 +100,15 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
             <Label htmlFor="o-qf">Vzorec množství (MJ)</Label>
             <Input id="o-qf" name="quantityFormula" defaultValue={operation?.quantityFormula ?? "1"} placeholder="delka * vyska" />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="o-lf">Vzorec normohodin</Label>
-            <Input id="o-lf" name="laborFormula" defaultValue={operation?.laborFormula ?? "0"} placeholder="1.2 * delka * vyska" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="o-lf">Vzorec normohodin</Label>
+              <Input id="o-lf" name="laborFormula" defaultValue={operation?.laborFormula ?? "0"} placeholder="1.2 * delka * vyska" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="o-lr">Sazba práce (Kč/Nh)</Label>
+              <Input id="o-lr" name="laborRate" type="number" step="0.01" min="0" defaultValue={operation?.laborRate ?? ""} placeholder="—" />
+            </div>
           </div>
           <p className="text-[11px] text-stone-400">
             Vzorce počítají z klíčů parametrů úkonu (např. <code>delka</code>,{" "}

@@ -466,6 +466,7 @@ model Operation {
   unit            String   @default("m2") // MJ úkonu (m2, bm, m3, ks…)
   quantityFormula String   @default("1") // množství MJ z parametrů
   laborFormula    String   @default("0") // normohodiny z parametrů
+  laborRate       Decimal? @db.Decimal(12, 2) // hodinová sazba práce (Kč/Nh)
   description     String?
   category        String   @default("other")
   createdAt       DateTime @default(now())

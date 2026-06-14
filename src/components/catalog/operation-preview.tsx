@@ -73,8 +73,16 @@ export function OperationPreview({
           </p>
         </div>
         <div>
-          <p className="kicker">Materiál celkem</p>
+          <p className="kicker">Materiál</p>
           <p className="font-mono text-stone-950">{formatCurrency(result.materialCost)}</p>
+        </div>
+        <div>
+          <p className="kicker">Práce</p>
+          <p className="font-mono text-stone-950">{formatCurrency(result.laborCost)}</p>
+        </div>
+        <div>
+          <p className="kicker">Celkem</p>
+          <p className="font-mono text-stone-950">{formatCurrency(result.totalCost)}</p>
         </div>
       </div>
 

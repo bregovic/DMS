@@ -43,6 +43,7 @@ export default async function OperationDetailPage({
     unit: operation.unit,
     quantityFormula: operation.quantityFormula,
     laborFormula: operation.laborFormula,
+    laborRate: operation.laborRate != null ? Number(operation.laborRate) : null,
     params: operation.params.map((p) => ({
       key: p.key,
       defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null,
@@ -80,6 +81,7 @@ export default async function OperationDetailPage({
               unit: operation.unit,
               quantityFormula: operation.quantityFormula,
               laborFormula: operation.laborFormula,
+              laborRate: operation.laborRate != null ? Number(operation.laborRate) : null,
               description: operation.description,
               category: operation.category,
             }}

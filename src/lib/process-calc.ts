@@ -21,6 +21,7 @@ export type CalcOperation = {
   unit: string;
   quantityFormula: string;
   laborFormula: string;
+  laborRate?: number | null;
   params: CalcParam[];
   materials: CalcRecipe[];
 };
@@ -38,8 +39,10 @@ export type OperationResult = {
   quantity: number; // množství v MJ úkonu
   unit: string;
   laborHours: number;
+  laborCost: number;
   materials: MaterialResult[];
   materialCost: number;
+  totalCost: number; // materiál + práce
   errors: string[];
 };
 
@@ -97,7 +100,17 @@ export function calcOperation(
   });
 
   const materialCost = materials.reduce((s, x) => s + x.cost, 0);
-  return { quantity, unit: op.unit, laborHours, materials, materialCost, errors };
+  const laborCost = laborHours * Number(op.laborRate ?? 0);
+  return {
+    quantity,
+    unit: op.unit,
+    laborHours,
+    laborCost,
+    materials,
+    materialCost,
+    totalCost: materialCost + laborCost,
+    errors,
+  };
 }
 
 export type CalcLine = {
@@ -108,7 +121,9 @@ export type CalcLine = {
 
 export type CalcTotals = {
   laborHours: number;
+  laborCost: number;
   materialCost: number;
+  totalCost: number;
   byMaterial: MaterialResult[]; // sečteno přes všechny úkony podle materiálu
   perOperation: (OperationResult & { name?: string; id?: string })[];
   errors: string[];
@@ -136,9 +151,13 @@ export function calcTotals(lines: CalcLine[]): CalcTotals {
   }
 
   const byMaterial = [...byId.values()].sort((a, b) => b.cost - a.cost);
+  const laborCost = perOperation.reduce((s, r) => s + r.laborCost, 0);
+  const materialCost = perOperation.reduce((s, r) => s + r.materialCost, 0);
   return {
     laborHours: perOperation.reduce((s, r) => s + r.laborHours, 0),
-    materialCost: perOperation.reduce((s, r) => s + r.materialCost, 0),
+    laborCost,
+    materialCost,
+    totalCost: materialCost + laborCost,
     byMaterial,
     perOperation,
     errors: perOperation.flatMap((r) => r.errors),
