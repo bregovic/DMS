@@ -61,7 +61,30 @@ export function CatalogGenerateDialog({
   const [error, setError] = useState<string | null>(null);
   const [wishText, setWishText] = useState("");
   const [wishSaved, setWishSaved] = useState(false);
+  const [wishOpen, setWishOpen] = useState(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
   const counter = useRef(0);
+
+  // Po výběru činnosti/balíčku → focus na zadání prvního parametru.
+  useEffect(() => {
+    if (!focusId) return;
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      if (el instanceof HTMLInputElement) el.select();
+      setFocusId(null);
+    }
+  }, [focusId, lines]);
+
+  // „Navazuje na fázi" přednastav na naposledy použitou.
+  useEffect(() => {
+    if (open && !phase) {
+      try {
+        const saved = localStorage.getItem(`dms-cg-dep-${projectId}`);
+        if (saved && phases.some((p) => p.id === saved)) setDependsOnPhaseId(saved);
+      } catch {}
+    }
+  }, [open, phase, projectId, phases]);
 
   async function noteWish() {
     const t = wishText.trim();
@@ -93,8 +116,11 @@ export function CatalogGenerateDialog({
     const values: Record<string, number> = {};
     for (const p of op.paramsMeta) values[p.key] = Number(p.defaultValue ?? 0);
     counter.current += 1;
-    setLines((ls) => [...ls, { lineId: counter.current, operationId, values, multiplier: 1 }]);
+    const id = counter.current;
+    setLines((ls) => [...ls, { lineId: id, operationId, values, multiplier: 1 }]);
     if (!phase && !phaseName) setPhaseName(op.name ?? "");
+    const firstKey = op.paramsMeta[0]?.key;
+    if (firstKey) setFocusId(`l${id}-${firstKey}`);
   }
 
   function addPackage() {
@@ -123,6 +149,9 @@ export function CatalogGenerateDialog({
     if (newLines.length) setLines((ls) => [...ls, ...newLines]);
     if (!phase && !phaseName) setPhaseName(`${pkg.name} (${qty} ${pkg.unit})`);
     setPkgSel("");
+    const first = newLines[0];
+    const firstKey = first && opMap.get(first.operationId)?.paramsMeta[0]?.key;
+    if (first && firstKey) setFocusId(`l${first.lineId}-${firstKey}`);
   }
 
   function close() {
@@ -213,7 +242,10 @@ export function CatalogGenerateDialog({
                 id="cg-dep"
                 className={fieldClass}
                 value={dependsOnPhaseId}
-                onChange={(e) => setDependsOnPhaseId(e.target.value)}
+                onChange={(e) => {
+                  setDependsOnPhaseId(e.target.value);
+                  try { localStorage.setItem(`dms-cg-dep-${projectId}`, e.target.value); } catch {}
+                }}
               >
                 <option value="">— bez návaznosti —</option>
                 {phases.map((p) => (
@@ -264,7 +296,7 @@ export function CatalogGenerateDialog({
               ) : (
                 <OperationPicker
                   ops={packages}
-                  onPick={(p) => setPkgSel(p.id)}
+                  onPick={(p) => { setPkgSel(p.id); setFocusId("cg-pkg-qty"); }}
                   placeholder="Hledat balíček… (název nebo kód)"
                 />
               )}
@@ -275,28 +307,38 @@ export function CatalogGenerateDialog({
             </div>
           )}
 
-          <div className="space-y-1.5 border border-dashed border-stone-300 p-3">
-            <Label htmlFor="cg-wish">Nenašel jsi činnost? Zapiš si ji k doplnění</Label>
-            <div className="flex items-end gap-2">
-              <Input
-                id="cg-wish"
-                value={wishText}
-                onChange={(e) => {
-                  setWishText(e.target.value);
-                  setWishSaved(false);
-                }}
-                placeholder="Např. Montáž sádrokartonového podhledu"
-              />
-              <Button type="button" variant="outline" disabled={!wishText.trim()} onClick={noteWish}>
-                Zapsat
-              </Button>
+          {!wishOpen ? (
+            <button
+              type="button"
+              onClick={() => setWishOpen(true)}
+              className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
+            >
+              Nenašel jsi činnost? Zapiš si ji k doplnění →
+            </button>
+          ) : (
+            <div className="space-y-1.5 border border-dashed border-stone-300 p-3">
+              <Label htmlFor="cg-wish">Chybějící činnost k doplnění</Label>
+              <div className="flex items-end gap-2">
+                <Input
+                  id="cg-wish"
+                  value={wishText}
+                  onChange={(e) => {
+                    setWishText(e.target.value);
+                    setWishSaved(false);
+                  }}
+                  placeholder="Např. Montáž sádrokartonového podhledu"
+                />
+                <Button type="button" variant="outline" disabled={!wishText.trim()} onClick={noteWish}>
+                  Zapsat
+                </Button>
+              </div>
+              {wishSaved && (
+                <p className="text-[11px] text-stone-500">
+                  Uloženo do Katalog → Chybějící. Tam stáhneš šablonu s promptem pro AI.
+                </p>
+              )}
             </div>
-            {wishSaved && (
-              <p className="text-[11px] text-stone-500">
-                Uloženo do Katalog → Chybějící. Tam stáhneš šablonu s promptem pro AI.
-              </p>
-            )}
-          </div>
+          )}
 
           {lines.map((l) => {
             const op = opMap.get(l.operationId);

@@ -32,10 +32,11 @@ export function OperationPicker({
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} disabled={!ops} />
       {!ops ? (
         <p className="text-[11px] text-stone-400">Načítám katalog…</p>
+      ) : !nq ? (
+        // Seznam se rozbalí až po zadání filtru.
+        ops.length === 0 ? <p className="text-[11px] text-stone-400">Katalog je prázdný.</p> : null
       ) : filtered.length === 0 ? (
-        <p className="text-[11px] text-stone-400">
-          {ops.length === 0 ? "Katalog je prázdný – přidej nejdřív úkony." : "Nic nenalezeno."}
-        </p>
+        <p className="text-[11px] text-stone-400">Nic nenalezeno.</p>
       ) : (
         <div className="max-h-52 divide-y divide-stone-100 overflow-y-auto border border-stone-200">
           {filtered.slice(0, 100).map((o) => (
