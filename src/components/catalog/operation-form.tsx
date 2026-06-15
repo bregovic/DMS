@@ -16,6 +16,7 @@ export type OperationInput = {
   quantityFormula: string;
   laborFormula: string;
   laborRate: number | null;
+  techPauseDays: number | null;
   description: string | null;
   category: string | null;
 };
@@ -115,6 +116,14 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
             <code>vyska</code>). Funkce: ceil, floor, round, min, max, abs, sqrt.
             Desetinná tečka.
           </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="o-tp">Technologická pauza (dny zrání)</Label>
+            <Input id="o-tp" name="techPauseDays" type="number" step="1" min="0" max="60" defaultValue={operation?.techPauseDays ?? ""} placeholder="—" />
+            <p className="text-[11px] text-stone-400">
+              Kolik dní musí uběhnout po činnosti, než se smí navázat (tvrdnutí
+              betonu, zrání potěru…). Přidá se do plánu jako úkol „⏳ pauza".
+            </p>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="o-desc">Popis</Label>
             <textarea

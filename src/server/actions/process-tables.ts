@@ -127,6 +127,7 @@ const operationSchema = z.object({
   quantityFormula: z.string().min(1).default("1"),
   laborFormula: z.string().min(1).default("0"),
   laborRate: z.coerce.number().min(0).optional(),
+  techPauseDays: z.coerce.number().int().min(0).max(60).optional(),
   description: z.string().optional(),
   category: z.string().optional(),
 });
@@ -139,6 +140,7 @@ function parseOperation(formData: FormData) {
     quantityFormula: String(formData.get("quantityFormula") || "").trim() || "1",
     laborFormula: String(formData.get("laborFormula") || "").trim() || "0",
     laborRate: formData.get("laborRate") || undefined,
+    techPauseDays: formData.get("techPauseDays") || undefined,
     description: formData.get("description") || undefined,
     category: formData.get("category") || undefined,
   });
@@ -175,6 +177,7 @@ export async function createOperation(_prev: FormState, formData: FormData): Pro
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
       laborRate: parsed.data.laborRate ?? null,
+      techPauseDays: parsed.data.techPauseDays ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
     },
@@ -209,6 +212,7 @@ export async function updateOperation(_prev: FormState, formData: FormData): Pro
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
       laborRate: parsed.data.laborRate ?? null,
+      techPauseDays: parsed.data.techPauseDays ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
     },
@@ -415,6 +419,7 @@ export type GenerateInput = {
   phaseId?: string | null; // přidat do existující fáze; jinak vznikne nová
   phaseName?: string;
   dependsOnPhaseId?: string | null; // nová fáze navazuje na tuto fázi
+  phaseStartDate?: string | null; // ruční začátek fáze (YYYY-MM-DD); jen odsune, neuspíší
   lines: { operationId: string; values: Record<string, number>; multiplier?: number }[];
 };
 
@@ -480,6 +485,7 @@ export async function generateFromCatalog(
         kind: "phase",
         title: (input.phaseName || "").trim() || "Nová fáze",
         status: "todo",
+        startDate: input.phaseStartDate ? new Date(input.phaseStartDate) : null,
         createdById: user.id,
       },
     });
@@ -567,6 +573,25 @@ export async function generateFromCatalog(
           price: res.laborCost,
           category: "prace",
           status: "poptavka",
+          createdById: user.id,
+        },
+      });
+    }
+
+    // Technologická pauza (zrání/tvrdnutí) → samostatný úkol hned za činností.
+    // Nemá žádanky ani cenu, jen drží čas, než se smí navázat.
+    const pause = op.techPauseDays ?? 0;
+    if (pause > 0) {
+      const dni = pause === 1 ? "den" : pause < 5 ? "dny" : "dní";
+      await prisma.task.create({
+        data: {
+          projectId: input.projectId,
+          subProjectId,
+          parentId: phaseId,
+          kind: "task",
+          title: `⏳ Technologická pauza – zrání (${pause} ${dni})`,
+          status: "todo",
+          estimateDays: pause,
           createdById: user.id,
         },
       });

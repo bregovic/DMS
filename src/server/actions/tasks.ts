@@ -413,12 +413,17 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     const kids = childrenOf.get(pid) ?? [];
     const preds = pred.get(pid) ?? [];
     const predEnd = preds.length ? Math.max(...preds.map((x) => phaseDue.get(x) ?? TODAY)) : null;
-    // Dílčí úkoly začínají od ručního termínu fáze, jinak po předchůdcích / dnes.
-    let cursor = phaseObj?.startDate
-      ? phaseObj.startDate.getTime()
-      : predEnd != null
-        ? predEnd + DAY_MS
-        : TODAY;
+    // Tvrdá podmínka: navazující fáze nesmí začít dřív, než skončí předchůdce
+    // (jeho konec už zahrnuje technologickou pauzu/zrání jako poslední úkol).
+    // Ruční termín fáze smí začátek jen ODSUNOUT (spodní mez), ne uspíšit.
+    const depFloor = predEnd != null ? predEnd + DAY_MS : null;
+    const manualStart = phaseObj?.startDate?.getTime() ?? null;
+    let cursor =
+      depFloor != null
+        ? manualStart != null
+          ? Math.max(manualStart, depFloor)
+          : depFloor
+        : manualStart ?? TODAY;
     const dates: { start: number; end: number }[] = [];
     for (const k of kids) {
       let s: number, e: number;
@@ -438,16 +443,17 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     }
     const kidsStart = dates.length ? Math.min(...dates.map((d) => d.start)) : null;
     const kidsDue = dates.length ? Math.max(...dates.map((d) => d.end)) : null;
-    // Pro návaznost dalších fází: ruční termín fáze má přednost před výpočtem z úkolů.
-    phaseStart.set(pid, phaseObj?.startDate?.getTime() ?? kidsStart ?? cursor);
-    phaseDue.set(pid, phaseObj?.dueDate?.getTime() ?? kidsDue ?? phaseStart.get(pid)!);
-    // Termín fáze zapíšeme jen když je prázdný (inicializace); ruční nepřepisujeme.
-    if (phaseObj && phaseObj.startDate == null && (kidsStart != null || kidsDue != null)) {
-      upd.push({
-        id: pid,
-        start: new Date(kidsStart ?? kidsDue!),
-        due: new Date(kidsDue ?? kidsStart!),
-      });
+    // Fáze drží reálné termíny svých úkolů (vč. zrání). Délku řídí práce,
+    // ne zaseknutý ruční termín – proto vždy přepočítáme a zapíšeme.
+    const effStart = kidsStart ?? cursor;
+    const effDue = kidsDue ?? effStart;
+    phaseStart.set(pid, effStart);
+    phaseDue.set(pid, effDue);
+    if (phaseObj) {
+      const changed =
+        phaseObj.startDate?.getTime() !== effStart ||
+        phaseObj.dueDate?.getTime() !== effDue;
+      if (changed) upd.push({ id: pid, start: new Date(effStart), due: new Date(effDue) });
     }
   }
 

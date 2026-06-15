@@ -56,6 +56,7 @@ export function CatalogGenerateDialog({
   const [pkgQty, setPkgQty] = useState("1");
   const [phaseName, setPhaseName] = useState("");
   const [dependsOnPhaseId, setDependsOnPhaseId] = useState("");
+  const [phaseStartDate, setPhaseStartDate] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,7 @@ export function CatalogGenerateDialog({
         phaseId: phase?.id ?? null,
         phaseName: phase ? undefined : phaseName,
         dependsOnPhaseId: phase ? null : dependsOnPhaseId || null,
+        phaseStartDate: phase ? null : phaseStartDate || null,
         lines: lines.map((l) => ({ operationId: l.operationId, values: l.values, multiplier: l.multiplier })),
       });
       if ("error" in res) {
@@ -177,6 +179,7 @@ export function CatalogGenerateDialog({
         setLines([]);
         setPhaseName("");
         setDependsOnPhaseId("");
+        setPhaseStartDate("");
         router.refresh();
       }
     } catch (e) {
@@ -231,10 +234,14 @@ export function CatalogGenerateDialog({
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
           {!phase && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="cg-phase">Název fáze</Label>
               <Input id="cg-phase" value={phaseName} onChange={(e) => setPhaseName(e.target.value)} placeholder="Např. Hrubá stavba 1.NP" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cg-start">Začátek fáze (volitelné)</Label>
+              <Input id="cg-start" type="date" value={phaseStartDate} onChange={(e) => setPhaseStartDate(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cg-dep">Navazuje na fázi (volitelné)</Label>
