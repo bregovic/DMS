@@ -530,6 +530,25 @@ export async function getTaskDetail(id: string) {
     }),
   ]);
 
+  // Forecast cena z katalogu: žádanky (materiál + práce) na tomto prvku;
+  // u fáze i za všechny její dílčí úkoly.
+  const childIds =
+    task.kind === "phase"
+      ? (await prisma.task.findMany({ where: { parentId: task.id }, select: { id: true } })).map((t) => t.id)
+      : [];
+  const costReqs = await prisma.request.findMany({
+    where: { taskId: { in: [task.id, ...childIds] }, price: { not: null }, status: { not: "zruseno" } },
+    select: { price: true, category: true },
+  });
+  let costMaterial = 0;
+  let costLabor = 0;
+  for (const r of costReqs) {
+    const p = Number(r.price ?? 0);
+    if (r.category === "prace") costLabor += p;
+    else costMaterial += p;
+  }
+  const cost = { material: costMaterial, labor: costLabor, total: costMaterial + costLabor };
+
   // "objednat do" = začátek úkolu − dodací lhůta; pozadu, když není vyřízeno a datum prošlo
   const now = new Date();
   const t0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -566,6 +585,7 @@ export async function getTaskDetail(id: string) {
     subProjectId: task.subProjectId,
     canEdit,
     canDelete,
+    cost,
     deps: task.dependsOn.map((d) => d.dependsOnId),
     candidates,
     vendors,

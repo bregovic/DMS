@@ -195,6 +195,25 @@ export function TaskDetailDialog({
               </p>
             </div>
 
+            {d.cost && d.cost.total > 0 && (
+              <div className="border border-stone-200 bg-stone-50 px-4 py-3">
+                <p className="kicker mb-1.5">
+                  {d.kind === "phase" ? "Forecast z katalogu · za všechny úkoly" : "Cena úkolu (forecast)"}
+                </p>
+                <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+                  <span className="text-stone-500">
+                    Materiál <span className="font-mono text-stone-800">{formatCurrency(d.cost.material)}</span>
+                  </span>
+                  <span className="text-stone-500">
+                    Práce <span className="font-mono text-stone-800">{formatCurrency(d.cost.labor)}</span>
+                  </span>
+                  <span className="font-medium text-stone-950">
+                    Celkem <span className="font-mono">{formatCurrency(d.cost.total)}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="dd-desc">Popis</Label>
               <textarea
