@@ -42,11 +42,20 @@ export default async function OperationsPage() {
                     {o.name}
                   </Link>
                   <span className="kicker">{o.category}</span>
+                  {o._count.materials === 0 && (
+                    <span className="border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                      ⚠ bez receptu · jen práce
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-stone-500">
                   <span className="font-mono text-stone-400">{o.code}</span> · MJ{" "}
-                  {o.unit} · {o._count.params} parametrů · {o._count.materials}{" "}
-                  materiálů v receptu
+                  {o.unit} · {o._count.params} parametrů ·{" "}
+                  {o._count.materials === 0 ? (
+                    <span className="text-amber-700">žádný materiál v receptu (počítá jen práci)</span>
+                  ) : (
+                    `${o._count.materials} materiálů v receptu`
+                  )}
                 </p>
               </div>
               <span className="flex shrink-0 items-center gap-4 opacity-0 transition-opacity group-hover:opacity-100">

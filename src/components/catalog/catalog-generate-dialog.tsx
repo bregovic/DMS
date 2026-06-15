@@ -356,6 +356,9 @@ export function CatalogGenerateDialog({
                   {res.quantity.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} {op.unit} ·{" "}
                   {res.laborHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} Nh (≈{" "}
                   {Math.max(1, Math.ceil(res.laborHours / 8))} d) · materiál {formatCurrency(res.materialCost)}
+                  {op.materials.length === 0 && (
+                    <span className="text-amber-700"> · ⚠ bez receptu (jen práce)</span>
+                  )}
                   {res.errors.length > 0 && <span className="text-red-600"> · {res.errors.join(", ")}</span>}
                 </p>
               </div>
