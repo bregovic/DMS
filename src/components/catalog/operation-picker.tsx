@@ -42,7 +42,12 @@ export function OperationPicker({
             <button
               key={o.id}
               type="button"
-              onClick={() => onPick(o)}
+              onMouseDown={(e) => {
+                // Výběr na stisk (ne klik) – na mobilu se jinak ztratí kvůli
+                // rozostření hledacího pole / zavírání klávesnice.
+                e.preventDefault();
+                onPick(o);
+              }}
               className="flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-stone-50 cursor-pointer"
             >
               <span className="text-stone-950">{o.name}</span>
