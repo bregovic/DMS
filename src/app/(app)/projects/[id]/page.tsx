@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Folder, CalendarRange } from "lucide-react";
+import { ArrowLeft, Folder, CalendarRange, Paperclip } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -475,6 +475,14 @@ export default async function ProjectDetailPage({
           </div>
         </div>
         <div className="flex items-stretch gap-3">
+          <Link
+            href={`/projects/${project.id}/prilohy${sub ? `?sub=${sub}` : ""}`}
+            className="flex items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+            title="Přílohy (skeny) – přehled a stažení za období"
+          >
+            <Paperclip className="size-4" />
+            Přílohy
+          </Link>
           <Link
             href={`/projects/${project.id}/planning${sub ? `?sub=${sub}` : ""}`}
             className="flex items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
