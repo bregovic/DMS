@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -15,7 +15,7 @@ export async function createSubProject(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
   const access = await getProjectAccess(projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění.");
   }
 
@@ -64,7 +64,7 @@ export async function updateSubProject(formData: FormData) {
     select: { createdById: true },
   });
   if (!sub) throw new Error("Subprojekt nenalezen.");
-  if (role !== "owner" && sub.createdById !== user.id) {
+  if (!isManager(role) && sub.createdById !== user.id) {
     throw new Error("Nemáš oprávnění upravit tento subprojekt.");
   }
 
@@ -95,7 +95,7 @@ export async function deleteSubProject(formData: FormData) {
   });
   if (!sub) return;
 
-  const allowed = role === "owner" || sub.createdById === user.id;
+  const allowed = isManager(role) || sub.createdById === user.id;
   if (!allowed) throw new Error("Nemáš oprávnění smazat tento subprojekt.");
 
   // Smaže i vnořené (cascade); položky se odpojí (subProjectId -> null).

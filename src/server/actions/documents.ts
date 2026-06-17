@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
-import { getProjectRole } from "@/server/access";
+import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { resolveDocTypeKey } from "@/server/document-types";
 
 const MAX_UPLOAD = 8 * 1024 * 1024; // 8 MB
@@ -23,7 +23,7 @@ export async function attachExpenseScan(formData: FormData) {
   }
 
   const role = await getProjectRole(projectId, user);
-  if (role !== "owner" && role !== "active") {
+  if (!canWrite(role)) {
     throw new Error("Nemáš oprávnění.");
   }
 
@@ -124,11 +124,12 @@ export async function deleteDocument(formData: FormData) {
   });
   if (!doc) return;
 
-  // Owner smaže cokoliv; aktivní dodavatel jen to, co sám nahrál.
+  // Vlastník i spolusprávce smažou cokoliv; aktivní dodavatel jen to, co sám nahrál.
   let allowed = doc.project.ownerId === user.id;
-  if (!allowed && doc.uploadedById === user.id) {
+  if (!allowed) {
     const role = await getProjectRole(doc.projectId, user);
-    allowed = role === "active" || role === "owner";
+    if (isManager(role)) allowed = true;
+    else if (doc.uploadedById === user.id && role === "active") allowed = true;
   }
   if (!allowed) return;
 

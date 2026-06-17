@@ -1,6 +1,16 @@
 import { prisma } from "@/lib/prisma";
 
-export type ProjectRole = "owner" | "active" | "reader";
+export type ProjectRole = "owner" | "active" | "reader" | "member";
+
+/** Spolusprávce obsahu projektu (vidí i edituje vše) – vlastník nebo člen. */
+export function isManager(role: string | null | undefined): boolean {
+  return role === "owner" || role === "member";
+}
+
+/** Smí přidávat/zakládat záznamy (vlastník, spolusprávce, nebo dodavatel "active"). */
+export function canWrite(role: string | null | undefined): boolean {
+  return role === "owner" || role === "member" || role === "active";
+}
 
 type SessionUser = { id: string; email?: string | null };
 

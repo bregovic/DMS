@@ -48,6 +48,7 @@ export function vendorCategoryLabel(value: string) {
 export const PROJECT_ROLES = [
   { value: "vendor", label: "Dodavatel" },
   { value: "active", label: "Aktivní dodavatel" },
+  { value: "member", label: "Spolusprávce" },
   { value: "reader", label: "Reader" },
   { value: "owner", label: "Owner" },
 ] as const;

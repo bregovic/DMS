@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectAccess, expandScope } from "@/server/access";
+import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 
 type SUser = { id: string; email?: string | null };
 
@@ -34,7 +34,7 @@ async function loadTaskForPlan(taskId: string, user: SUser) {
   const access = await getProjectAccess(task.projectId, user);
   let ok = false;
   if (access) {
-    if (access.role === "owner" || task.createdById === user.id) ok = true;
+    if (isManager(access.role) || task.createdById === user.id) ok = true;
     else if (access.role === "active") {
       if (!access.scopeSubIds) ok = true;
       else {
@@ -101,7 +101,7 @@ export async function setLinkedRequestStatus(formData: FormData) {
   const req = await prisma.request.findUnique({ where: { id }, select: { projectId: true, taskId: true, vendorId: true } });
   if (!req) throw new Error("Žádanka nenalezena.");
   const access = await getProjectAccess(req.projectId, user);
-  if (access?.role !== "owner") {
+  if (!isManager(access?.role)) {
     if (req.taskId) await loadTaskForPlan(req.taskId, user);
     else throw new Error("Nemáš oprávnění.");
   }
@@ -138,7 +138,7 @@ export async function getRequestDetail(id: string) {
     requiredDate: r.requiredDate ? r.requiredDate.toISOString().slice(0, 10) : null,
     projectId: r.projectId,
     subProjectId: r.subProjectId,
-    canEdit: access.role === "owner" || access.role === "active",
+    canEdit: canWrite(access.role),
     isOwner: access.role === "owner",
     offers: r.offers.map((o) => ({
       id: o.id,
@@ -158,7 +158,7 @@ export async function updateRequestDates(formData: FormData) {
   const r = await prisma.request.findUnique({ where: { id }, select: { projectId: true } });
   if (!r) throw new Error("Výběrové řízení nenalezeno.");
   const access = await getProjectAccess(r.projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění.");
   }
   const status = String(formData.get("status") || "").trim();

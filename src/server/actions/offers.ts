@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole } from "@/server/access";
+import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -52,7 +52,7 @@ function readVendorName(formData: FormData): string | null {
 export async function createOffer(formData: FormData) {
   const requestId = String(formData.get("requestId"));
   const { request, ctx } = await requestCtx(requestId);
-  if (ctx.role !== "owner" && ctx.role !== "active") {
+  if (!canWrite(ctx.role)) {
     throw new Error("Nemáš oprávnění přidávat nabídky.");
   }
 
@@ -102,7 +102,7 @@ async function offerCtx(offerId: string) {
   if (!offer) throw new Error("Nabídka nenalezena.");
   const projectId = offer.request.projectId;
   const role = await getProjectRole(projectId, user);
-  const canEdit = role === "owner" || (role === "active" && offer.createdById === user.id);
+  const canEdit = isManager(role) || (role === "active" && offer.createdById === user.id);
   return { user, offer, projectId, role, canEdit };
 }
 
@@ -203,7 +203,7 @@ export async function deleteOffer(formData: FormData) {
 export async function selectOffer(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, offer, projectId, role } = await offerCtx(id);
-  if (role !== "owner") throw new Error("Vybrat nabídku může jen vlastník.");
+  if (!isManager(role)) throw new Error("Vybrat nabídku může jen vlastník nebo spolusprávce.");
 
   const full = await prisma.offer.findUnique({
     where: { id: offer.id },

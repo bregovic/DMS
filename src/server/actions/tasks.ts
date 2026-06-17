@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectAccess, expandScope } from "@/server/access";
+import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { REQUEST_HANDLED_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 
 function toDate(v: FormDataEntryValue | null): Date | null {
@@ -34,7 +34,7 @@ export async function createTask(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
   const access = await getProjectAccess(projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění přidávat úkoly.");
   }
 
@@ -115,7 +115,8 @@ async function taskCtx(id: string) {
   });
   if (!task) throw new Error("Úkol nenalezen.");
   const access = await getProjectAccess(task.projectId, user);
-  const isOwner = access?.role === "owner";
+  // spolusprávce (owner|member) smí editovat/mazat veškeré úkoly
+  const isOwner = isManager(access?.role);
   const isCreator = task.createdById === user.id;
   const isAssignee =
     !!task.assigneeEmail && task.assigneeEmail === user.email?.toLowerCase();
@@ -213,7 +214,7 @@ async function canPlan(
 ) {
   const access = await getProjectAccess(task.projectId, user);
   if (!access) return false;
-  if (access.role === "owner") return true;
+  if (isManager(access.role)) return true;
   if (task.createdById === user.id) return true;
   if (access.role === "active") {
     if (!access.scopeSubIds) return true;
@@ -467,7 +468,7 @@ export async function recomputeSchedule(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const subProjectId = String(formData.get("subProjectId") || "") || null;
   const access = await getProjectAccess(projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění plánovat.");
   }
   await scheduleProject(projectId, subProjectId);
@@ -496,7 +497,7 @@ export async function getTaskDetail(id: string) {
     { projectId: task.projectId, createdById: task.createdById, subProjectId: task.subProjectId },
     user
   );
-  const canDelete = access.role === "owner" || task.createdById === user.id;
+  const canDelete = isManager(access.role) || task.createdById === user.id;
 
   const [candidates, vendors, linkedReqs, linkedExps, candReqs, candExps] = await Promise.all([
     prisma.task.findMany({

@@ -65,6 +65,9 @@ export default async function ProjectDetailPage({
   const role = access.role;
   const scopeSubIds = access.scopeSubIds; // null = celý projekt
   const isOwner = role === "owner";
+  // Spolusprávce (owner|member) edituje veškerý obsah; jen owner spravuje
+  // nastavení projektu, členy a mazání projektu.
+  const isManager = role === "owner" || role === "member";
   // Aktivní dodavatel vidí jen své vlastní záznamy
   const onlyMine = role === "active";
 
@@ -277,7 +280,7 @@ export default async function ProjectDetailPage({
   // Na této úrovni smí dodavatel s per-subprojekt přístupem vidět/přidávat
   // jen je-li úroveň v jeho rozsahu (root a nadřazené složky jsou jen k navigaci).
   const levelInScope = !scopeSet || (sub != null && scopeSet.has(sub));
-  const canAdd = (role === "owner" || role === "active") && levelInScope;
+  const canAdd = (role === "owner" || role === "active" || role === "member") && levelInScope;
 
   const levelExpenses = levelInScope
     ? visExpenses.filter((e) => (e.subProjectId ?? null) === (sub ?? null))
@@ -630,7 +633,7 @@ export default async function ProjectDetailPage({
                       </span>
                     </div>
                   </Link>
-                  {(isOwner || s.createdById === user.id) && (
+                  {(isManager || s.createdById === user.id) && (
                     <span className="absolute right-2 top-2 flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                       <EditSubProjectForm
                         sub={{
@@ -712,7 +715,7 @@ export default async function ProjectDetailPage({
             ) : (
             <ExpenseList
               projectId={project.id}
-              isOwner={isOwner}
+              isOwner={isManager}
               canAdd={canAdd}
               expenses={expenseItems}
               statuses={expenseStatuses}
@@ -737,7 +740,7 @@ export default async function ProjectDetailPage({
             title={`Dokumenty · ${project.documents.length}`}
           >
           <section>
-            {isOwner && <UploadForm projectId={project.id} types={docTypes} />}
+            {isManager && <UploadForm projectId={project.id} types={docTypes} />}
 
             {docTypesPresent.length > 1 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -776,7 +779,7 @@ export default async function ProjectDetailPage({
                         {docTypeMap.get(d.type) ?? d.type} · {formatBytes(d.size)}
                       </span>
                     </a>
-                    {isOwner && (
+                    {isManager && (
                       <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                         <DeleteButton
                           action={deleteDocument}
@@ -859,7 +862,7 @@ export default async function ProjectDetailPage({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {isOwner ? (
+                    {isManager ? (
                       <RequestStatusSelect
                         projectId={project.id}
                         id={r.id}
@@ -871,7 +874,7 @@ export default async function ProjectDetailPage({
                         {reqStatusMap.get(r.status) ?? requestStatusLabel(r.status)}
                       </span>
                     )}
-                    {isOwner && r.vendorId && r.price != null && (
+                    {isManager && r.vendorId && r.price != null && (
                       <form action={createExpenseFromRequest}>
                         <input type="hidden" name="id" value={r.id} />
                         <input type="hidden" name="projectId" value={project.id} />
@@ -884,7 +887,7 @@ export default async function ProjectDetailPage({
                         </button>
                       </form>
                     )}
-                    {isOwner && (
+                    {isManager && (
                       <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                         <DeleteButton
                           action={deleteRequest}
@@ -898,7 +901,7 @@ export default async function ProjectDetailPage({
 
                 <OffersPanel
                   requestId={r.id}
-                  isOwner={isOwner}
+                  isOwner={isManager}
                   canAdd={canAdd}
                   vendors={offerVendorItems}
                   statuses={offerStatuses}
@@ -918,7 +921,7 @@ export default async function ProjectDetailPage({
                     status: o.status,
                     selected: o.selected,
                     canEdit:
-                      isOwner || (role === "active" && o.createdById === user.id),
+                      isManager || (role === "active" && o.createdById === user.id),
                     docs: o.documents.map((d) => ({
                       id: d.id,
                       originalName: d.originalName,
@@ -964,7 +967,7 @@ export default async function ProjectDetailPage({
           <ul>
             {orderedTasks.map(({ t, level }) => {
               const isPhase = t.kind === "phase";
-              const canEditTask = isOwner || t.createdById === user.id;
+              const canEditTask = isManager || t.createdById === user.id;
               const canStatusTask =
                 canEditTask ||
                 (!!t.assigneeEmail && t.assigneeEmail === myEmail);

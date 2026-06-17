@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -17,7 +17,7 @@ export async function createExpense(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   const access = await getProjectAccess(projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
@@ -170,7 +170,7 @@ export async function updateExpense(formData: FormData) {
   const id = String(formData.get("id"));
   const projectId = String(formData.get("projectId"));
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Upravit výdaj může jen vlastník projektu.");
   }
 
@@ -267,7 +267,7 @@ export async function setExpenseStage(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const stage = String(formData.get("stage") || "").trim() || null;
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Stav výdaje mění jen vlastník projektu.");
   }
   await prisma.expense.updateMany({ where: { id, projectId }, data: { stage } });
@@ -285,7 +285,7 @@ export async function bulkUpdateExpenses(formData: FormData) {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Hromadnou změnu může provést jen vlastník projektu.");
   }
   if (ids.length === 0) return;
@@ -322,7 +322,7 @@ export async function approveExpense(formData: FormData) {
   const id = String(formData.get("id"));
   const projectId = String(formData.get("projectId"));
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Schvalovat může jen vlastník projektu.");
   }
   await prisma.expense.updateMany({
@@ -338,7 +338,7 @@ export async function setExpensePaid(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const paid = String(formData.get("paid")) === "true";
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Stav úhrady mění jen vlastník projektu.");
   }
   await prisma.expense.updateMany({ where: { id, projectId }, data: { paid } });
@@ -351,7 +351,7 @@ export async function deleteExpense(formData: FormData) {
   const id = String(formData.get("id"));
   const projectId = String(formData.get("projectId"));
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Mazat může jen vlastník projektu.");
   }
   // smaž i připojené skeny z úložiště (R2)

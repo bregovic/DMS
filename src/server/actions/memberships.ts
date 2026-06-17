@@ -31,7 +31,7 @@ export async function setMemberRole(formData: FormData) {
     select: { id: true },
   });
 
-  if (role !== "active" && role !== "reader") {
+  if (role !== "active" && role !== "reader" && role !== "member") {
     await prisma.projectMembership.deleteMany({ where: { projectId, email } });
   } else {
     await prisma.projectMembership.upsert({
@@ -62,7 +62,7 @@ export async function setSubMemberRole(formData: FormData) {
     select: { id: true },
   });
 
-  if (role !== "active" && role !== "reader") {
+  if (role !== "active" && role !== "reader" && role !== "member") {
     await prisma.subProjectMembership.deleteMany({ where: { subProjectId, email } });
   } else {
     await prisma.subProjectMembership.upsert({

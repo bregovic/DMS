@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { validateFormula } from "@/lib/formula";
 import { calcOperation, type CalcOperation } from "@/lib/process-calc";
-import { getProjectAccess, expandScope } from "@/server/access";
+import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { recomputeSchedule } from "@/server/actions/tasks";
 
 export type FormState = { error?: string; ok?: boolean } | undefined;
@@ -430,7 +430,7 @@ export async function generateFromCatalog(
 ): Promise<{ ok: true; phaseId: string } | { error: string }> {
   const user = await requireUser();
   const access = await getProjectAccess(input.projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     return { error: "Nemáš oprávnění přidávat do projektu." };
   }
   if (!input.lines?.length) return { error: "Vyber alespoň jednu činnost." };
@@ -1046,7 +1046,7 @@ export async function fillTaskFromCatalog(input: {
 
   const access = await getProjectAccess(task.projectId, user);
   if (!access) return { error: "Nemáš přístup k projektu." };
-  let canEdit = access.role === "owner" || task.createdById === user.id;
+  let canEdit = isManager(access.role) || task.createdById === user.id;
   if (!canEdit && access.role === "active") {
     if (!access.scopeSubIds) canEdit = true;
     else {

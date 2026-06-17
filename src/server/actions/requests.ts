@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectRole, getProjectAccess, expandScope } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -16,7 +16,7 @@ export async function createRequest(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   const access = await getProjectAccess(projectId, user);
-  if (!access || (access.role !== "owner" && access.role !== "active")) {
+  if (!access || !canWrite(access.role)) {
     throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
@@ -84,7 +84,7 @@ export async function setRequestStatus(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const status = String(formData.get("status") || "new");
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Měnit stav může jen vlastník projektu.");
   }
   await prisma.request.updateMany({ where: { id, projectId }, data: { status } });
@@ -96,7 +96,7 @@ export async function createExpenseFromRequest(formData: FormData) {
   const id = String(formData.get("id"));
   const projectId = String(formData.get("projectId"));
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Výdaj ze žádanky může založit jen vlastník projektu.");
   }
   const req = await prisma.request.findFirst({ where: { id, projectId } });
@@ -136,7 +136,7 @@ export async function deleteRequest(formData: FormData) {
   const id = String(formData.get("id"));
   const projectId = String(formData.get("projectId"));
 
-  if ((await getProjectRole(projectId, user)) !== "owner") {
+  if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Mazat může jen vlastník projektu.");
   }
   await prisma.request.deleteMany({ where: { id, projectId } });
