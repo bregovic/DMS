@@ -11,6 +11,7 @@ import { Collapsible } from "@/components/app/collapsible";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
+import { IncomeSection } from "@/components/incomes/income-section";
 import { ListFilters } from "@/components/ui/list-filters";
 import { EscBack } from "@/components/app/esc-back";
 import { NewRequestForm } from "@/components/requests/new-request-form";
@@ -84,6 +85,13 @@ export default async function ProjectDetailPage({
               select: { id: true, originalName: true },
               orderBy: { createdAt: "asc" },
             },
+          },
+        },
+        incomes: {
+          orderBy: { date: "desc" },
+          include: {
+            subProject: { select: { name: true } },
+            createdBy: { select: { name: true, email: true } },
           },
         },
         documents: {
@@ -233,6 +241,20 @@ export default async function ProjectDetailPage({
     }
   }
 
+  // Příjmy: vlastník/člen vidí vše; aktivní dodavatel jen své záznamy.
+  const visIncomes = onlyMine
+    ? project.incomes.filter((i) => i.createdById === user.id)
+    : project.incomes;
+  const incomeTotal = visIncomes.reduce((s, i) => s + Number(i.amount), 0);
+  const incomeBySub = new Map<string, number>();
+  for (const i of visIncomes) {
+    if (!i.subProjectId) continue;
+    const amt = Number(i.amount);
+    for (const sid of [i.subProjectId, ...ancestorsOf(i.subProjectId)]) {
+      incomeBySub.set(sid, (incomeBySub.get(sid) ?? 0) + amt);
+    }
+  }
+
   // Aktivní dodavatel: viditelné složky podle rozsahu, jinak jen svoje
   let visibleSubIds: Set<string> | null = null;
   if (onlyMine) {
@@ -291,6 +313,19 @@ export default async function ProjectDetailPage({
   const levelTasks = levelInScope
     ? visTasks.filter((t) => (t.subProjectId ?? null) === (sub ?? null))
     : [];
+  const levelIncomes = levelInScope
+    ? visIncomes.filter((i) => (i.subProjectId ?? null) === (sub ?? null))
+    : [];
+  const incomeRows = levelIncomes.map((i) => ({
+    id: i.id,
+    title: i.title,
+    description: i.description,
+    amount: Number(i.amount),
+    currency: i.currency,
+    category: i.category,
+    date: i.date.toISOString().slice(0, 10),
+    subProjectName: i.subProject?.name ?? null,
+  }));
 
   // Fáze + dílčí úkoly (jedna úroveň vnoření)
   const taskChildren = new Map<string, typeof levelTasks>();
@@ -491,21 +526,38 @@ export default async function ProjectDetailPage({
             <CalendarRange className="size-4" />
             Plánování
           </Link>
-          <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
-            <p className="kicker !text-stone-400">
-              {currentSub ? "Složka celkem" : "Celkem"}
-            </p>
-            <p className="display mt-1 text-2xl">
-              {formatCurrency(
-                currentSub ? spentBySub.get(currentSub.id) ?? 0 : total,
-              )}
-            </p>
-            {folders.length > 0 && (
-              <p className="mt-1 text-xs text-stone-400">
-                přímo zde {formatCurrency(levelTotal)}
-              </p>
-            )}
-          </div>
+          {(() => {
+            const expLevel = currentSub ? spentBySub.get(currentSub.id) ?? 0 : total;
+            const incLevel = currentSub ? incomeBySub.get(currentSub.id) ?? 0 : incomeTotal;
+            const saldo = incLevel - expLevel;
+            return (
+              <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
+                <p className="kicker !text-stone-400">
+                  {currentSub ? "Složka — výdaje" : "Výdaje"}
+                </p>
+                <p className="display mt-1 text-2xl">{formatCurrency(expLevel)}</p>
+                {folders.length > 0 && (
+                  <p className="mt-1 text-xs text-stone-400">
+                    přímo zde {formatCurrency(levelTotal)}
+                  </p>
+                )}
+                {(incLevel > 0 || incomeTotal > 0) && (
+                  <div className="mt-2 space-y-0.5 border-t border-stone-700 pt-2 text-xs">
+                    <p className="flex items-center justify-between gap-4 text-stone-400">
+                      <span>Příjmy</span>
+                      <span className="font-mono text-emerald-400">{formatCurrency(incLevel)}</span>
+                    </p>
+                    <p className="flex items-center justify-between gap-4">
+                      <span className="text-stone-400">Saldo</span>
+                      <span className={`font-mono ${saldo < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {formatCurrency(saldo)}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {isOwner && (
             <div className="flex items-stretch gap-2">
               {currentSub ? (
@@ -671,6 +723,15 @@ export default async function ProjectDetailPage({
       </section>
 
       <div className="mt-8 flex flex-col gap-10">
+        {/* Příjmy (saldo = příjmy − výdaje) */}
+        <IncomeSection
+          projectId={project.id}
+          subProjectId={sub ?? undefined}
+          incomes={incomeRows}
+          canAdd={canAdd}
+          canManage={isManager}
+        />
+
         {/* Výdaje */}
         <CollapsibleSection
           className="order-2"

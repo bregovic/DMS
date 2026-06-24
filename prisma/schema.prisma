@@ -27,6 +27,7 @@ model User {
   sessions          Session[]
   projects          Project[]  @relation("ProjectOwner")
   expensesCreated   Expense[]  @relation("ExpenseCreatedBy")
+  incomesCreated    Income[]   @relation("IncomeCreatedBy")
   documentsUploaded Document[] @relation("DocumentUploadedBy")
   vendors           Vendor[]     @relation("VendorOwner")
   requestsCreated   Request[]    @relation("RequestCreatedBy")
@@ -238,6 +239,7 @@ model Project {
 
   owner       User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   expenses    Expense[]
+  incomes     Income[]
   documents   Document[]
   vendors     Vendor[]            @relation("ProjectVendors")
   memberships ProjectMembership[]
@@ -265,6 +267,7 @@ model SubProject {
   children   SubProject[] @relation("SubTree")
   createdBy  User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
   expenses   Expense[]
+  incomes    Income[]
   requests   Request[]
   tasks      Task[]
   memberships SubProjectMembership[]
@@ -406,6 +409,32 @@ model Expense {
   @@index([taskId])
   @@index([requestId])
   @@index([offerId])
+}
+
+// Příjem (income) – peníze přicházející do projektu (dotace, vlastní vklad,
+// prodej, refundace…). Saldo projektu = příjmy − výdaje. Záměrně jednodušší
+// než Expense: bez dodavatele/žádanky/QR plateb/životního cyklu.
+model Income {
+  id           String   @id @default(cuid())
+  projectId    String
+  subProjectId String?
+  title        String
+  description  String?
+  amount       Decimal  @db.Decimal(12, 2)
+  currency     String   @default("CZK")
+  category     String   @default("other") // dotace | vklad | prodej | refundace | other
+  date         DateTime @default(now())
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  createdBy  User        @relation("IncomeCreatedBy", fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@index([subProjectId])
+  @@index([date])
 }
 
 model Document {

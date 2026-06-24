@@ -27,6 +27,20 @@ export function categoryLabel(value: string) {
   return EXPENSE_CATEGORIES.find((c) => c.value === value)?.label ?? "Ostatní";
 }
 
+export const INCOME_CATEGORIES = [
+  { value: "dotace", label: "Dotace / grant" },
+  { value: "vklad", label: "Vlastní vklad" },
+  { value: "uver", label: "Úvěr / půjčka" },
+  { value: "prodej", label: "Prodej" },
+  { value: "najem", label: "Nájem / pronájem" },
+  { value: "refundace", label: "Refundace / vratka" },
+  { value: "other", label: "Ostatní" },
+] as const;
+
+export function incomeCategoryLabel(value: string) {
+  return INCOME_CATEGORIES.find((c) => c.value === value)?.label ?? "Ostatní";
+}
+
 export const VENDOR_CATEGORIES = [
   { value: "construction", label: "Stavební práce" },
   { value: "plumbing", label: "Instalatér / Topenář" },

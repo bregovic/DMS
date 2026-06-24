@@ -15,6 +15,7 @@ export default async function DashboardPage() {
   const [
     projectCount,
     expenseAgg,
+    incomeAgg,
     recentExpenses,
     projects,
     catMap,
@@ -30,6 +31,10 @@ export default async function DashboardPage() {
       where: { project: { ownerId: user.id } },
       _sum: { amount: true },
       _count: true,
+    }),
+    prisma.income.aggregate({
+      where: { project: { ownerId: user.id } },
+      _sum: { amount: true },
     }),
     prisma.expense.findMany({
       where: { project: { ownerId: user.id } },
@@ -98,11 +103,18 @@ export default async function DashboardPage() {
   }
 
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
+  const totalIncome = Number(incomeAgg._sum.amount ?? 0);
+  const saldo = totalIncome - totalSpent;
 
   const stats = [
-    { label: "Projekty", value: String(projectCount) },
-    { label: "Celkové výdaje", value: formatCurrency(totalSpent) },
-    { label: "Záznamů", value: String(expenseAgg._count) },
+    { label: "Projekty", value: String(projectCount), className: "text-stone-950" },
+    { label: "Celkové příjmy", value: formatCurrency(totalIncome), className: "text-stone-950" },
+    { label: "Celkové výdaje", value: formatCurrency(totalSpent), className: "text-stone-950" },
+    {
+      label: "Saldo",
+      value: formatCurrency(saldo),
+      className: saldo < 0 ? "text-red-600" : "text-emerald-700",
+    },
   ];
 
   return (
@@ -118,14 +130,14 @@ export default async function DashboardPage() {
       />
 
       {/* Statistiky – karty s jemným stínem */}
-      <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
           <div
             key={s.label}
             className="border border-stone-200 bg-white px-6 py-6 shadow-soft"
           >
             <p className="kicker">{s.label}</p>
-            <p className="display mt-2 text-3xl text-stone-950">{s.value}</p>
+            <p className={`display mt-2 text-3xl ${s.className}`}>{s.value}</p>
           </div>
         ))}
       </div>
