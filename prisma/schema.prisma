@@ -290,6 +290,7 @@ model Task {
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech
+  dateLocked    Boolean   @default(false) // termín zadán ručně → automatický přepočet ho nepřepíše
   vendorId      String? // přiřazený dodavatel (lookup)
   createdById   String
   createdAt     DateTime  @default(now())

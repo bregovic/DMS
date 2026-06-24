@@ -45,6 +45,7 @@ export function TaskDetailDialog({
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [locked, setLocked] = useState(false);
   const reqTitle = useRef<HTMLInputElement>(null);
   const reqLead = useRef<HTMLInputElement>(null);
   const reqLink = useRef<HTMLSelectElement>(null);
@@ -55,7 +56,9 @@ export function TaskDetailDialog({
   const subDays = useRef<HTMLInputElement>(null);
 
   async function reload() {
-    setD(await getTaskDetail(id));
+    const x = await getTaskDetail(id);
+    setD(x);
+    setLocked(!!x.dateLocked);
     onSaved?.();
   }
   async function act(fn: (fd: FormData) => Promise<unknown>, entries: Record<string, string>) {
@@ -74,7 +77,11 @@ export function TaskDetailDialog({
   useEffect(() => {
     let live = true;
     getTaskDetail(id)
-      .then((x) => live && setD(x))
+      .then((x) => {
+        if (!live) return;
+        setD(x);
+        setLocked(!!x.dateLocked);
+      })
       .catch((e) => live && setErr(e instanceof Error ? e.message : "Načtení selhalo."));
     return () => {
       live = false;
@@ -88,7 +95,9 @@ export function TaskDetailDialog({
       const fd = new FormData();
       fd.set("id", d.id);
       const r = await scheduleTaskByAvailability(fd);
-      setD(await getTaskDetail(d.id));
+      const x = await getTaskDetail(d.id);
+      setD(x);
+      setLocked(!!x.dateLocked);
       onSaved?.();
       if (!r.enough)
         window.alert(
@@ -255,25 +264,37 @@ export function TaskDetailDialog({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-start">Začátek</Label>
-                      <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={lock} />
+                      <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-due">Termín</Label>
-                      <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={lock} />
+                      <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
                     </div>
                   </div>
+
+                  {d.canEdit && (
+                    <label className="flex items-start gap-2 text-xs text-stone-600">
+                      <input
+                        type="checkbox"
+                        name="dateLocked"
+                        value="1"
+                        checked={locked}
+                        onChange={(e) => setLocked(e.target.checked)}
+                        className="mt-0.5 size-4 shrink-0 accent-stone-900"
+                      />
+                      <span>
+                        Termín zadán ručně (neplánovat automaticky).{" "}
+                        {locked
+                          ? "Tento termín se při přepočtu nezmění."
+                          : "Bez zaškrtnutí se blok plánuje automaticky z odhadu dní a dostupnosti dodavatele."}
+                      </span>
+                    </label>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label htmlFor="dd-pct">Hotovo (%)</Label>
                     <Input key={`p-${d.percentDone}`} id="dd-pct" name="percentDone" type="number" min={0} max={100} defaultValue={d.percentDone ?? 0} disabled={lock} />
                   </div>
-
-                  {d.kind === "phase" && (
-                    <p className="text-[11px] text-stone-400">
-                      Termín i % fáze nastavuješ ručně. Prázdná fáze se jednorázově
-                      předvyplní z dílčích úkolů, ručně zadané se už nepřepisuje.
-                    </p>
-                  )}
                 </>
               );
             })()}

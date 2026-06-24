@@ -336,21 +336,27 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
   await recomputePhaseDates(projectId);
 }
 
-/** Přepočítá termíny celé složky/projektu z fázových návazností a délek úkolů.
- *  Hotové úkoly drží svá data (kotvy); ostatní se počítají dopředu a u úkolu
- *  s dodavatelem se respektuje jeho dostupnost (nedostupné dny posunou termín). */
+/** Přepočítá termíny celé složky/projektu.
+ *  Plánovací jednotky = fáze + samostatné úkoly (bez rodiče). Řadí se podle
+ *  návazností (TaskDependency) a posouvají se jen dopředu. Pravidla na jednotku:
+ *   1) ručně uzamčený termín (dateLocked) = kotva, nepřepisuje se;
+ *   2) hotový samostatný úkol = kotva (drží reálná data);
+ *   3) fáze s dílčími úkoly → délku řídí úkoly (respektují dostupnost dodavatele);
+ *   4) jednotka s odhadem dní + dodavatelem → naplánuje se dle jeho dostupnosti
+ *      (nedostupné dny posunou termín), jinak kalendářní dny od kurzoru;
+ *   5) jednotka bez odhadu dní → drží délku, posune se jen když ji předchůdce tlačí. */
 async function scheduleProject(projectId: string, subProjectId: string | null) {
   const tasks = await prisma.task.findMany({
     where: { projectId, ...(subProjectId ? { subProjectId } : {}) },
     select: {
       id: true, kind: true, parentId: true, estimateDays: true, status: true,
-      vendorId: true, startDate: true, dueDate: true, createdAt: true,
+      vendorId: true, startDate: true, dueDate: true, dateLocked: true, createdAt: true,
       dependsOn: { select: { dependsOnId: true } },
     },
   });
-  const phases = tasks.filter((t) => t.kind === "phase");
-  const phaseIds = new Set(phases.map((p) => p.id));
   const byId = new Map(tasks.map((t) => [t.id, t]));
+
+  // dílčí úkoly fází (řazené dle vzniku)
   const childrenOf = new Map<string, typeof tasks>();
   for (const t of tasks)
     if (t.kind === "task" && t.parentId) {
@@ -359,6 +365,10 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
       childrenOf.set(t.parentId, a);
     }
   for (const [, arr] of childrenOf) arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  // plánovací jednotky = fáze + samostatné úkoly (bez rodiče)
+  const units = tasks.filter((t) => t.kind === "phase" || (t.kind === "task" && !t.parentId));
+  const unitIds = new Set(units.map((u) => u.id));
 
   // dostupnost dodavatelů (jen volné dny), seřazené
   const vendorIds = [...new Set(tasks.map((t) => t.vendorId).filter((v): v is string => !!v))];
@@ -387,75 +397,106 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     return { start: slice[0], end: slice[slice.length - 1] };
   };
 
+  // topologické pořadí jednotek dle návazností (cykly se přeskočí)
   const pred = new Map<string, string[]>(
-    phases.map((p) => [p.id, p.dependsOn.map((d) => d.dependsOnId).filter((x) => phaseIds.has(x))]),
+    units.map((u) => [u.id, u.dependsOn.map((d) => d.dependsOnId).filter((x) => unitIds.has(x))]),
   );
-  const indeg = new Map(phases.map((p) => [p.id, pred.get(p.id)!.length]));
-  const radj = new Map<string, string[]>(phases.map((p) => [p.id, []]));
-  for (const p of phases) for (const pr of pred.get(p.id)!) radj.get(pr)?.push(p.id);
-  const queue = phases.filter((p) => indeg.get(p.id) === 0).map((p) => p.id);
+  const indeg = new Map(units.map((u) => [u.id, pred.get(u.id)!.length]));
+  const radj = new Map<string, string[]>(units.map((u) => [u.id, []]));
+  for (const u of units) for (const pr of pred.get(u.id)!) radj.get(pr)?.push(u.id);
+  const queue = units.filter((u) => indeg.get(u.id) === 0).map((u) => u.id);
   const order: string[] = [];
   while (queue.length) {
     const x = queue.shift()!;
     order.push(x);
     for (const n of radj.get(x) ?? []) { indeg.set(n, indeg.get(n)! - 1); if (indeg.get(n) === 0) queue.push(n); }
   }
-  for (const p of phases) if (!order.includes(p.id)) order.push(p.id);
+  for (const u of units) if (!order.includes(u.id)) order.push(u.id);
 
   const done = (s: string) => TASK_DONE_STATUSES.includes(s);
   const now = new Date();
   const TODAY = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const phaseStart = new Map<string, number>();
-  const phaseDue = new Map<string, number>();
+  const uStart = new Map<string, number>();
+  const uDue = new Map<string, number>();
   const upd: { id: string; start: Date; due: Date }[] = [];
 
-  for (const pid of order) {
-    const phaseObj = byId.get(pid);
-    const kids = childrenOf.get(pid) ?? [];
-    const preds = pred.get(pid) ?? [];
-    const predEnd = preds.length ? Math.max(...preds.map((x) => phaseDue.get(x) ?? TODAY)) : null;
-    // Tvrdá podmínka: navazující fáze nesmí začít dřív, než skončí předchůdce
-    // (jeho konec už zahrnuje technologickou pauzu/zrání jako poslední úkol).
-    // Ruční termín fáze smí začátek jen ODSUNOUT (spodní mez), ne uspíšit.
+  for (const uid of order) {
+    const u = byId.get(uid)!;
+    const preds = pred.get(uid) ?? [];
+    const predEnd = preds.length ? Math.max(...preds.map((x) => uDue.get(x) ?? TODAY)) : null;
     const depFloor = predEnd != null ? predEnd + DAY_MS : null;
-    const manualStart = phaseObj?.startDate?.getTime() ?? null;
-    let cursor =
-      depFloor != null
-        ? manualStart != null
-          ? Math.max(manualStart, depFloor)
-          : depFloor
-        : manualStart ?? TODAY;
-    const dates: { start: number; end: number }[] = [];
-    for (const k of kids) {
-      let s: number, e: number;
-      if (done(k.status) && k.dueDate) {
-        s = (k.startDate ?? k.dueDate).getTime();
-        e = k.dueDate.getTime();
-        cursor = Math.max(cursor, e + DAY_MS);
-      } else {
-        const dur = Math.max(k.estimateDays ?? 1, 1);
-        const av = bookAvail(k.vendorId, cursor, dur);
-        if (av) { s = av.start; e = av.end; } // dle dostupnosti dodavatele
-        else { s = cursor; e = s + (dur - 1) * DAY_MS; } // kalendářní dny
-        cursor = e + DAY_MS;
-        upd.push({ id: k.id, start: new Date(s), due: new Date(e) });
+    const curS = u.startDate?.getTime() ?? null;
+    const curE = u.dueDate?.getTime() ?? null;
+
+    // 1) Ručně uzamčený termín = kotva.
+    // 2) Hotový samostatný úkol = kotva (drží reálná data).
+    if (
+      (u.dateLocked || (u.kind !== "phase" && done(u.status))) &&
+      (curS != null || curE != null)
+    ) {
+      const s = curS ?? curE!;
+      const e = curE ?? curS!;
+      uStart.set(uid, s);
+      uDue.set(uid, e);
+      continue;
+    }
+
+    const kids = childrenOf.get(uid) ?? [];
+
+    // 3) Fáze s dílčími úkoly: délku řídí úkoly (respektují dostupnost dodavatele).
+    //    Ruční start fáze smí začátek jen odsunout (spodní mez), ne uspíšit.
+    if (u.kind === "phase" && kids.length) {
+      let cursor =
+        depFloor != null ? Math.max(depFloor, curS ?? depFloor) : (curS ?? TODAY);
+      const dates: { start: number; end: number }[] = [];
+      for (const k of kids) {
+        let s: number, e: number;
+        if (done(k.status) && k.dueDate) {
+          s = (k.startDate ?? k.dueDate).getTime();
+          e = k.dueDate.getTime();
+          cursor = Math.max(cursor, e + DAY_MS);
+        } else {
+          const dur = Math.max(k.estimateDays ?? 1, 1);
+          const av = bookAvail(k.vendorId, cursor, dur);
+          if (av) { s = av.start; e = av.end; } // dle dostupnosti dodavatele
+          else { s = cursor; e = s + (dur - 1) * DAY_MS; } // kalendářní dny
+          cursor = e + DAY_MS;
+          upd.push({ id: k.id, start: new Date(s), due: new Date(e) });
+        }
+        dates.push({ start: s, end: e });
       }
-      dates.push({ start: s, end: e });
+      const effStart = dates.length ? Math.min(...dates.map((d) => d.start)) : (depFloor ?? curS ?? TODAY);
+      const effDue = dates.length ? Math.max(...dates.map((d) => d.end)) : effStart;
+      uStart.set(uid, effStart);
+      uDue.set(uid, effDue);
+      if (u.startDate?.getTime() !== effStart || u.dueDate?.getTime() !== effDue)
+        upd.push({ id: uid, start: new Date(effStart), due: new Date(effDue) });
+      continue;
     }
-    const kidsStart = dates.length ? Math.min(...dates.map((d) => d.start)) : null;
-    const kidsDue = dates.length ? Math.max(...dates.map((d) => d.end)) : null;
-    // Fáze drží reálné termíny svých úkolů (vč. zrání). Délku řídí práce,
-    // ne zaseknutý ruční termín – proto vždy přepočítáme a zapíšeme.
-    const effStart = kidsStart ?? cursor;
-    const effDue = kidsDue ?? effStart;
-    phaseStart.set(pid, effStart);
-    phaseDue.set(pid, effDue);
-    if (phaseObj) {
-      const changed =
-        phaseObj.startDate?.getTime() !== effStart ||
-        phaseObj.dueDate?.getTime() !== effDue;
-      if (changed) upd.push({ id: pid, start: new Date(effStart), due: new Date(effDue) });
+
+    // 4) Samostatný úkol (nebo prázdná fáze) s odhadem dní → plán dle dostupnosti.
+    const hasDur = (u.estimateDays ?? 0) > 0;
+    if (hasDur && !(u.kind === "phase" && done(u.status))) {
+      const cursor = depFloor ?? curS ?? TODAY;
+      const dur = Math.max(u.estimateDays!, 1);
+      const av = bookAvail(u.vendorId, cursor, dur);
+      const s = av ? av.start : cursor;
+      const e = av ? av.end : s + (dur - 1) * DAY_MS;
+      uStart.set(uid, s);
+      uDue.set(uid, e);
+      if (curS !== s || curE !== e) upd.push({ id: uid, start: new Date(s), due: new Date(e) });
+      continue;
     }
+
+    // 5) Bez odhadu dní: drží délku, posune se jen když ho předchůdce tlačí dál.
+    if (curS == null && curE == null) continue; // není co plánovat
+    const dur = curS != null && curE != null ? curE - curS : 0;
+    let s = curS ?? curE!;
+    if (depFloor != null && s < depFloor) s = depFloor;
+    const e = s + dur;
+    uStart.set(uid, s);
+    uDue.set(uid, e);
+    if (curS !== s || curE !== e) upd.push({ id: uid, start: new Date(s), due: new Date(e) });
   }
 
   for (const u of upd)
@@ -483,7 +524,7 @@ export async function getTaskDetail(id: string) {
     where: { id },
     select: {
       id: true, title: true, kind: true, description: true, status: true,
-      startDate: true, dueDate: true, assigneeEmail: true, vendorId: true,
+      startDate: true, dueDate: true, dateLocked: true, assigneeEmail: true, vendorId: true,
       priority: true, profession: true, estimateDays: true, percentDone: true,
       projectId: true, subProjectId: true, createdById: true,
       dependsOn: { select: { dependsOnId: true } },
@@ -582,6 +623,7 @@ export async function getTaskDetail(id: string) {
     status: task.status,
     startDate: task.startDate ? task.startDate.toISOString().slice(0, 10) : null,
     dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+    dateLocked: task.dateLocked,
     assigneeEmail: task.assigneeEmail,
     vendorId: task.vendorId,
     priority: task.priority,
@@ -622,7 +664,9 @@ export async function updateTaskPlan(formData: FormData) {
     if (!v) vendorId = null;
   }
 
-  // Termín i % se ukládají ručně i u fáze (fáze jsou ruční; přepočet je nepřepíše).
+  // dateLocked = ruční zámek termínu (zaškrtnuto v dialogu). Když je zaškrtnut,
+  // automatický přepočet termín nepřepíše; jinak se blok plánuje automaticky.
+  const dateLocked = String(formData.get("dateLocked") || "") === "1";
   const newTitle = String(formData.get("title") || "").trim();
   await prisma.task.update({
     where: { id: task.id },
@@ -630,6 +674,7 @@ export async function updateTaskPlan(formData: FormData) {
       ...(newTitle ? { title: newTitle } : {}),
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
+      dateLocked,
       percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       vendorId,
       description: toText(formData.get("description")),
@@ -637,9 +682,9 @@ export async function updateTaskPlan(formData: FormData) {
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
-  // U fáze přepočítat celý rozvrh (posune fázi za novou návaznost); u úkolu jen navazující.
-  if (task.kind === "phase") await scheduleProject(task.projectId, task.subProjectId);
-  else await cascadeReschedule(task.projectId, task.id);
+  // Přepočítat rozvrh celé složky: uzamčené/hotové bloky drží data, ostatní se
+  // (i samostatné úkoly) naplánují dle dodavatele a navazující se posunou.
+  await scheduleProject(task.projectId, task.subProjectId);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
@@ -679,9 +724,10 @@ export async function scheduleTaskByAvailability(formData: FormData) {
       "Dodavatel nemá v kalendáři žádné dostupné dny od plánovaného začátku. Doplň mu dostupnost.",
     );
   }
+  // Naplánováno automaticky → zámek vypneme (přepočet smí blok dál posouvat).
   await prisma.task.update({
     where: { id: task.id },
-    data: { startDate: s.start, dueDate: s.due },
+    data: { startDate: s.start, dueDate: s.due, dateLocked: false },
   });
   await cascadeReschedule(task.projectId, task.id);
   revalidatePath(`/projects/${task.projectId}`);
