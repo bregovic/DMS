@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { QuickAdd } from "@/components/app/quick-add";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
 import { getExpenseCategoryMap, getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
 import { getStatuses } from "@/server/statuses";
@@ -16,6 +17,7 @@ export default async function DashboardPage() {
     projectCount,
     expenseAgg,
     incomeAgg,
+    forecastReqs,
     recentExpenses,
     projects,
     catMap,
@@ -35,6 +37,14 @@ export default async function DashboardPage() {
     prisma.income.aggregate({
       where: { project: { ownerId: user.id } },
       _sum: { amount: true },
+    }),
+    prisma.request.findMany({
+      where: {
+        project: { ownerId: user.id },
+        status: { in: REQUEST_FORECAST_STATUSES },
+        price: { not: null },
+      },
+      select: { price: true, expenses: { select: { amount: true } } },
     }),
     prisma.expense.findMany({
       where: { project: { ownerId: user.id } },
@@ -105,15 +115,31 @@ export default async function DashboardPage() {
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
   const totalIncome = Number(incomeAgg._sum.amount ?? 0);
   const saldo = totalIncome - totalSpent;
+  // Forecast: zbývající výdaje potvrzených žádanek (cena − navázané reálné výdaje).
+  const totalForecast = forecastReqs.reduce((s, r) => {
+    const spent = r.expenses.reduce((a, e) => a + Number(e.amount), 0);
+    return s + Math.max(0, Number(r.price ?? 0) - spent);
+  }, 0);
+  const expectedSaldo = totalIncome - totalSpent - totalForecast;
 
   const stats = [
     { label: "Projekty", value: String(projectCount), className: "text-stone-950" },
     { label: "Celkové příjmy", value: formatCurrency(totalIncome), className: "text-stone-950" },
     { label: "Celkové výdaje", value: formatCurrency(totalSpent), className: "text-stone-950" },
     {
+      label: "Forecast výdajů",
+      value: formatCurrency(totalForecast),
+      className: "text-amber-600",
+    },
+    {
       label: "Saldo",
       value: formatCurrency(saldo),
       className: saldo < 0 ? "text-red-600" : "text-emerald-700",
+    },
+    {
+      label: "Oček. saldo",
+      value: formatCurrency(expectedSaldo),
+      className: expectedSaldo < 0 ? "text-red-600" : "text-emerald-700",
     },
   ];
 
@@ -130,7 +156,7 @@ export default async function DashboardPage() {
       />
 
       {/* Statistiky – karty s jemným stínem */}
-      <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-3">
         {stats.map((s) => (
           <div
             key={s.label}

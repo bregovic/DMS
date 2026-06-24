@@ -39,6 +39,7 @@ import {
   unitLabel,
   priorityLabel,
   priorityColor,
+  REQUEST_FORECAST_STATUSES,
 } from "@/lib/constants";
 import { colorClasses } from "@/lib/status-colors";
 import { getProjectTypeMap } from "@/server/project-types";
@@ -252,6 +253,28 @@ export default async function ProjectDetailPage({
     const amt = Number(i.amount);
     for (const sid of [i.subProjectId, ...ancestorsOf(i.subProjectId)]) {
       incomeBySub.set(sid, (incomeBySub.get(sid) ?? 0) + amt);
+    }
+  }
+
+  // Forecast: očekávané budoucí výdaje = cena potvrzené žádanky − již navázané
+  // reálné výdaje. (Aktivní dodavatel rozpočet nevidí → forecast 0.)
+  const realizedByReq = new Map<string, number>();
+  for (const e of project.expenses) {
+    if (e.requestId) realizedByReq.set(e.requestId, (realizedByReq.get(e.requestId) ?? 0) + Number(e.amount));
+  }
+  const forecastBySub = new Map<string, number>();
+  let forecastTotal = 0;
+  if (!onlyMine) {
+    for (const r of project.requests) {
+      if (!REQUEST_FORECAST_STATUSES.includes(r.status) || r.price == null) continue;
+      const remaining = Math.max(0, Number(r.price) - (realizedByReq.get(r.id) ?? 0));
+      if (remaining <= 0) continue;
+      forecastTotal += remaining;
+      if (r.subProjectId) {
+        for (const sid of [r.subProjectId, ...ancestorsOf(r.subProjectId)]) {
+          forecastBySub.set(sid, (forecastBySub.get(sid) ?? 0) + remaining);
+        }
+      }
     }
   }
 
@@ -529,7 +552,10 @@ export default async function ProjectDetailPage({
           {(() => {
             const expLevel = currentSub ? spentBySub.get(currentSub.id) ?? 0 : total;
             const incLevel = currentSub ? incomeBySub.get(currentSub.id) ?? 0 : incomeTotal;
+            const fcLevel = currentSub ? forecastBySub.get(currentSub.id) ?? 0 : forecastTotal;
             const saldo = incLevel - expLevel;
+            const expSaldo = incLevel - expLevel - fcLevel;
+            const hasExtra = incLevel > 0 || incomeTotal > 0 || fcLevel > 0;
             return (
               <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
                 <p className="kicker !text-stone-400">
@@ -541,18 +567,34 @@ export default async function ProjectDetailPage({
                     přímo zde {formatCurrency(levelTotal)}
                   </p>
                 )}
-                {(incLevel > 0 || incomeTotal > 0) && (
+                {hasExtra && (
                   <div className="mt-2 space-y-0.5 border-t border-stone-700 pt-2 text-xs">
-                    <p className="flex items-center justify-between gap-4 text-stone-400">
-                      <span>Příjmy</span>
-                      <span className="font-mono text-emerald-400">{formatCurrency(incLevel)}</span>
-                    </p>
+                    {(incLevel > 0 || incomeTotal > 0) && (
+                      <p className="flex items-center justify-between gap-4 text-stone-400">
+                        <span>Příjmy</span>
+                        <span className="font-mono text-emerald-400">{formatCurrency(incLevel)}</span>
+                      </p>
+                    )}
                     <p className="flex items-center justify-between gap-4">
                       <span className="text-stone-400">Saldo</span>
                       <span className={`font-mono ${saldo < 0 ? "text-red-400" : "text-emerald-400"}`}>
                         {formatCurrency(saldo)}
                       </span>
                     </p>
+                    {fcLevel > 0 && (
+                      <>
+                        <p className="flex items-center justify-between gap-4 text-stone-400">
+                          <span>Forecast výdajů</span>
+                          <span className="font-mono text-amber-400">{formatCurrency(fcLevel)}</span>
+                        </p>
+                        <p className="flex items-center justify-between gap-4">
+                          <span className="text-stone-400">Oček. saldo</span>
+                          <span className={`font-mono ${expSaldo < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                            {formatCurrency(expSaldo)}
+                          </span>
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
