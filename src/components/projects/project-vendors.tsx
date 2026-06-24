@@ -88,7 +88,7 @@ export function ProjectVendors({
                       <button
                         type="submit"
                         title="Odebrat z projektu"
-                        className="flex size-7 items-center justify-center text-stone-400 opacity-0 transition-all hover:bg-stone-950 hover:text-white group-hover:opacity-100 cursor-pointer"
+                        className="flex size-7 items-center justify-center text-stone-400 opacity-100 transition-all hover:bg-stone-950 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
                       >
                         <X className="size-3.5" />
                       </button>

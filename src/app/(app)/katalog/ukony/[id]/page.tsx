@@ -112,7 +112,7 @@ export default async function OperationDetailPage({
                       <span className="text-stone-400"> · výchozí {Number(p.defaultValue)}</span>
                     ) : null}
                   </span>
-                  <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <DeleteButton action={deleteParam} fields={{ id: p.id }} confirm={`Smazat parametr „${p.key}"?`} />
                   </span>
                 </li>
@@ -146,7 +146,7 @@ export default async function OperationDetailPage({
                       {r.wastePct != null ? ` · prořez ${Number(r.wastePct)} %` : ""}
                     </span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex shrink-0 items-center gap-3 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <RecipeForm
                       operationId={operation.id}
                       materials={materials}

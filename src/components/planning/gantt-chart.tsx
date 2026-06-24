@@ -171,11 +171,12 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   }
   const effPct = (done?: boolean, pct?: number) => (done ? 100 : pct ?? 0);
 
-  const LABEL = "13rem";
+  // Šířka popisku je responzivní (úzká na mobilu, ať gantt nezabere půl displeje).
+  const LABEL = "var(--gantt-label)";
 
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[720px]">
+    <div className="overflow-x-auto [--gantt-label:8.5rem] sm:[--gantt-label:13rem]">
+      <div className="min-w-[600px] sm:min-w-[720px]">
         {/* osa */}
         <div className="flex">
           <div className="shrink-0" style={{ width: LABEL }} />

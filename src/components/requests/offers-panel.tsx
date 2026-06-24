@@ -98,7 +98,7 @@ function OfferForm({
             <Input id="vendorName" name="vendorName" defaultValue={offer?.vendorName ?? ""} placeholder="Např. Truhlář Karel" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="price">Cena</Label>
               <Input id="price" name="price" type="number" step="0.01" min="0" defaultValue={offer?.price ?? ""} placeholder="0" />
@@ -109,7 +109,7 @@ function OfferForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="score">Body (0–100)</Label>
               <Input id="score" name="score" type="number" step="1" min="0" max="100" defaultValue={offer?.score ?? ""} placeholder="—" />

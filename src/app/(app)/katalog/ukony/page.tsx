@@ -58,7 +58,7 @@ export default async function OperationsPage() {
                   )}
                 </p>
               </div>
-              <span className="flex shrink-0 items-center gap-4 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="flex shrink-0 items-center gap-4 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                 <Link
                   href={`/katalog/ukony/${o.id}`}
                   className="text-sm text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"

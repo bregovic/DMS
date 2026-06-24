@@ -52,7 +52,7 @@ export function ListFilters({
         }}
         onBlur={() => setParam({ [k("q")]: q })}
         placeholder={placeholder}
-        className={`${inputClass} w-44`}
+        className={`${inputClass} w-full sm:w-44`}
       />
       <label className="flex items-center gap-1 text-xs text-stone-500">
         od
@@ -73,11 +73,11 @@ export function ListFilters({
         />
       </label>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
         <select
           value={sort}
           onChange={(e) => setParam({ [k("sort")]: e.target.value })}
-          className={inputClass}
+          className={`${inputClass} flex-1 sm:flex-none`}
         >
           {sortOptions.map((o) => (
             <option key={o.value} value={o.value}>

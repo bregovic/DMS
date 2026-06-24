@@ -95,7 +95,7 @@ export default async function VendorsPage() {
                       {v._count.expenses} výdajů · {v._count.projects} proj.
                     </p>
                   </div>
-                  <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <VendorAvailabilityDialog vendorId={v.id} vendorName={v.name} />
                     <EditVendorForm
                       vendor={{
