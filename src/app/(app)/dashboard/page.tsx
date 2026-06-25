@@ -6,6 +6,7 @@ import { ProjectIcon } from "@/components/projects/project-icon";
 import { QuickAdd } from "@/components/app/quick-add";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
+import { computeForecastContribs } from "@/lib/forecast";
 import { getExpenseCategoryMap, getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
 import { getStatuses } from "@/server/statuses";
@@ -27,6 +28,8 @@ export default async function DashboardPage() {
     docTypes,
     expenseStatuses,
     taskStatuses,
+    fcTaskRows,
+    fcTaskExpenses,
   ] = await Promise.all([
     prisma.project.count({ where: { ownerId: user.id } }),
     prisma.expense.aggregate({
@@ -44,7 +47,7 @@ export default async function DashboardPage() {
         status: { in: REQUEST_FORECAST_STATUSES },
         price: { not: null },
       },
-      select: { price: true, expenses: { select: { amount: true } } },
+      select: { price: true, taskId: true, subProjectId: true, expenses: { select: { amount: true } } },
     }),
     prisma.expense.findMany({
       where: { project: { ownerId: user.id } },
@@ -73,6 +76,8 @@ export default async function DashboardPage() {
     getDocumentTypes(),
     getStatuses("expense"),
     getStatuses("task"),
+    prisma.task.findMany({ where: { project: { ownerId: user.id } }, select: { id: true, parentId: true } }),
+    prisma.expense.findMany({ where: { project: { ownerId: user.id }, taskId: { not: null } }, select: { taskId: true, amount: true } }),
   ]);
   const quickVendors = vendorRows.map((v) => ({
     id: v.id,
@@ -115,11 +120,23 @@ export default async function DashboardPage() {
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
   const totalIncome = Number(incomeAgg._sum.amount ?? 0);
   const saldo = totalIncome - totalSpent;
-  // Forecast: zbývající výdaje potvrzených žádanek (cena − navázané reálné výdaje).
-  const totalForecast = forecastReqs.reduce((s, r) => {
-    const spent = r.expenses.reduce((a, e) => a + Number(e.amount), 0);
-    return s + Math.max(0, Number(r.price ?? 0) - spent);
-  }, 0);
+  // Forecast: zbývající výdaje potvrzených žádanek (cena − navázané reálné výdaje),
+  // s roll-up offsetem výdajů navázaných na úkol/fázi přes celý podstrom.
+  const realByTask = new Map<string, number>();
+  for (const e of fcTaskExpenses) {
+    if (!e.taskId) continue;
+    realByTask.set(e.taskId, (realByTask.get(e.taskId) ?? 0) + Number(e.amount));
+  }
+  const totalForecast = computeForecastContribs(
+    forecastReqs.map((r) => ({
+      price: Number(r.price ?? 0),
+      taskId: r.taskId,
+      subId: r.subProjectId,
+      realOnRequest: r.expenses.reduce((a, e) => a + Number(e.amount), 0),
+    })),
+    fcTaskRows.map((t) => ({ id: t.id, parentId: t.parentId })),
+    realByTask,
+  ).reduce((s, c) => s + c.amount, 0);
   const expectedSaldo = totalIncome - totalSpent - totalForecast;
 
   const stats = [

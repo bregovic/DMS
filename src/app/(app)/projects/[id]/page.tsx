@@ -41,6 +41,7 @@ import {
   priorityColor,
   REQUEST_FORECAST_STATUSES,
 } from "@/lib/constants";
+import { computeForecastContribs } from "@/lib/forecast";
 import { colorClasses } from "@/lib/status-colors";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
@@ -276,20 +277,16 @@ export default async function ProjectDetailPage({
     if (subId) for (const sid of [subId, ...ancestorsOf(subId)]) forecastBySub.set(sid, (forecastBySub.get(sid) ?? 0) + amount);
   };
   if (!onlyMine) {
-    const fcByTask = new Map<string, { sum: number; subId: string | null }>();
-    for (const r of project.requests) {
-      if (!REQUEST_FORECAST_STATUSES.includes(r.status) || r.price == null) continue;
-      if (r.taskId) {
-        const g = fcByTask.get(r.taskId) ?? { sum: 0, subId: r.subProjectId };
-        g.sum += Number(r.price);
-        fcByTask.set(r.taskId, g);
-      } else {
-        addForecast(Math.max(0, Number(r.price) - (realByReq.get(r.id) ?? 0)), r.subProjectId);
-      }
-    }
-    for (const [taskId, g] of fcByTask) {
-      addForecast(Math.max(0, g.sum - (realByTask.get(taskId) ?? 0)), g.subId);
-    }
+    const fcReqs = project.requests
+      .filter((r) => REQUEST_FORECAST_STATUSES.includes(r.status) && r.price != null)
+      .map((r) => ({
+        price: Number(r.price),
+        taskId: r.taskId,
+        subId: r.subProjectId,
+        realOnRequest: realByReq.get(r.id) ?? 0,
+      }));
+    const fcTasks = project.tasks.map((t) => ({ id: t.id, parentId: t.parentId }));
+    for (const c of computeForecastContribs(fcReqs, fcTasks, realByTask)) addForecast(c.amount, c.subId);
   }
 
   // Aktivní dodavatel: viditelné složky podle rozsahu, jinak jen svoje
