@@ -16,7 +16,7 @@ import {
   unlinkRequestFromTask,
   setLinkedRequestStatus,
   createExpenseForTask,
-  linkExpenseToTask,
+  linkExpensesToTask,
   unlinkExpenseFromTask,
 } from "@/server/actions/procurement";
 import { Button } from "@/components/ui/button";
@@ -46,12 +46,31 @@ export function TaskDetailDialog({
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [expPickerOpen, setExpPickerOpen] = useState(false);
+  const [expSel, setExpSel] = useState<Set<string>>(new Set());
+  const [expSearch, setExpSearch] = useState("");
+
+  async function linkSelectedExpenses() {
+    if (!d || expSel.size === 0) return;
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.set("taskId", d.id);
+      expSel.forEach((id) => fd.append("expenseId", id));
+      await linkExpensesToTask(fd);
+      setExpSel(new Set());
+      setExpPickerOpen(false);
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Spárování selhalo.");
+    }
+    setSaving(false);
+  }
   const reqTitle = useRef<HTMLInputElement>(null);
   const reqLead = useRef<HTMLInputElement>(null);
   const reqLink = useRef<HTMLSelectElement>(null);
   const expTitle = useRef<HTMLInputElement>(null);
   const expAmount = useRef<HTMLInputElement>(null);
-  const expLink = useRef<HTMLSelectElement>(null);
   const subTitle = useRef<HTMLInputElement>(null);
   const subDays = useRef<HTMLInputElement>(null);
 
@@ -149,7 +168,7 @@ export function TaskDetailDialog({
               />
             )}
             {d && d.canEdit && d.kind !== "phase" && (
-              <TaskCatalogFillDialog taskId={d.id} taskTitle={d.title} />
+              <TaskCatalogFillDialog taskId={d.id} taskTitle={d.title} onDone={reload} />
             )}
             <button
               type="button"
@@ -220,6 +239,14 @@ export function TaskDetailDialog({
                     Celkem <span className="font-mono">{formatCurrency(d.cost.total)}</span>
                   </span>
                 </div>
+                <div className="mt-1.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-stone-200 pt-1.5 text-sm">
+                  <span className="text-stone-500">
+                    Reálné výdaje <span className="font-mono text-emerald-700">{formatCurrency(d.real)}</span>
+                  </span>
+                  <span className="font-medium text-stone-950">
+                    Zbývá forecast <span className="font-mono">{formatCurrency(d.forecastRemaining)}</span>
+                  </span>
+                </div>
               </div>
             )}
 
@@ -227,12 +254,25 @@ export function TaskDetailDialog({
               <div className="border border-stone-200 bg-white px-4 py-3">
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <p className="kicker">Z katalogu · recept</p>
-                  <Link
-                    href={`/katalog/ukony/${d.recipe.operationId}`}
-                    className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline"
-                  >
-                    Otevřít úkon →
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    {d.canEdit && (
+                      <TaskCatalogFillDialog
+                        taskId={d.id}
+                        taskTitle={d.title}
+                        initialOperationId={d.recipe.operationId}
+                        initialValues={Object.fromEntries(d.recipe.params.map((p) => [p.key, p.value ?? 0]))}
+                        initialMultiplier={d.recipe.multiplier}
+                        triggerLabel="Upravit množství"
+                        onDone={reload}
+                      />
+                    )}
+                    <Link
+                      href={`/katalog/ukony/${d.recipe.operationId}`}
+                      className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline"
+                    >
+                      Otevřít úkon →
+                    </Link>
+                  </div>
                 </div>
                 <p className="text-sm font-medium text-stone-900">{d.recipe.name}</p>
                 {d.recipe.params.some((p) => p.value != null) && (
@@ -570,22 +610,66 @@ export function TaskDetailDialog({
                     </Button>
                   </div>
                   {d.candidateExpenses.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <select ref={expLink} className={fieldClass + " h-8 flex-1"} defaultValue="">
-                        <option value="">— připojit existující výdaj —</option>
-                        {d.candidateExpenses.map((c) => (
-                          <option key={c.id} value={c.id}>{c.title} ({formatCurrency(c.amount)})</option>
-                        ))}
-                      </select>
-                      <Button
+                    <div className="pt-1">
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={saving}
-                        onClick={() => expLink.current?.value && act(linkExpenseToTask, { taskId: d.id, expenseId: expLink.current.value })}
+                        onClick={() => setExpPickerOpen((o) => !o)}
+                        className="text-xs text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline cursor-pointer"
                       >
-                        Připojit
-                      </Button>
+                        {expPickerOpen
+                          ? "Skrýt párování"
+                          : `Spárovat reálné výdaje (${d.candidateExpenses.length} k dispozici) →`}
+                      </button>
+                      {expPickerOpen && (
+                        <div className="mt-2 space-y-2 border border-stone-200 p-2">
+                          <input
+                            value={expSearch}
+                            onChange={(e) => setExpSearch(e.target.value)}
+                            placeholder="Hledat ve výdajích…"
+                            className={fieldClass + " h-8"}
+                          />
+                          <div className="max-h-56 space-y-1 overflow-y-auto">
+                            {(() => {
+                              const list = d.candidateExpenses.filter(
+                                (c) => !expSearch || c.title.toLowerCase().includes(expSearch.toLowerCase()),
+                              );
+                              if (list.length === 0)
+                                return <p className="text-xs text-stone-400">Nic nenalezeno.</p>;
+                              return list.map((c) => (
+                                <label key={c.id} className="flex items-center gap-2 text-sm text-stone-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={expSel.has(c.id)}
+                                    onChange={(e) =>
+                                      setExpSel((s) => {
+                                        const n = new Set(s);
+                                        if (e.target.checked) n.add(c.id);
+                                        else n.delete(c.id);
+                                        return n;
+                                      })
+                                    }
+                                    className="size-4 shrink-0 accent-stone-900"
+                                  />
+                                  <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                                  <span className="shrink-0 font-mono text-stone-500">{formatCurrency(c.amount)}</span>
+                                  <span className="shrink-0 text-[11px] text-stone-400">{c.date}</span>
+                                </label>
+                              ));
+                            })()}
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-stone-400">Vybráno: {expSel.size}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={saving || expSel.size === 0}
+                              onClick={linkSelectedExpenses}
+                            >
+                              Spárovat vybrané ({expSel.size})
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

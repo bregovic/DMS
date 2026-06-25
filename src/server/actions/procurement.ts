@@ -204,6 +204,19 @@ export async function linkExpenseToTask(formData: FormData) {
   done(task.projectId);
 }
 
+export async function linkExpensesToTask(formData: FormData) {
+  const user = await requireUser();
+  const task = await loadTaskForPlan(String(formData.get("taskId")), user);
+  const ids = formData.getAll("expenseId").map((v) => String(v)).filter(Boolean);
+  if (ids.length) {
+    await prisma.expense.updateMany({
+      where: { id: { in: ids }, projectId: task.projectId },
+      data: { taskId: task.id },
+    });
+  }
+  done(task.projectId);
+}
+
 export async function unlinkExpenseFromTask(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("expenseId"));

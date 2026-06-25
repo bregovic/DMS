@@ -17,7 +17,23 @@ import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
 
-export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; taskTitle: string }) {
+export function TaskCatalogFillDialog({
+  taskId,
+  taskTitle,
+  initialOperationId,
+  initialValues,
+  initialMultiplier,
+  triggerLabel = "Z katalogu",
+  onDone,
+}: {
+  taskId: string;
+  taskTitle: string;
+  initialOperationId?: string;
+  initialValues?: Record<string, number>;
+  initialMultiplier?: number;
+  triggerLabel?: string;
+  onDone?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [ops, setOps] = useState<CalcOperationDTO[] | null>(null);
@@ -26,6 +42,17 @@ export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; t
   const [multiplier, setMultiplier] = useState(1);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Otevře dialog; když jsou předány počáteční hodnoty (editace množství),
+  // předvyplní operaci + parametry.
+  function openDialog() {
+    if (initialOperationId) {
+      setOpId(initialOperationId);
+      setValues(initialValues ? { ...initialValues } : {});
+      setMultiplier(initialMultiplier && initialMultiplier > 0 ? initialMultiplier : 1);
+    }
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (open && ops === null) {
@@ -58,6 +85,7 @@ export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; t
         setOpen(false);
         setOpId("");
         router.refresh();
+        onDone?.();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Naplnění selhalo.");
@@ -69,12 +97,12 @@ export function TaskCatalogFillDialog({ taskId, taskTitle }: { taskId: string; t
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openDialog}
         title="Naplnit úkol z katalogu"
         className="inline-flex items-center gap-1 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
       >
         <Boxes className="size-3.5" />
-        Z katalogu
+        {triggerLabel}
       </button>
     );
   }

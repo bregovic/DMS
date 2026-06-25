@@ -588,10 +588,10 @@ export async function getTaskDetail(id: string) {
       orderBy: { createdAt: "asc" },
     }),
     prisma.expense.findMany({
-      where: { projectId: task.projectId, subProjectId: task.subProjectId, taskId: null },
-      select: { id: true, title: true, amount: true },
+      where: { projectId: task.projectId, taskId: null },
+      select: { id: true, title: true, amount: true, date: true, category: true },
       orderBy: { date: "desc" },
-      take: 50,
+      take: 300,
     }),
   ]);
 
@@ -613,6 +613,15 @@ export async function getTaskDetail(id: string) {
     else costMaterial += p;
   }
   const cost = { material: costMaterial, labor: costLabor, total: costMaterial + costLabor };
+
+  // Reálné výdaje navázané na úkol (u fáze i na dílčí úkoly) + zbývající forecast
+  // (model 1: forecast žádanek − reálné navázané výdaje, min 0).
+  const realAgg = await prisma.expense.aggregate({
+    where: { taskId: { in: [task.id, ...childIds] } },
+    _sum: { amount: true },
+  });
+  const realCost = Number(realAgg._sum.amount ?? 0);
+  const forecastRemaining = Math.max(0, cost.total - realCost);
 
   // Recept z katalogu (proklik + zadané parametry m²/m³ + odhad) – jen když
   // úkol vznikl z úkonu. Přepočítá se z aktuálních cen katalogu.
@@ -713,6 +722,8 @@ export async function getTaskDetail(id: string) {
     canEdit,
     canDelete,
     cost,
+    real: realCost,
+    forecastRemaining,
     recipe,
     deps: task.dependsOn.map((d) => d.dependsOnId),
     candidates,
@@ -720,7 +731,13 @@ export async function getTaskDetail(id: string) {
     requests,
     expenses: linkedExps.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
     candidateRequests: candReqs,
-    candidateExpenses: candExps.map((e) => ({ id: e.id, title: e.title, amount: Number(e.amount) })),
+    candidateExpenses: candExps.map((e) => ({
+      id: e.id,
+      title: e.title,
+      amount: Number(e.amount),
+      date: e.date.toISOString().slice(0, 10),
+      category: e.category,
+    })),
   };
 }
 

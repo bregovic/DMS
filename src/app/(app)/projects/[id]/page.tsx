@@ -258,23 +258,37 @@ export default async function ProjectDetailPage({
 
   // Forecast: očekávané budoucí výdaje = cena potvrzené žádanky − již navázané
   // reálné výdaje. (Aktivní dodavatel rozpočet nevidí → forecast 0.)
-  const realizedByReq = new Map<string, number>();
+  // Model (1): forecast se offsetuje na ÚROVNI ÚKOLU. Výdaj navázaný na úkol snižuje
+  // forecast toho úkolu (součet jeho žádanek); výdaj navázaný jen na žádanku (bez
+  // úkolu) snižuje forecast té žádanky. Tak párování reálných výdajů snižuje forecast.
+  const realByTask = new Map<string, number>();
+  const realByReq = new Map<string, number>();
   for (const e of project.expenses) {
-    if (e.requestId) realizedByReq.set(e.requestId, (realizedByReq.get(e.requestId) ?? 0) + Number(e.amount));
+    const amt = Number(e.amount);
+    if (e.taskId) realByTask.set(e.taskId, (realByTask.get(e.taskId) ?? 0) + amt);
+    else if (e.requestId) realByReq.set(e.requestId, (realByReq.get(e.requestId) ?? 0) + amt);
   }
   const forecastBySub = new Map<string, number>();
   let forecastTotal = 0;
+  const addForecast = (amount: number, subId: string | null) => {
+    if (amount <= 0) return;
+    forecastTotal += amount;
+    if (subId) for (const sid of [subId, ...ancestorsOf(subId)]) forecastBySub.set(sid, (forecastBySub.get(sid) ?? 0) + amount);
+  };
   if (!onlyMine) {
+    const fcByTask = new Map<string, { sum: number; subId: string | null }>();
     for (const r of project.requests) {
       if (!REQUEST_FORECAST_STATUSES.includes(r.status) || r.price == null) continue;
-      const remaining = Math.max(0, Number(r.price) - (realizedByReq.get(r.id) ?? 0));
-      if (remaining <= 0) continue;
-      forecastTotal += remaining;
-      if (r.subProjectId) {
-        for (const sid of [r.subProjectId, ...ancestorsOf(r.subProjectId)]) {
-          forecastBySub.set(sid, (forecastBySub.get(sid) ?? 0) + remaining);
-        }
+      if (r.taskId) {
+        const g = fcByTask.get(r.taskId) ?? { sum: 0, subId: r.subProjectId };
+        g.sum += Number(r.price);
+        fcByTask.set(r.taskId, g);
+      } else {
+        addForecast(Math.max(0, Number(r.price) - (realByReq.get(r.id) ?? 0)), r.subProjectId);
       }
+    }
+    for (const [taskId, g] of fcByTask) {
+      addForecast(Math.max(0, g.sum - (realByTask.get(taskId) ?? 0)), g.subId);
     }
   }
 
