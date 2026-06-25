@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { REQUEST_HANDLED_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
+import { calcOperation, type CalcOperation } from "@/lib/process-calc";
 
 function toDate(v: FormDataEntryValue | null): Date | null {
   const s = String(v || "").trim();
@@ -525,6 +526,7 @@ export async function getTaskDetail(id: string) {
     select: {
       id: true, title: true, kind: true, description: true, status: true,
       startDate: true, dueDate: true, dateLocked: true, assigneeEmail: true, vendorId: true,
+      operationId: true, operationParams: true,
       priority: true, profession: true, estimateDays: true, percentDone: true,
       projectId: true, subProjectId: true, createdById: true,
       dependsOn: { select: { dependsOnId: true } },
@@ -597,6 +599,67 @@ export async function getTaskDetail(id: string) {
   }
   const cost = { material: costMaterial, labor: costLabor, total: costMaterial + costLabor };
 
+  // Recept z katalogu (proklik + zadané parametry m²/m³ + odhad) – jen když
+  // úkol vznikl z úkonu. Přepočítá se z aktuálních cen katalogu.
+  let recipe: {
+    operationId: string; code: string; name: string; unit: string; multiplier: number;
+    params: { key: string; label: string; unit: string | null; value: number | null }[];
+    quantity: number; laborHours: number; laborCost: number; materialCost: number; totalCost: number;
+    materials: { name: string; unit: string; quantity: number; unitPrice: number; cost: number }[];
+  } | null = null;
+  if (task.operationId) {
+    const op = await prisma.operation.findUnique({
+      where: { id: task.operationId },
+      include: {
+        params: { orderBy: { sort: "asc" } },
+        materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true } } } },
+      },
+    });
+    if (op) {
+      let parsed: { values?: Record<string, number>; multiplier?: number } = {};
+      try { parsed = JSON.parse(task.operationParams || "{}"); } catch {}
+      const values = parsed.values || {};
+      const multiplier = parsed.multiplier ?? 1;
+      const calcOp: CalcOperation = {
+        id: op.id,
+        name: op.name,
+        unit: op.unit,
+        quantityFormula: op.quantityFormula,
+        laborFormula: op.laborFormula,
+        laborRate: op.laborRate != null ? Number(op.laborRate) : null,
+        params: op.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
+        materials: op.materials.map((r) => ({
+          materialId: r.material.id,
+          name: r.material.name,
+          unit: r.material.unit,
+          unitPrice: Number(r.material.unitPrice),
+          quantityFormula: r.quantityFormula,
+          wastePct: r.wastePct != null ? Number(r.wastePct) : null,
+        })),
+      };
+      const r = calcOperation(calcOp, values, multiplier);
+      recipe = {
+        operationId: op.id,
+        code: op.code,
+        name: op.name,
+        unit: op.unit,
+        multiplier,
+        params: op.params.map((p) => ({
+          key: p.key,
+          label: p.label,
+          unit: p.unit,
+          value: Number.isFinite(values[p.key]) ? values[p.key] : (p.defaultValue != null ? Number(p.defaultValue) : null),
+        })),
+        quantity: r.quantity,
+        laborHours: r.laborHours,
+        laborCost: r.laborCost,
+        materialCost: r.materialCost,
+        totalCost: r.totalCost,
+        materials: r.materials.map((m) => ({ name: m.name, unit: m.unit, quantity: m.quantity, unitPrice: m.unitPrice, cost: m.cost })),
+      };
+    }
+  }
+
   // "objednat do" = začátek úkolu − dodací lhůta; pozadu, když není vyřízeno a datum prošlo
   const now = new Date();
   const t0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -635,6 +698,7 @@ export async function getTaskDetail(id: string) {
     canEdit,
     canDelete,
     cost,
+    recipe,
     deps: task.dependsOn.map((d) => d.dependsOnId),
     candidates,
     vendors,

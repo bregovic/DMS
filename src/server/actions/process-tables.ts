@@ -541,6 +541,8 @@ export async function generateFromCatalog(
         title: op.name,
         status: "todo",
         estimateDays,
+        operationId: line.operationId,
+        operationParams: JSON.stringify({ values: line.values || {}, multiplier: line.multiplier ?? 1 }),
         createdById: user.id,
       },
     });
@@ -1111,7 +1113,14 @@ export async function fillTaskFromCatalog(input: {
   const res = calcOperation(calcOp, input.values || {}, input.multiplier ?? 1);
   const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
 
-  await prisma.task.update({ where: { id: task.id }, data: { estimateDays } });
+  await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      estimateDays,
+      operationId: input.operationId,
+      operationParams: JSON.stringify({ values: input.values || {}, multiplier: input.multiplier ?? 1 }),
+    },
+  });
 
   for (const mat of res.materials) {
     if (mat.quantity <= 0) continue;

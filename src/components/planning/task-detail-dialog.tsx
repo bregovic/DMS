@@ -223,6 +223,59 @@ export function TaskDetailDialog({
               </div>
             )}
 
+            {d.recipe && (
+              <div className="border border-stone-200 bg-white px-4 py-3">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="kicker">Z katalogu · recept</p>
+                  <Link
+                    href={`/katalog/ukony/${d.recipe.operationId}`}
+                    className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline"
+                  >
+                    Otevřít úkon →
+                  </Link>
+                </div>
+                <p className="text-sm font-medium text-stone-900">{d.recipe.name}</p>
+                {d.recipe.params.some((p) => p.value != null) && (
+                  <p className="mt-0.5 text-xs text-stone-600">
+                    {d.recipe.params
+                      .filter((p) => p.value != null)
+                      .map((p) => `${p.label}: ${p.value!.toLocaleString("cs-CZ")}${p.unit ? " " + p.unit : ""}`)
+                      .join(" · ")}
+                    {d.recipe.multiplier !== 1 ? ` · ×${d.recipe.multiplier}` : ""}
+                  </p>
+                )}
+                {d.recipe.materials.length > 0 && (
+                  <div className="mt-2 space-y-0.5 border-t border-stone-100 pt-2 text-xs">
+                    {d.recipe.materials.map((m, i) => (
+                      <div key={i} className="flex items-baseline justify-between gap-2">
+                        <span className="text-stone-600">
+                          {m.name}{" "}
+                          <span className="text-stone-400">
+                            · {m.quantity.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} {m.unit}
+                          </span>
+                        </span>
+                        <span className="font-mono text-stone-700">{formatCurrency(m.cost)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-stone-100 pt-2 text-sm">
+                  <span className="text-stone-500">
+                    Materiál <span className="font-mono text-stone-800">{formatCurrency(d.recipe.materialCost)}</span>
+                  </span>
+                  <span className="text-stone-500">
+                    Práce <span className="font-mono text-stone-800">{formatCurrency(d.recipe.laborCost)}</span>{" "}
+                    <span className="text-stone-400">
+                      ({d.recipe.laborHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} Nh)
+                    </span>
+                  </span>
+                  <span className="font-medium text-stone-950">
+                    Celkem <span className="font-mono">{formatCurrency(d.recipe.totalCost)}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="dd-desc">Popis</Label>
               <textarea
