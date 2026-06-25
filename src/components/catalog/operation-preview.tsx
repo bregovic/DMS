@@ -79,7 +79,8 @@ export function OperationPreview({
       </div>
 
       {result.materials.length > 0 && (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[20rem] text-sm">
           <thead>
             <tr className="border-b border-stone-200 text-left text-stone-500">
               <th className="py-1.5 pr-4 font-normal kicker">Materiál</th>
@@ -105,6 +106,7 @@ export function OperationPreview({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

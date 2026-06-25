@@ -245,7 +245,7 @@ async function availabilityDates(vendorId: string, from: Date, need: number) {
 /** Přepočítá termíny fází (min/max dílčích úkolů). */
 async function recomputePhaseDates(projectId: string) {
   const [phases, children] = await Promise.all([
-    prisma.task.findMany({ where: { projectId, kind: "phase" }, select: { id: true, startDate: true, dueDate: true } }),
+    prisma.task.findMany({ where: { projectId, kind: "phase" }, select: { id: true, startDate: true, dueDate: true, dateLocked: true } }),
     prisma.task.findMany({ where: { projectId, kind: "task", parentId: { not: null } }, select: { parentId: true, startDate: true, dueDate: true } }),
   ]);
   const byParent = new Map<string, { startDate: Date | null; dueDate: Date | null }[]>();
@@ -256,16 +256,18 @@ async function recomputePhaseDates(projectId: string) {
     byParent.set(c.parentId, a);
   }
   for (const p of phases) {
-    // Fáze s ručně/dříve nastaveným termínem se nepřepisuje (fáze jsou ruční);
-    // automaticky se jen inicializuje prázdná fáze z dílčích úkolů.
-    if (p.startDate != null || p.dueDate != null) continue;
+    // Ručně uzamčená fáze (dateLocked) se nepřepisuje; ostatní fáze s dílčími úkoly
+    // se přepočítají z min/max termínů dětí (drží reálný rozsah fáze).
+    if (p.dateLocked) continue;
     const kids = byParent.get(p.id) ?? [];
     const starts = kids.map((k) => k.startDate?.getTime()).filter((x): x is number => x != null);
     const dues = kids.map((k) => k.dueDate?.getTime()).filter((x): x is number => x != null);
     if (!starts.length && !dues.length) continue;
     const start = starts.length ? new Date(Math.min(...starts)) : null;
     const due = dues.length ? new Date(Math.max(...dues)) : null;
-    await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
+    if (p.startDate?.getTime() !== start?.getTime() || p.dueDate?.getTime() !== due?.getTime()) {
+      await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
+    }
   }
 }
 
@@ -275,6 +277,7 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
     where: { projectId, kind: "task" },
     select: {
       id: true, vendorId: true, estimateDays: true, startDate: true, dueDate: true,
+      dateLocked: true, status: true,
       dependsOn: { select: { dependsOnId: true } },
     },
   });
@@ -310,6 +313,8 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
     for (const id of order) {
       if (!affected.has(id)) continue;
       const t = byId.get(id)!;
+      // Ručně uzamčený nebo hotový úkol = kotva: neposouvá se (jen ho použijí jako předchůdce).
+      if (t.dateLocked || TASK_DONE_STATUSES.includes(t.status)) continue;
       let maxPred: Date | null = null;
       for (const d of deps.get(id)!) {
         const dd = dm.get(d)?.due;

@@ -1122,6 +1122,10 @@ export async function fillTaskFromCatalog(input: {
     },
   });
 
+  // Opakované vyplnění z katalogu: smaž předchozí nevyřízené žádanky (stav poptavka)
+  // na tomto úkolu, ať se materiál/práce nezdvojí (a nenafoukne forecast).
+  await prisma.request.deleteMany({ where: { taskId: task.id, status: "poptavka" } });
+
   for (const mat of res.materials) {
     if (mat.quantity <= 0) continue;
     await prisma.request.create({

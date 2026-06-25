@@ -156,7 +156,7 @@ export default async function DashboardPage() {
       />
 
       {/* Statistiky – karty s jemným stínem */}
-      <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => (
           <div
             key={s.label}
