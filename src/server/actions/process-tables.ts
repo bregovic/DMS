@@ -532,25 +532,11 @@ export async function generateFromCatalog(
     const res = calcOperation(calcOp, line.values || {}, line.multiplier ?? 1);
     const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
 
-    const subtask = await prisma.task.create({
-      data: {
-        projectId: input.projectId,
-        subProjectId,
-        parentId: phaseId,
-        kind: "task",
-        title: op.name,
-        status: "todo",
-        estimateDays,
-        operationId: line.operationId,
-        operationParams: JSON.stringify({ values: line.values || {}, multiplier: line.multiplier ?? 1 }),
-        createdById: user.id,
-      },
-    });
-
     const matRows = res.materials.filter((m) => m.quantity > 0);
-    // Kam navázat žádanky na materiál: samostatný úkol „Nákup: …" (checklist),
-    // nebo přímo pracovní úkol (původní chování).
-    let materialTaskId = subtask.id;
+
+    // Nákup materiálu jako samostatný úkol „Nákup: …" (checklist) – vytváříme HO
+    // PRVNÍ, ať v rozvrhu PŘEDCHÁZÍ pracovní úkol (materiál se kupuje před prací).
+    let materialTaskId: string | null = null;
     if (input.materialAsTask && matRows.length) {
       const matTotal = matRows.reduce((s, m) => s + m.cost, 0);
       const nakup = await prisma.task.create({
@@ -567,6 +553,23 @@ export async function generateFromCatalog(
       });
       materialTaskId = nakup.id;
     }
+
+    // Pracovní úkol (vznikne po nákupu → v rozvrhu navazuje za ním).
+    const subtask = await prisma.task.create({
+      data: {
+        projectId: input.projectId,
+        subProjectId,
+        parentId: phaseId,
+        kind: "task",
+        title: op.name,
+        status: "todo",
+        estimateDays,
+        operationId: line.operationId,
+        operationParams: JSON.stringify({ values: line.values || {}, multiplier: line.multiplier ?? 1 }),
+        createdById: user.id,
+      },
+    });
+    if (!materialTaskId) materialTaskId = subtask.id;
 
     for (const mat of matRows) {
       await prisma.request.create({
