@@ -64,6 +64,7 @@ export function CatalogGenerateDialog({
   const [wishSaved, setWishSaved] = useState(false);
   const [wishOpen, setWishOpen] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [materialAsTask, setMaterialAsTask] = useState(true);
   const counter = useRef(0);
 
   // Po výběru činnosti/balíčku → focus na zadání prvního parametru.
@@ -170,6 +171,7 @@ export function CatalogGenerateDialog({
         phaseName: phase ? undefined : phaseName,
         dependsOnPhaseId: phase ? null : dependsOnPhaseId || null,
         phaseStartDate: phase ? null : phaseStartDate || null,
+        materialAsTask,
         lines: lines.map((l) => ({ operationId: l.operationId, values: l.values, multiplier: l.multiplier })),
       });
       if ("error" in res) {
@@ -440,6 +442,21 @@ export function CatalogGenerateDialog({
               </div>
             </div>
           )}
+
+          <label className="flex items-start gap-2 text-xs text-stone-600">
+            <input
+              type="checkbox"
+              checked={materialAsTask}
+              onChange={(e) => setMaterialAsTask(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-stone-900"
+            />
+            <span>
+              Materiál jako úkol <strong>„Nákup: …"</strong> se seznamem položek (checklist objednání).{" "}
+              {materialAsTask
+                ? "Žádanky na materiál se seskupí pod nákupní úkol."
+                : "Žádanky na materiál povisí přímo na pracovním úkolu."}
+            </span>
+          </label>
 
           {error && (
             <p className="border-l-2 border-red-600 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

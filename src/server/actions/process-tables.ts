@@ -420,6 +420,9 @@ export type GenerateInput = {
   phaseName?: string;
   dependsOnPhaseId?: string | null; // nová fáze navazuje na tuto fázi
   phaseStartDate?: string | null; // ruční začátek fáze (YYYY-MM-DD); jen odsune, neuspíší
+  // true = materiál seskupit pod samostatný úkol „Nákup: …" (žádanky = checklist),
+  // jinak žádanky visí přímo na pracovním úkolu.
+  materialAsTask?: boolean;
   lines: { operationId: string; values: Record<string, number>; multiplier?: number }[];
 };
 
@@ -542,13 +545,33 @@ export async function generateFromCatalog(
       },
     });
 
-    for (const mat of res.materials) {
-      if (mat.quantity <= 0) continue;
+    const matRows = res.materials.filter((m) => m.quantity > 0);
+    // Kam navázat žádanky na materiál: samostatný úkol „Nákup: …" (checklist),
+    // nebo přímo pracovní úkol (původní chování).
+    let materialTaskId = subtask.id;
+    if (input.materialAsTask && matRows.length) {
+      const matTotal = matRows.reduce((s, m) => s + m.cost, 0);
+      const nakup = await prisma.task.create({
+        data: {
+          projectId: input.projectId,
+          subProjectId,
+          parentId: phaseId,
+          kind: "task",
+          title: `Nákup: ${op.name}`,
+          description: `Nákup materiálu z katalogu (odhad ${Math.round(matTotal).toLocaleString("cs-CZ")} Kč). Položky níže = checklist objednání.`,
+          status: "todo",
+          createdById: user.id,
+        },
+      });
+      materialTaskId = nakup.id;
+    }
+
+    for (const mat of matRows) {
       await prisma.request.create({
         data: {
           projectId: input.projectId,
           subProjectId,
-          taskId: subtask.id,
+          taskId: materialTaskId,
           title: mat.name,
           quantity: mat.quantity,
           unit: mat.unit,
