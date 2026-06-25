@@ -434,9 +434,14 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     const curS = u.startDate?.getTime() ?? null;
     const curE = u.dueDate?.getTime() ?? null;
 
-    // 1) Ručně uzamčený termín = kotva.
-    // 2) Hotový samostatný úkol = kotva (drží reálná data).
+    const kids = childrenOf.get(uid) ?? [];
+    const isPhaseWithKids = u.kind === "phase" && kids.length > 0;
+
+    // 1) Ručně uzamčený termín = kotva; 2) hotový samostatný úkol = kotva.
+    //    Fáze s dětmi se NEanchoruje – děti se musí naplánovat. Zámek u fáze
+    //    pinuje jen ZAČÁTEK, konec se i tak řídí dílčími úkoly.
     if (
+      !isPhaseWithKids &&
       (u.dateLocked || (u.kind !== "phase" && done(u.status))) &&
       (curS != null || curE != null)
     ) {
@@ -447,13 +452,16 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
       continue;
     }
 
-    const kids = childrenOf.get(uid) ?? [];
-
-    // 3) Fáze s dílčími úkoly: délku řídí úkoly (respektují dostupnost dodavatele).
-    //    Ruční start fáze smí začátek jen odsunout (spodní mez), ne uspíšit.
-    if (u.kind === "phase" && kids.length) {
+    // 3) Fáze s dílčími úkoly: děti se plánují od začátku fáze, konec fáze = z dětí.
+    //    Uzamčená fáze drží svůj START (pin); konec se přesto počítá z úkolů.
+    if (isPhaseWithKids) {
+      const lockedStart = u.dateLocked && curS != null ? curS : null;
       let cursor =
-        depFloor != null ? Math.max(depFloor, curS ?? depFloor) : (curS ?? TODAY);
+        lockedStart != null
+          ? lockedStart
+          : depFloor != null
+            ? Math.max(depFloor, curS ?? depFloor)
+            : (curS ?? TODAY);
       const dates: { start: number; end: number }[] = [];
       for (const k of kids) {
         let s: number, e: number;
@@ -471,8 +479,10 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
         }
         dates.push({ start: s, end: e });
       }
-      const effStart = dates.length ? Math.min(...dates.map((d) => d.start)) : (depFloor ?? curS ?? TODAY);
-      const effDue = dates.length ? Math.max(...dates.map((d) => d.end)) : effStart;
+      const kidsStart = dates.length ? Math.min(...dates.map((d) => d.start)) : (lockedStart ?? depFloor ?? curS ?? TODAY);
+      const kidsDue = dates.length ? Math.max(...dates.map((d) => d.end)) : kidsStart;
+      const effStart = lockedStart != null ? lockedStart : kidsStart;
+      const effDue = kidsDue; // konec fáze vždy podle dílčích úkolů
       uStart.set(uid, effStart);
       uDue.set(uid, effDue);
       if (u.startDate?.getTime() !== effStart || u.dueDate?.getTime() !== effDue)
