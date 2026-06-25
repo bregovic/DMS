@@ -159,7 +159,7 @@ export function TaskCatalogFillDialog({
 
               {res && (
                 <div className="flex flex-wrap gap-x-6 gap-y-1 border-y border-stone-200 py-3 text-sm">
-                  <span>Pracnost: <span className="font-mono text-stone-950">{res.laborHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} Nh (≈ {Math.max(1, Math.ceil(res.laborHours / 8))} d)</span></span>
+                  <span>Pracnost: <span className="font-mono text-stone-950">{res.laborHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} Nh (≈ {op ? Math.max(1, Math.ceil(res.laborHours / (8 * (op.crew || 1)))) : Math.max(1, Math.ceil(res.laborHours / 8))} d{op && op.crew > 1 ? `, parta ${op.crew}` : ""})</span></span>
                   <span>Materiál: <span className="font-mono text-stone-950">{formatCurrency(res.materialCost)}</span></span>
                   <span>Práce: <span className="font-mono text-stone-950">{formatCurrency(res.laborCost)}</span></span>
                   {res.errors.length > 0 && <span className="text-red-600">{res.errors.join(", ")}</span>}

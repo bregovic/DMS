@@ -81,6 +81,7 @@ export default async function OperationDetailPage({
               quantityFormula: operation.quantityFormula,
               laborFormula: operation.laborFormula,
               laborRate: operation.laborRate != null ? Number(operation.laborRate) : null,
+              crew: operation.crew ?? 1,
               techPauseDays: operation.techPauseDays ?? null,
               description: operation.description,
               category: operation.category,

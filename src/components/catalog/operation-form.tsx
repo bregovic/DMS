@@ -16,6 +16,7 @@ export type OperationInput = {
   quantityFormula: string;
   laborFormula: string;
   laborRate: number | null;
+  crew: number | null;
   techPauseDays: number | null;
   description: string | null;
   category: string | null;
@@ -116,13 +117,21 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
             <code>vyska</code>). Funkce: ceil, floor, round, min, max, abs, sqrt.
             Desetinná tečka.
           </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="o-tp">Technologická pauza (dny zrání)</Label>
-            <Input id="o-tp" name="techPauseDays" type="number" step="1" min="0" max="60" defaultValue={operation?.techPauseDays ?? ""} placeholder="—" />
-            <p className="text-[11px] text-stone-400">
-              Kolik dní musí uběhnout po činnosti, než se smí navázat (tvrdnutí
-              betonu, zrání potěru…). Přidá se do plánu jako úkol „⏳ pauza".
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="o-crew">Počet lidí (parta)</Label>
+              <Input id="o-crew" name="crew" type="number" step="1" min="1" max="20" defaultValue={operation?.crew ?? 1} placeholder="1" />
+              <p className="text-[11px] text-stone-400">
+                Odhad dní = normohodiny ÷ (8 h × parta). Cena práce zůstává z plných normohodin.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="o-tp">Technologická pauza (dny zrání)</Label>
+              <Input id="o-tp" name="techPauseDays" type="number" step="1" min="0" max="60" defaultValue={operation?.techPauseDays ?? ""} placeholder="—" />
+              <p className="text-[11px] text-stone-400">
+                Dní po činnosti, než se smí navázat (tvrdnutí betonu…). Přidá se jako „⏳ pauza".
+              </p>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="o-desc">Popis</Label>

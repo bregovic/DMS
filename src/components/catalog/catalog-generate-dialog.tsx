@@ -408,7 +408,7 @@ export function CatalogGenerateDialog({
                 <p className="text-xs text-stone-500">
                   {res.quantity.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} {op.unit} ·{" "}
                   {res.laborHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} Nh (≈{" "}
-                  {Math.max(1, Math.ceil(res.laborHours / 8))} d) · materiál {formatCurrency(res.materialCost)}
+                  {Math.max(1, Math.ceil(res.laborHours / (8 * (op.crew || 1))))} d{op.crew > 1 ? `, parta ${op.crew}` : ""}) · materiál {formatCurrency(res.materialCost)}
                   {op.materials.length === 0 && (
                     <span className="text-amber-700"> · ⚠ bez receptu (jen práce)</span>
                   )}

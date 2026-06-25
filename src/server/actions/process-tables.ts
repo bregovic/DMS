@@ -127,6 +127,7 @@ const operationSchema = z.object({
   quantityFormula: z.string().min(1).default("1"),
   laborFormula: z.string().min(1).default("0"),
   laborRate: z.coerce.number().min(0).optional(),
+  crew: z.coerce.number().int().min(1).max(20).optional(),
   techPauseDays: z.coerce.number().int().min(0).max(60).optional(),
   description: z.string().optional(),
   category: z.string().optional(),
@@ -140,6 +141,7 @@ function parseOperation(formData: FormData) {
     quantityFormula: String(formData.get("quantityFormula") || "").trim() || "1",
     laborFormula: String(formData.get("laborFormula") || "").trim() || "0",
     laborRate: formData.get("laborRate") || undefined,
+    crew: formData.get("crew") || undefined,
     techPauseDays: formData.get("techPauseDays") || undefined,
     description: formData.get("description") || undefined,
     category: formData.get("category") || undefined,
@@ -177,6 +179,7 @@ export async function createOperation(_prev: FormState, formData: FormData): Pro
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
       laborRate: parsed.data.laborRate ?? null,
+      crew: parsed.data.crew ?? 1,
       techPauseDays: parsed.data.techPauseDays ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
@@ -212,6 +215,7 @@ export async function updateOperation(_prev: FormState, formData: FormData): Pro
       quantityFormula: parsed.data.quantityFormula,
       laborFormula: parsed.data.laborFormula,
       laborRate: parsed.data.laborRate ?? null,
+      crew: parsed.data.crew ?? 1,
       techPauseDays: parsed.data.techPauseDays ?? null,
       description: parsed.data.description ?? null,
       category: parsed.data.category || "other",
@@ -372,6 +376,7 @@ export async function deleteRecipe(formData: FormData) {
 export type CalcOperationDTO = Omit<CalcOperation, "id"> & {
   id: string;
   code: string;
+  crew: number;
   paramsMeta: { key: string; label: string; unit: string | null; defaultValue: number | null }[];
 };
 
@@ -390,6 +395,7 @@ export async function listOperationsForCalc(): Promise<CalcOperationDTO[]> {
     code: o.code,
     name: o.name,
     unit: o.unit,
+    crew: o.crew && o.crew > 0 ? o.crew : 1,
     quantityFormula: o.quantityFormula,
     laborFormula: o.laborFormula,
     laborRate: o.laborRate != null ? Number(o.laborRate) : null,
@@ -412,6 +418,11 @@ export async function listOperationsForCalc(): Promise<CalcOperationDTO[]> {
 }
 
 const HOURS_PER_DAY = 8;
+// Odhad dní z normohodin a počtu lidí v partě (crew). 1 člověk = 8 h/den.
+function daysFromHours(hours: number, crew: number | null | undefined): number | null {
+  const cr = crew && crew > 0 ? crew : 1;
+  return hours > 0 ? Math.max(1, Math.ceil(hours / (HOURS_PER_DAY * cr))) : null;
+}
 
 export type GenerateInput = {
   projectId: string;
@@ -530,7 +541,7 @@ export async function generateFromCatalog(
       })),
     };
     const res = calcOperation(calcOp, line.values || {}, line.multiplier ?? 1);
-    const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
+    const estimateDays = daysFromHours(res.laborHours, op.crew);
 
     const matRows = res.materials.filter((m) => m.quantity > 0);
 
@@ -1114,7 +1125,7 @@ export async function fillTaskFromCatalog(input: {
     })),
   };
   const res = calcOperation(calcOp, input.values || {}, input.multiplier ?? 1);
-  const estimateDays = res.laborHours > 0 ? Math.max(1, Math.ceil(res.laborHours / HOURS_PER_DAY)) : null;
+  const estimateDays = daysFromHours(res.laborHours, op.crew);
 
   await prisma.task.update({
     where: { id: task.id },
