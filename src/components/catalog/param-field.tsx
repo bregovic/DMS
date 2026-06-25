@@ -41,7 +41,9 @@ export function ParamField({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between gap-1">
+      {/* Pevná výška popiskového řádku (i pro 2řádkové popisky), ať inputy
+          parametrů sedí na stejné lince napříč mřížkou. */}
+      <div className="flex min-h-9 items-center justify-between gap-1">
         <Label htmlFor={idBase}>
           {label}
           {unit ? ` (${unit})` : ""}
