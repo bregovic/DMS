@@ -588,7 +588,8 @@ export async function getTaskDetail(id: string) {
       orderBy: { createdAt: "asc" },
     }),
     prisma.expense.findMany({
-      where: { projectId: task.projectId, taskId: null },
+      // Jen nenamapované výdaje z AKTUÁLNÍHO subprojektu (stejně jako žádanky výše).
+      where: { projectId: task.projectId, subProjectId: task.subProjectId, taskId: null },
       select: { id: true, title: true, amount: true, date: true, category: true },
       orderBy: { date: "desc" },
       take: 300,
