@@ -386,7 +386,9 @@ export function CatalogGenerateDialog({
                     />
                   ))}
                   <div className="space-y-1">
-                    <Label htmlFor={`l${l.lineId}-mult`}>Počet</Label>
+                    <div className="flex min-h-9 items-center">
+                      <Label htmlFor={`l${l.lineId}-mult`}>Počet</Label>
+                    </div>
                     <Input
                       id={`l${l.lineId}-mult`}
                       type="number"

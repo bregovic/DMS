@@ -150,7 +150,9 @@ export function TaskCatalogFillDialog({
                   />
                 ))}
                 <div className="space-y-1">
-                  <Label htmlFor="tf-mult">Počet</Label>
+                  <div className="flex min-h-9 items-center">
+                    <Label htmlFor="tf-mult">Počet</Label>
+                  </div>
                   <Input id="tf-mult" type="number" step="1" min="1" value={multiplier} onChange={(e) => setMultiplier(parseInt(e.target.value) || 1)} />
                 </div>
               </div>
