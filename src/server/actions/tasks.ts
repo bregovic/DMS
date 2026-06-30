@@ -568,7 +568,7 @@ export async function getTaskDetail(id: string) {
       orderBy: { createdAt: "asc" },
     }),
     prisma.vendor.findMany({
-      where: { ownerId: task.project.ownerId },
+      where: {},
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -750,12 +750,8 @@ export async function updateTaskPlan(formData: FormData) {
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
-    const project = await prisma.project.findUnique({
-      where: { id: task.projectId },
-      select: { ownerId: true },
-    });
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId, ownerId: project?.ownerId },
+      where: { id: vendorId },
       select: { id: true },
     });
     if (!v) vendorId = null;

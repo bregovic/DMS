@@ -14,13 +14,13 @@ export default async function VendorsPage() {
 
   const [vendors, totals] = await Promise.all([
     prisma.vendor.findMany({
-      where: { ownerId: user.id },
+      where: {},
       orderBy: { name: "asc" },
       include: { _count: { select: { expenses: true, projects: true } } },
     }),
     prisma.expense.groupBy({
       by: ["vendorId"],
-      where: { vendor: { ownerId: user.id } },
+      where: {},
       _sum: { amount: true },
     }),
   ]);

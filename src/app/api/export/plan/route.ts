@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
   const [vendors, avail] = await Promise.all([
     vendorIds.size
       ? prisma.vendor.findMany({
-          where: { id: { in: [...vendorIds] }, ownerId: project.ownerId },
+          where: { id: { in: [...vendorIds] } },
           select: { id: true, ico: true, name: true, dic: true, email: true, address: true },
         })
       : Promise.resolve([]),

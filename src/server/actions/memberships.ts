@@ -27,7 +27,7 @@ export async function setMemberRole(formData: FormData) {
 
   // propojení s dodavatelem (pokud takový e-mail v evidenci je) – jen informativní
   const vendor = await prisma.vendor.findFirst({
-    where: { ownerId: user.id, email },
+    where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true },
   });
 
@@ -58,7 +58,7 @@ export async function setSubMemberRole(formData: FormData) {
   if (!sub || sub.project.ownerId !== user.id) throw new Error("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
-    where: { ownerId: user.id, email },
+    where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true },
   });
 
@@ -92,7 +92,7 @@ export async function setVendorRole(formData: FormData) {
   if (!project) throw new Error("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
-    where: { id: vendorId, ownerId: user.id },
+    where: { id: vendorId },
     select: { email: true },
   });
   if (!vendor) throw new Error("Dodavatel nenalezen.");
@@ -128,7 +128,7 @@ export async function setVendorSubRole(formData: FormData) {
   if (!sub || sub.project.ownerId !== user.id) throw new Error("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
-    where: { id: vendorId, ownerId: user.id },
+    where: { id: vendorId },
     select: { email: true },
   });
   if (!vendor) throw new Error("Dodavatel nenalezen.");

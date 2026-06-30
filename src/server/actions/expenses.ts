@@ -30,11 +30,11 @@ export async function createExpense(formData: FormData) {
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
-  // Dodavatel (komu výdaj patří) – musí být z adresáře vlastníka projektu
+  // Dodavatel (komu výdaj patří) – ze sdíleného číselníku (ověříme jen existenci)
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId, ownerId: project.ownerId },
+      where: { id: vendorId },
       select: { id: true },
     });
     if (!v) vendorId = null;
@@ -176,10 +176,9 @@ export async function updateExpense(formData: FormData) {
 
   const existing = await prisma.expense.findFirst({
     where: { id, projectId },
-    select: { id: true, project: { select: { ownerId: true } } },
+    select: { id: true },
   });
   if (!existing) throw new Error("Výdaj nenalezen.");
-  const ownerId = existing.project.ownerId;
 
   const title = String(formData.get("title") || "").trim();
   if (!title) throw new Error("Zadej název.");
@@ -187,7 +186,7 @@ export async function updateExpense(formData: FormData) {
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId, ownerId },
+      where: { id: vendorId },
       select: { id: true },
     });
     if (!v) vendorId = null;

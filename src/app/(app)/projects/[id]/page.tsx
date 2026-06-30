@@ -482,7 +482,7 @@ export default async function ProjectDetailPage({
 
   const accountVendors = canAdd
     ? await prisma.vendor.findMany({
-        where: { ownerId: project.ownerId },
+        where: {},
         orderBy: { name: "asc" },
         select: { id: true, name: true, email: true, hourlyRate: true },
       })

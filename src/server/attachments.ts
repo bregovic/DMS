@@ -61,7 +61,7 @@ export async function getProjectAttachments(
     onlyMine && myEmail
       ? (
           await prisma.vendor.findMany({
-            where: { ownerId: project.ownerId, email: myEmail },
+            where: { email: { equals: myEmail, mode: "insensitive" } },
             select: { id: true },
           })
         ).map((v) => v.id)

@@ -32,7 +32,7 @@ export async function createRequest(formData: FormData) {
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId, ownerId: project.ownerId },
+      where: { id: vendorId },
       select: { id: true },
     });
     if (!v) vendorId = null;
