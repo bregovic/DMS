@@ -230,7 +230,7 @@ export function ExpenseList({
                 {formatCurrency(e.amount, e.currency)}
               </span>
               {isOwner && (
-                <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                <span className="flex items-center gap-1">
                   <EditExpenseForm
                     expense={e.edit}
                     vendors={vendors}
