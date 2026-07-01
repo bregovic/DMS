@@ -11,6 +11,7 @@ export type AttachmentItem = {
   date: Date; // datum výdaje
   amount: number;
   subProjectId: string | null;
+  exported: boolean; // už staženo/vyexportováno
 };
 
 export type AttachmentsResult = {
@@ -95,6 +96,7 @@ export async function getProjectAttachments(
       originalName: true,
       mimeType: true,
       size: true,
+      exportedAt: true,
       expense: { select: { title: true, date: true, amount: true, subProjectId: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -112,6 +114,7 @@ export async function getProjectAttachments(
       date: d.expense!.date,
       amount: Number(d.expense!.amount),
       subProjectId: d.expense!.subProjectId,
+      exported: !!d.exportedAt,
     }));
 
   return { projectName: project.name, subName, items };

@@ -452,6 +452,7 @@ model Document {
   type         String   @default("other") // receipt | invoice | contract | revision | insurance | other
   uploadedById String
   createdAt    DateTime @default(now())
+  exportedAt   DateTime? // označeno jako stažené/vyexportováno (hromadné stažení příloh)
 
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)

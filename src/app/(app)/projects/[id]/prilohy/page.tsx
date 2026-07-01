@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Download, FileText } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectAttachments } from "@/server/attachments";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  AttachmentsBrowser,
+  type BrowserItem,
+} from "@/components/expenses/attachments-browser";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -39,12 +42,15 @@ export default async function AttachmentsPage({
 
   const total = res.items.reduce((s, i) => s + i.amount, 0);
   const totalSize = res.items.reduce((s, i) => s + i.size, 0);
+  const exportedCount = res.items.filter((i) => i.exported).length;
 
-  const zipParams = new URLSearchParams();
-  if (sub) zipParams.set("sub", sub);
-  if (from) zipParams.set("from", from);
-  if (to) zipParams.set("to", to);
-  const zipHref = `/api/projects/${id}/documents/zip${zipParams.toString() ? `?${zipParams}` : ""}`;
+  const browserItems: BrowserItem[] = res.items.map((it) => ({
+    docId: it.docId,
+    originalName: it.originalName,
+    metaLabel: `${it.expenseTitle} · ${formatDate(it.date)} · ${formatCurrency(it.amount)} · ${formatBytes(it.size)}`,
+    exported: it.exported,
+  }));
+
   const backHref = `/projects/${id}${sub ? `?sub=${sub}` : ""}`;
 
   return (
@@ -53,24 +59,14 @@ export default async function AttachmentsPage({
         ← {res.subName ?? res.projectName}
       </Link>
 
-      <header className="mb-6 mt-2 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
-        <div>
-          <h1 className="display text-3xl text-stone-950">Přílohy</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {res.subName ? `Složka ${res.subName}` : `Projekt ${res.projectName}`} ·{" "}
-            {res.items.length} {res.items.length === 1 ? "soubor" : "souborů"} ·{" "}
-            {formatBytes(totalSize)} · výdaje {formatCurrency(total)}
-          </p>
-        </div>
-        {res.items.length > 0 && (
-          <a
-            href={zipHref}
-            className="flex items-center gap-2 bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-800"
-          >
-            <Download className="size-4" />
-            Stáhnout vše (ZIP)
-          </a>
-        )}
+      <header className="mb-6 mt-2 border-b border-stone-300/80 pb-6">
+        <h1 className="display text-3xl text-stone-950">Přílohy</h1>
+        <p className="mt-1 text-sm text-stone-500">
+          {res.subName ? `Složka ${res.subName}` : `Projekt ${res.projectName}`} ·{" "}
+          {res.items.length} {res.items.length === 1 ? "soubor" : "souborů"} ·{" "}
+          {formatBytes(totalSize)} · výdaje {formatCurrency(total)}
+          {exportedCount > 0 ? ` · ${exportedCount} staženo` : ""}
+        </p>
       </header>
 
       {/* Filtr období (podle data výdaje) */}
@@ -110,40 +106,13 @@ export default async function AttachmentsPage({
             : "K výdajům v této úrovni zatím nejsou žádné přílohy."}
         </p>
       ) : (
-        <ul className="border-t border-stone-200">
-          {res.items.map((it) => (
-            <li
-              key={it.docId}
-              className="flex items-center justify-between gap-3 border-b border-stone-200 py-3"
-            >
-              <a
-                href={`/api/documents/${it.docId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-w-0 flex-1 items-center gap-3 group"
-              >
-                <FileText className="size-4 shrink-0 text-stone-400" />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-stone-950 underline-offset-4 group-hover:underline">
-                    {it.originalName}
-                  </span>
-                  <span className="kicker mt-0.5 block">
-                    {it.expenseTitle} · {formatDate(it.date)} · {formatCurrency(it.amount)} ·{" "}
-                    {formatBytes(it.size)}
-                  </span>
-                </span>
-              </a>
-              <a
-                href={`/api/documents/${it.docId}`}
-                download
-                className="shrink-0 text-stone-400 transition-colors hover:text-stone-950"
-                title="Stáhnout"
-              >
-                <Download className="size-4" />
-              </a>
-            </li>
-          ))}
-        </ul>
+        <AttachmentsBrowser
+          projectId={id}
+          items={browserItems}
+          sub={sub}
+          from={from}
+          to={to}
+        />
       )}
     </div>
   );
