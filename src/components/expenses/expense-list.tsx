@@ -27,6 +27,7 @@ export type ExpenseItem = {
   stage: string | null;
   status: string;
   paid: boolean;
+  exported: boolean;
   dueLabel: string | null;
   overdue: boolean;
   hasBank: boolean;
@@ -186,6 +187,11 @@ export function ExpenseList({
                   <span className="min-w-0 break-words">{e.title}</span>
                   {e.docs.length > 0 && (
                     <Paperclip className="size-3 shrink-0 text-stone-400" />
+                  )}
+                  {e.exported && (
+                    <span className="shrink-0 border border-emerald-300 bg-emerald-50 px-1 py-0.5 text-[10px] font-normal uppercase tracking-wide text-emerald-700">
+                      exportováno
+                    </span>
                   )}
                 </p>
                 <p className="kicker mt-0.5">

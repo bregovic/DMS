@@ -1,0 +1,93 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireUser } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
+import { getProjectAccess, isManager } from "@/server/access";
+import { getExpenseCategoryMap } from "@/server/expense-categories";
+
+function csvField(v: string) {
+  return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+function csvRow(vals: (string | number | null | undefined)[]) {
+  return vals.map((v) => csvField(v == null ? "" : String(v))).join(";");
+}
+function fmtDate(d: Date | null) {
+  if (!d) return "";
+  const x = new Date(d);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(x.getDate())}.${p(x.getMonth() + 1)}.${x.getFullYear()}`;
+}
+function numv(v: unknown) {
+  return v == null ? "" : String(Number(v as number));
+}
+
+const HEADER = [
+  "ID", "Datum", "Název", "Dodavatel", "IČO", "Kategorie",
+  "Hodiny", "Sazba", "Částka", "Měna", "Splatnost", "VS", "Stav", "Subprojekt",
+];
+
+export type ExportResult =
+  | { csv: string; filename: string; count: number }
+  | { error: string };
+
+/** Vyexportuje zadané (aktuálně filtrované) výdaje projektu do CSV a označí je
+ *  jako „exportováno" (exportedAt). Smí jen vlastník/spolusprávce projektu. */
+export async function exportProjectExpenses(
+  projectId: string,
+  ids: string[],
+): Promise<ExportResult> {
+  const user = await requireUser();
+  const access = await getProjectAccess(projectId, user);
+  if (!access || !isManager(access.role)) {
+    return { error: "Export může jen vlastník nebo spolusprávce projektu." };
+  }
+  const idList = [...new Set(ids)].filter(Boolean);
+  if (idList.length === 0) return { error: "Nic k exportu." };
+
+  const [expenses, catMap] = await Promise.all([
+    prisma.expense.findMany({
+      where: { id: { in: idList }, projectId },
+      orderBy: { date: "desc" },
+      include: {
+        vendor: { select: { name: true, ico: true } },
+        subProject: { select: { name: true } },
+      },
+    }),
+    getExpenseCategoryMap(),
+  ]);
+  if (expenses.length === 0) return { error: "Nic k exportu." };
+
+  const lines = [csvRow(HEADER)];
+  for (const e of expenses) {
+    lines.push(
+      csvRow([
+        e.id,
+        fmtDate(e.date),
+        e.title,
+        e.vendor?.name ?? "",
+        e.vendor?.ico ?? "",
+        catMap.get(e.category) ?? e.category,
+        numv(e.hours),
+        numv(e.rate),
+        numv(e.amount),
+        e.currency,
+        fmtDate(e.dueDate),
+        e.variableSymbol ?? "",
+        e.stage ?? "",
+        e.subProject?.name ?? "",
+      ]),
+    );
+  }
+  // BOM kvůli Excelu
+  const csv = "﻿" + lines.join("\r\n") + "\r\n";
+
+  await prisma.expense.updateMany({
+    where: { id: { in: expenses.map((e) => e.id) }, projectId },
+    data: { exportedAt: new Date() },
+  });
+  revalidatePath(`/projects/${projectId}`);
+
+  const stamp = fmtDate(new Date()).replace(/\./g, "-");
+  return { csv, filename: `vydaje-${stamp}.csv`, count: expenses.length };
+}

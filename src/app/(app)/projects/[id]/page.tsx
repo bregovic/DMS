@@ -11,6 +11,7 @@ import { Collapsible } from "@/components/app/collapsible";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
+import { ExportExpensesButton } from "@/components/expenses/export-expenses-button";
 import { IncomeSection } from "@/components/incomes/income-section";
 import { ListFilters } from "@/components/ui/list-filters";
 import { EscBack } from "@/components/app/esc-back";
@@ -418,6 +419,7 @@ export default async function ProjectDetailPage({
     stage: e.stage,
     status: e.status,
     paid: e.paid,
+    exported: !!e.exportedAt,
     dueLabel: e.dueDate ? formatDate(e.dueDate) : null,
     overdue: !e.paid && !!e.dueDate && new Date(e.dueDate) < todayStart,
     hasBank: Boolean(e.vendor?.bankAccount),
@@ -830,6 +832,14 @@ export default async function ProjectDetailPage({
                 { value: "amount", label: "Částka" },
               ]}
             />
+            {isManager && shownExpenses.length > 0 && (
+              <div className="mb-3 flex justify-end">
+                <ExportExpensesButton
+                  projectId={project.id}
+                  ids={shownExpenses.map((e) => e.id)}
+                />
+              </div>
+            )}
             {shownExpenses.length === 0 ? (
               <p className="py-8 text-sm text-stone-500">
                 Nic neodpovídá filtru.

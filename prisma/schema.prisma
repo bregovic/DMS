@@ -386,6 +386,7 @@ model Expense {
   paid           Boolean   @default(false)
   dueDate        DateTime?
   variableSymbol String?
+  exportedAt  DateTime? // označeno jako vyexportováno do CSV (účetnictví)
   vendorId    String?
   subProjectId String?
   taskId      String? // navázáno na úkol/fázi
