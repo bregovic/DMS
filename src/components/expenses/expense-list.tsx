@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Paperclip, Trash2 } from "lucide-react";
+import { Paperclip, QrCode, Trash2 } from "lucide-react";
 import { deleteExpense, bulkUpdateExpenses } from "@/server/actions/expenses";
+import { QrAggregateModal } from "@/components/expenses/qr-aggregate-modal";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
@@ -60,6 +61,7 @@ export function ExpenseList({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [stage, setStage] = useState("");
   const [pending, setPending] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const stageLabel = (k: string) => statuses.find((s) => s.key === k)?.label ?? k;
   const toggle = (id: string) =>
@@ -127,6 +129,15 @@ export function ExpenseList({
                 className="h-8 border border-stone-300 px-2 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white disabled:opacity-40 cursor-pointer"
               >
                 Nastavit stav
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrOpen(true)}
+                className="flex h-8 items-center gap-1 border border-stone-300 px-2 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer"
+                title="Sdružená QR platba vybraných neuhrazených výdajů"
+              >
+                <QrCode className="size-3.5" />
+                QR platba
               </button>
               <button
                 type="button"
@@ -255,6 +266,14 @@ export function ExpenseList({
           </li>
         ))}
       </ul>
+
+      {qrOpen && (
+        <QrAggregateModal
+          projectId={projectId}
+          ids={Array.from(sel)}
+          onClose={() => setQrOpen(false)}
+        />
+      )}
     </div>
   );
 }
