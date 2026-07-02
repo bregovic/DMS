@@ -30,6 +30,8 @@ function loadDefaults(): Record<string, string> {
 export function NewExpenseForm({
   projectId,
   subProjectId,
+  subProjects = [],
+  myVendorId,
   vendors,
   categories,
   docTypes,
@@ -39,6 +41,8 @@ export function NewExpenseForm({
 }: {
   projectId: string;
   subProjectId?: string;
+  subProjects?: { id: string; name: string }[];
+  myVendorId?: string; // dodavatel se stejným e-mailem jako přihlášený uživatel
   vendors: Vendor[];
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
@@ -67,6 +71,10 @@ export function NewExpenseForm({
   const [amountMode, setAmountMode] = useState(d.amountMode || "fixed");
   const [rate, setRate] = useState("");
   const [hours, setHours] = useState("");
+  // Subprojekt: kontext složky má přednost, jinak posledně použitý (localStorage).
+  const [subProject, setSubProject] = useState(
+    subProjectId || d.subProjectId || "",
+  );
 
   if (!open) {
     return (
@@ -119,6 +127,7 @@ export function NewExpenseForm({
                   category: String(fd.get("category") || ""),
                   currency: String(fd.get("currency") || ""),
                   amountMode: String(fd.get("amountMode") || ""),
+                  subProjectId: String(fd.get("subProjectId") || ""),
                 }),
               );
             } catch {}
@@ -131,7 +140,7 @@ export function NewExpenseForm({
           className="space-y-5 p-5"
         >
           <input type="hidden" name="projectId" value={projectId} />
-          <input type="hidden" name="subProjectId" value={subProjectId ?? ""} />
+          <input type="hidden" name="subProjectId" value={subProject} />
           <input type="hidden" name="amountMode" value={amountMode} />
 
           {/* Typ záznamu */}
@@ -158,6 +167,25 @@ export function NewExpenseForm({
             <Input id="title" name="title" placeholder="Např. Zdění příčky" required autoFocus />
           </div>
 
+          {subProjects.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="subProject">Složka (subprojekt)</Label>
+              <select
+                id="subProject"
+                value={subProject}
+                onChange={(e) => setSubProject(e.target.value)}
+                className={fieldClass}
+              >
+                <option value="">— projekt (bez složky) —</option>
+                {subProjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Dodavatel</Label>
@@ -168,7 +196,8 @@ export function NewExpenseForm({
                   label: v.name,
                   hourlyRate: v.hourlyRate,
                 }))}
-                defaultId={d.vendorId}
+                defaultId={myVendorId || d.vendorId}
+                clearOnFocus
                 placeholder="Hledat dodavatele…"
                 onSelect={(item) => {
                   if (item?.hourlyRate != null) setRate(String(item.hourlyRate));

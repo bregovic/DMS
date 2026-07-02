@@ -503,6 +503,12 @@ export default async function ProjectDetailPage({
   const statusColor = (st: string) => taskColorMap.get(st) ?? "stone";
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
+  // Dodavatel se stejným e-mailem jako přihlášený uživatel → předvyplní se u výdaje.
+  // (myEmail je definováno výše.)
+  const myVendorId = myEmail
+    ? accountVendors.find((v) => v.email?.toLowerCase() === myEmail)?.id
+    : undefined;
+
   return (
     <div className="mx-auto max-w-7xl">
       {currentSub && (
@@ -804,6 +810,8 @@ export default async function ProjectDetailPage({
               <NewExpenseForm
                 projectId={project.id}
                 subProjectId={sub ?? undefined}
+                subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+                myVendorId={myVendorId}
                 vendors={accountVendors.map((v) => ({
                   id: v.id,
                   name: v.name,

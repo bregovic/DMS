@@ -12,6 +12,7 @@ export function Combobox({
   allowEmpty = true,
   emptyLabel = "— bez dodavatele —",
   onSelect,
+  clearOnFocus = false,
 }: {
   items: ComboItem[];
   name: string;
@@ -20,11 +21,14 @@ export function Combobox({
   allowEmpty?: boolean;
   emptyLabel?: string;
   onSelect?: (item: ComboItem | null) => void;
+  // Předvyplněnou hodnotu při prvním kliknutí vynuluje, ať se hledá od začátku.
+  clearOnFocus?: boolean;
 }) {
   const initial = items.find((i) => i.id === defaultId) ?? null;
   const [id, setId] = useState(initial?.id ?? "");
   const [query, setQuery] = useState(initial?.label ?? "");
   const [open, setOpen] = useState(false);
+  const [touched, setTouched] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +47,7 @@ export function Combobox({
     setId(item?.id ?? "");
     setQuery(item?.label ?? "");
     setOpen(false);
+    setTouched(true);
     onSelect?.(item);
   }
 
@@ -55,9 +60,18 @@ export function Combobox({
         onChange={(e) => {
           setQuery(e.target.value);
           setId("");
+          setTouched(true);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          // Předvyplněnou (nedotčenou) hodnotu při prvním kliknutí vynuluj → čisté hledání.
+          if (clearOnFocus && !touched && query) {
+            setQuery("");
+            setId("");
+            setTouched(true);
+          }
+          setOpen(true);
+        }}
         className="flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
       />
       {open && (
