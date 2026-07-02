@@ -24,7 +24,10 @@ export function ExportExpensesButton({
         window.alert(res.error);
         return;
       }
-      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const bytes = Uint8Array.from(atob(res.data), (ch) => ch.charCodeAt(0));
+      const blob = new Blob([bytes], {
+        type: "text/csv;charset=windows-1250",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

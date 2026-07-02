@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, isManager } from "@/server/access";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
+import { csvToWin1250Base64 } from "@/lib/win1250";
 
 function csvField(v: string) {
   return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -29,7 +30,7 @@ const HEADER = [
 ];
 
 export type ExportResult =
-  | { csv: string; filename: string; count: number }
+  | { data: string; filename: string; count: number } // data = base64 (Windows-1250)
   | { error: string };
 
 /** Vyexportuje zadané (aktuálně filtrované) výdaje projektu do CSV a označí je
@@ -80,8 +81,8 @@ export async function exportProjectExpenses(
       ]),
     );
   }
-  // BOM kvůli Excelu
-  const csv = "﻿" + lines.join("\r\n") + "\r\n";
+  // Windows-1250 (bez BOM) – český Excel to čte nativně, diakritika sedí.
+  const csv = lines.join("\r\n") + "\r\n";
 
   await prisma.expense.updateMany({
     where: { id: { in: expenses.map((e) => e.id) }, projectId },
@@ -90,5 +91,9 @@ export async function exportProjectExpenses(
   revalidatePath(`/projects/${projectId}`);
 
   const stamp = fmtDate(new Date()).replace(/\./g, "-");
-  return { csv, filename: `vydaje-${stamp}.csv`, count: expenses.length };
+  return {
+    data: csvToWin1250Base64(csv),
+    filename: `vydaje-${stamp}.csv`,
+    count: expenses.length,
+  };
 }
