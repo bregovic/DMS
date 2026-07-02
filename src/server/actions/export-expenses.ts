@@ -19,7 +19,8 @@ function fmtDate(d: Date | null) {
   return `${p(x.getDate())}.${p(x.getMonth() + 1)}.${x.getFullYear()}`;
 }
 function numv(v: unknown) {
-  return v == null ? "" : String(Number(v as number));
+  // Desetinná ČÁRKA kvůli českému Excelu (jinak bere číslo jako text).
+  return v == null ? "" : String(Number(v as number)).replace(".", ",");
 }
 
 const HEADER = [

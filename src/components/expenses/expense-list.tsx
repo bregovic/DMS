@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Paperclip, QrCode, Trash2 } from "lucide-react";
 import { deleteExpense, bulkUpdateExpenses } from "@/server/actions/expenses";
 import { QrAggregateModal } from "@/components/expenses/qr-aggregate-modal";
@@ -62,6 +63,7 @@ export function ExpenseList({
   const [stage, setStage] = useState("");
   const [pending, setPending] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const router = useRouter();
 
   const stageLabel = (k: string) => statuses.find((s) => s.key === k)?.label ?? k;
   const toggle = (id: string) =>
@@ -87,6 +89,7 @@ export function ExpenseList({
       if (op === "stage") fd.set("stage", stage);
       await bulkUpdateExpenses(fd);
       setSel(new Set());
+      router.refresh(); // promítnout hromadnou změnu (stav/uhrazeno…) do seznamu
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Hromadná změna selhala.");
     } finally {
