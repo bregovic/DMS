@@ -82,7 +82,7 @@ function MemberRow({
             }
           });
         }}
-        className="flex size-7 shrink-0 items-center justify-center text-stone-400 opacity-100 transition-all hover:bg-stone-950 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 disabled:opacity-50 cursor-pointer"
+        className="flex size-7 shrink-0 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white disabled:opacity-50 cursor-pointer"
       >
         <X className="size-3.5" />
       </button>
