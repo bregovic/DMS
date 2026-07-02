@@ -10,19 +10,28 @@ import { computeForecastContribs } from "@/lib/forecast";
 import { getExpenseCategoryMap, getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
 import { getStatuses } from "@/server/statuses";
+import { listProjectsForUser, canWrite } from "@/server/access";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
+  // Projekty s přístupem (vlastní + pozvané) – aby i pozvaný dodavatel mohl
+  // rychle přidat výdaj a viděl „svůj" projekt (bez vlastního projektu = prázdno).
+  const accessible = await listProjectsForUser(user);
+  const writable = accessible.filter((a) => canWrite(a.role));
+  const writableProjects = writable.map((a) => ({
+    id: a.project.id,
+    name: a.project.name,
+  }));
+  const writableIds = writable.map((a) => a.project.id);
+  const projectsList = accessible.slice(0, 5).map((a) => a.project);
+
   const [
-    projectCount,
     expenseAgg,
     incomeAgg,
     forecastReqs,
     recentExpenses,
-    projects,
     catMap,
-    allProjects,
     vendorRows,
     categories,
     docTypes,
@@ -31,7 +40,6 @@ export default async function DashboardPage() {
     fcTaskRows,
     fcTaskExpenses,
   ] = await Promise.all([
-    prisma.project.count({ where: { ownerId: user.id } }),
     prisma.expense.aggregate({
       where: { project: { ownerId: user.id } },
       _sum: { amount: true },
@@ -55,22 +63,10 @@ export default async function DashboardPage() {
       take: 6,
       include: { project: true },
     }),
-    prisma.project.findMany({
-      where: { ownerId: user.id },
-      include: { _count: { select: { expenses: true, documents: true } } },
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-    }),
     getExpenseCategoryMap(),
-    prisma.project.findMany({
-      where: { ownerId: user.id },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, name: true },
-    }),
     prisma.vendor.findMany({
-      where: { ownerId: user.id },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, hourlyRate: true },
+      select: { id: true, name: true, email: true, hourlyRate: true },
     }),
     getExpenseCategories(),
     getDocumentTypes(),
@@ -85,9 +81,15 @@ export default async function DashboardPage() {
     hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
   }));
 
-  // Subprojekty vlastníka pro výběr složky v rychlém přidání (s odsazením dle vnoření)
+  // Dodavatel se stejným e-mailem jako přihlášený → předvyplní se u výdaje.
+  const myEmail = user.email?.toLowerCase();
+  const myVendorId = myEmail
+    ? vendorRows.find((v) => v.email?.toLowerCase() === myEmail)?.id
+    : undefined;
+
+  // Subprojekty přístupných projektů pro výběr složky (s odsazením dle vnoření)
   const subRows = await prisma.subProject.findMany({
-    where: { project: { ownerId: user.id } },
+    where: { projectId: { in: writableIds } },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, projectId: true, parentId: true },
   });
@@ -140,7 +142,7 @@ export default async function DashboardPage() {
   const expectedSaldo = totalIncome - totalSpent - totalForecast;
 
   const stats = [
-    { label: "Projekty", value: String(projectCount), className: "text-stone-950" },
+    { label: "Projekty", value: String(accessible.length), className: "text-stone-950" },
     { label: "Celkové příjmy", value: formatCurrency(totalIncome), className: "text-stone-950" },
     { label: "Celkové výdaje", value: formatCurrency(totalSpent), className: "text-stone-950" },
     {
@@ -163,9 +165,10 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <QuickAdd
-        projects={allProjects}
+        projects={writableProjects}
         subsByProject={subsByProject}
         vendors={quickVendors}
+        myVendorId={myVendorId}
         categories={categories}
         docTypes={docTypes}
         expenseStatuses={expenseStatuses}
@@ -197,7 +200,7 @@ export default async function DashboardPage() {
               Všechny
             </Link>
           </div>
-          {projects.length === 0 ? (
+          {projectsList.length === 0 ? (
             <p className="py-6 text-sm text-stone-500">
               Zatím nemáš žádné projekty.{" "}
               <Link href="/projects" className="text-stone-950 underline underline-offset-4">
@@ -207,7 +210,7 @@ export default async function DashboardPage() {
             </p>
           ) : (
             <ul>
-              {projects.map((p) => (
+              {projectsList.map((p) => (
                 <li key={p.id} className="border-b border-stone-200">
                   <Link
                     href={`/projects/${p.id}`}
