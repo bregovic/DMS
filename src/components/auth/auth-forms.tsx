@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import Link from "next/link";
 import {
   type AuthFormState,
-  googleSignInAction,
   loginAction,
   registerAction,
 } from "@/server/actions/auth";
@@ -12,28 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-function GoogleButton() {
-  return (
-    <form action={googleSignInAction}>
-      <Button type="submit" variant="outline" className="w-full">
-        Pokračovat přes Google
-      </Button>
-    </form>
-  );
-}
-
-function Divider() {
-  return (
-    <div className="relative my-6">
-      <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t border-stone-200" />
-      </div>
-      <div className="relative flex justify-center">
-        <span className="bg-white px-3 kicker">nebo</span>
-      </div>
-    </div>
-  );
-}
+// Přihlášení přes Google je dočasně vypnuté (zatím nefunguje) – provider zůstává
+// v auth.ts, jen se neukazuje v UI.
 
 function ErrorMsg({ state }: { state: AuthFormState }) {
   if (!state?.error) return null;
@@ -48,8 +27,6 @@ export function LoginForm() {
   const [state, action, pending] = useActionState(loginAction, undefined);
   return (
     <div>
-      <GoogleButton />
-      <Divider />
       <form action={action} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">E-mail</Label>
@@ -84,8 +61,6 @@ export function RegisterForm() {
   const [state, action, pending] = useActionState(registerAction, undefined);
   return (
     <div>
-      <GoogleButton />
-      <Divider />
       <form action={action} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="name">Jméno</Label>
