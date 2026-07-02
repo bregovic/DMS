@@ -22,11 +22,19 @@ export function resolveIban(account: string | null | undefined): string | null {
   return czAccountToIban(a);
 }
 
+// SPAYD (QR platba) očekává v podstatě ASCII. Odstraníme diakritiku a převedeme
+// běžnou typografii (pomlčky, uvozovky) na ASCII; cokoli mimo tisknutelné ASCII
+// zahodíme, ať bankovní aplikace zprávu (MSG) vždy načte.
 function ascii(s: string): string {
   return s
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/[*\r\n]/g, " ")
+    .replace(/[‒-―−]/g, "-") // pomlčky/minus → -
+    .replace(/[‘’‚‛]/g, "'") // jednoduché uvozovky → '
+    .replace(/[“”„‟]/g, '"') // dvojité uvozovky → "
+    .replace(/[*\r\n\t]/g, " ") // oddělovač SPAYD + řídicí znaky
+    .replace(/[^\x20-\x7E]/g, "") // zahodit zbylé ne-ASCII
+    .replace(/\s+/g, " ")
     .trim();
 }
 

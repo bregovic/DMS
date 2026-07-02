@@ -99,7 +99,7 @@ export async function aggregateExpensesQr(
     const msg =
       g.titles.length === 1
         ? g.titles[0]
-        : `${g.vendorName} – ${g.titles.length} výdajů`;
+        : `${g.vendorName} - ${g.titles.length} výdajů`;
     const spd = buildSpd({
       iban: g.iban,
       amount: g.amount,
