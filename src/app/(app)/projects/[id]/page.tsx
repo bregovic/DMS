@@ -509,6 +509,17 @@ export default async function ProjectDetailPage({
     ? accountVendors.find((v) => v.email?.toLowerCase() === myEmail)?.id
     : undefined;
 
+  // Našeptávání činností: unikátní názvy výdajů z celého projektu (napříč dodavateli).
+  const titleRows = canAdd
+    ? await prisma.expense.findMany({
+        where: { projectId: id },
+        select: { title: true },
+        distinct: ["title"],
+        orderBy: { title: "asc" },
+      })
+    : [];
+  const titleSuggestions = titleRows.map((t) => t.title).filter(Boolean);
+
   return (
     <div className="mx-auto max-w-7xl">
       {currentSub && (
@@ -812,6 +823,7 @@ export default async function ProjectDetailPage({
                 subProjectId={sub ?? undefined}
                 subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
                 myVendorId={myVendorId}
+                titleSuggestions={titleSuggestions}
                 vendors={accountVendors.map((v) => ({
                   id: v.id,
                   name: v.name,

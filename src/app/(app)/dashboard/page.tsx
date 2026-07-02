@@ -119,6 +119,19 @@ export default async function DashboardPage() {
     }
   }
 
+  // Našeptávání činností pro rychlé přidání: unikátní názvy výdajů per projekt.
+  const titleRows = await prisma.expense.findMany({
+    where: { projectId: { in: writableIds } },
+    select: { title: true, projectId: true },
+    distinct: ["projectId", "title"],
+    orderBy: { title: "asc" },
+  });
+  const titlesByProject: Record<string, string[]> = {};
+  for (const t of titleRows) {
+    if (!t.title) continue;
+    (titlesByProject[t.projectId] ??= []).push(t.title);
+  }
+
   const totalSpent = Number(expenseAgg._sum.amount ?? 0);
   const totalIncome = Number(incomeAgg._sum.amount ?? 0);
   const saldo = totalIncome - totalSpent;
@@ -167,6 +180,7 @@ export default async function DashboardPage() {
       <QuickAdd
         projects={writableProjects}
         subsByProject={subsByProject}
+        titlesByProject={titlesByProject}
         vendors={quickVendors}
         myVendorId={myVendorId}
         categories={categories}

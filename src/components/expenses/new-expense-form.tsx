@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export function NewExpenseForm({
   subProjectId,
   subProjects = [],
   myVendorId,
+  titleSuggestions = [],
   vendors,
   categories,
   docTypes,
@@ -43,6 +44,7 @@ export function NewExpenseForm({
   subProjectId?: string;
   subProjects?: { id: string; name: string }[];
   myVendorId?: string; // dodavatel se stejným e-mailem jako přihlášený uživatel
+  titleSuggestions?: string[]; // našeptávání činností z historie projektu
   vendors: Vendor[];
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
@@ -75,6 +77,7 @@ export function NewExpenseForm({
   const [subProject, setSubProject] = useState(
     subProjectId || d.subProjectId || "",
   );
+  const titleListId = useId();
 
   if (!open) {
     return (
@@ -164,7 +167,22 @@ export function NewExpenseForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="title">Název / popis činnosti</Label>
-            <Input id="title" name="title" placeholder="Např. Zdění příčky" required autoFocus />
+            <Input
+              id="title"
+              name="title"
+              placeholder="Např. Zdění příčky"
+              required
+              autoFocus
+              autoComplete="off"
+              list={titleSuggestions.length ? titleListId : undefined}
+            />
+            {titleSuggestions.length > 0 && (
+              <datalist id={titleListId}>
+                {titleSuggestions.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            )}
           </div>
 
           {subProjects.length > 0 && (

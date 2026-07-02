@@ -14,6 +14,7 @@ type Sub = { id: string; name: string };
 export function QuickAdd({
   projects,
   subsByProject,
+  titlesByProject = {},
   vendors,
   myVendorId,
   categories,
@@ -23,6 +24,7 @@ export function QuickAdd({
 }: {
   projects: { id: string; name: string }[];
   subsByProject: Record<string, Sub[]>;
+  titlesByProject?: Record<string, string[]>;
   vendors: Vendor[];
   myVendorId?: string;
   categories: { key: string; label: string }[];
@@ -104,6 +106,7 @@ export function QuickAdd({
               subProjectId={subId}
               vendors={vendors}
               myVendorId={myVendorId}
+              titleSuggestions={titlesByProject[pid] ?? []}
               categories={categories}
               docTypes={docTypes}
               statuses={expenseStatuses}
