@@ -84,8 +84,6 @@ export async function createExpense(formData: FormData) {
   const date = dateStr ? new Date(dateStr) : new Date();
   const status = "approved"; // schvalování zrušeno – vše rovnou platné
 
-  const paid =
-    formData.get("paid") === "on" || formData.get("paid") === "true";
   const dueStr = String(formData.get("dueDate") || "");
   const due = dueStr ? new Date(dueStr) : null;
   const variableSymbol =
@@ -120,7 +118,6 @@ export async function createExpense(formData: FormData) {
       hours,
       rate,
       date: isNaN(date.getTime()) ? new Date() : date,
-      paid,
       dueDate: due && !isNaN(due.getTime()) ? due : null,
       variableSymbol,
       stage: String(formData.get("stage") || "").trim() || null,
@@ -225,8 +222,6 @@ export async function updateExpense(formData: FormData) {
 
   const dateStr = String(formData.get("date") || "");
   const date = dateStr ? new Date(dateStr) : new Date();
-  const paid =
-    formData.get("paid") === "on" || formData.get("paid") === "true";
   const dueStr = String(formData.get("dueDate") || "");
   const due = dueStr ? new Date(dueStr) : null;
   const variableSymbol =
@@ -244,7 +239,6 @@ export async function updateExpense(formData: FormData) {
       hours,
       rate,
       date: isNaN(date.getTime()) ? new Date() : date,
-      paid,
       dueDate: due && !isNaN(due.getTime()) ? due : null,
       variableSymbol,
       stage: String(formData.get("stage") || "").trim() || null,
@@ -300,9 +294,9 @@ export async function bulkUpdateExpenses(formData: FormData) {
     await prisma.document.deleteMany({ where: { expenseId: { in: ids } } });
     await prisma.expense.deleteMany({ where });
   } else if (op === "paid") {
-    await prisma.expense.updateMany({ where, data: { paid: true } });
+    await prisma.expense.updateMany({ where, data: { stage: "uhrazeno" } });
   } else if (op === "unpaid") {
-    await prisma.expense.updateMany({ where, data: { paid: false } });
+    await prisma.expense.updateMany({ where, data: { stage: "k_uhrade" } });
   } else if (op === "stage") {
     const stage = String(formData.get("stage") || "").trim() || null;
     await prisma.expense.updateMany({ where, data: { stage } });
@@ -340,7 +334,11 @@ export async function setExpensePaid(formData: FormData) {
   if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Stav úhrady mění jen vlastník projektu.");
   }
-  await prisma.expense.updateMany({ where: { id, projectId }, data: { paid } });
+  // Úhrada = stav "uhrazeno" (jinak "k úhradě").
+  await prisma.expense.updateMany({
+    where: { id, projectId },
+    data: { stage: paid ? "uhrazeno" : "k_uhrade" },
+  });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/payments");
 }

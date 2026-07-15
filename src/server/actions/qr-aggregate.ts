@@ -59,7 +59,7 @@ export async function aggregateExpensesQr(
   >();
 
   for (const e of expenses) {
-    if (e.paid) {
+    if (e.stage === "uhrazeno") {
       skippedPaid++;
       continue;
     }

@@ -327,13 +327,6 @@ export function NewExpenseForm({
               <Label htmlFor="variableSymbol">VS</Label>
               <Input id="variableSymbol" name="variableSymbol" inputMode="numeric" placeholder="—" />
             </div>
-            <div className="space-y-1.5">
-              <Label>Úhrada</Label>
-              <label className="flex h-10 items-center gap-2 text-sm text-stone-700">
-                <input type="checkbox" name="paid" className="size-4 accent-stone-950" />
-                Uhrazeno
-              </label>
-            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="stage">Stav</Label>

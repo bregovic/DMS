@@ -28,7 +28,6 @@ export type ExpenseEdit = {
   date: string; // yyyy-mm-dd
   dueDate: string | null; // yyyy-mm-dd
   variableSymbol: string | null;
-  paid: boolean;
   description: string | null;
   vendorId: string | null;
   subProjectId: string | null;
@@ -270,13 +269,6 @@ export function EditExpenseForm({
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Úhrada</Label>
-              <label className="flex h-10 items-center gap-2 text-sm text-stone-700">
-                <input type="checkbox" name="paid" defaultChecked={expense.paid} className="size-4 accent-stone-950" />
-                Uhrazeno
-              </label>
             </div>
           </div>
 

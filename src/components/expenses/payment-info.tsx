@@ -13,24 +13,18 @@ export function PaymentInfo({
   overdue: boolean;
   hasBank: boolean;
 }) {
-  // Informativní stav úhrady (mění se přes stav výdaje / úpravu). Bez přepínače.
-  if (paid && !dueLabel) return null;
+  // Stav úhrady řeší lookup stav výdaje – tady jen splatnost + QR (bez duplicity).
+  if (paid) return null;
+  if (!dueLabel && !hasBank) return null;
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      <span
-        className={
-          paid
-            ? "text-emerald-700"
-            : overdue
-              ? "font-medium text-red-600"
-              : "text-stone-500"
-        }
-      >
-        {paid ? "Uhrazeno" : overdue ? "Po splatnosti" : "K úhradě"}
-        {!paid && dueLabel ? ` · do ${dueLabel}` : ""}
-      </span>
+      {dueLabel && (
+        <span className={overdue ? "font-medium text-red-600" : "text-stone-500"}>
+          {overdue ? "Po splatnosti" : "Splatnost"} · {dueLabel}
+        </span>
+      )}
 
-      {!paid && hasBank && (
+      {hasBank && (
         <a
           href={`/api/qr/${expenseId}`}
           target="_blank"

@@ -152,6 +152,13 @@ export function expenseStatusLabel(value: string) {
   return EXPENSE_STATUSES.find((s) => s.value === value)?.label ?? value;
 }
 
+// Úhrada výdaje se řídí stavem (ne samostatným booleanem). "uhrazeno" = zaplaceno.
+export const EXPENSE_PAID_STAGE = "uhrazeno";
+export const EXPENSE_TOPAY_STAGE = "k_uhrade";
+export function isExpensePaid(stage: string | null | undefined) {
+  return stage === EXPENSE_PAID_STAGE;
+}
+
 // Stavy úkolů (vestavěné). Vlastní v číselníku StatusOption scope "task".
 export const TASK_STATUSES = [
   { value: "rozhodnout", label: "Rozhodnout" },

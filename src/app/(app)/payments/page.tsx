@@ -9,7 +9,11 @@ export default async function PaymentsPage() {
   const user = await requireUser();
 
   const expenses = await prisma.expense.findMany({
-    where: { paid: false, project: { ownerId: user.id } },
+    // "K úhradě" = vše kromě stavu "uhrazeno" (i bez stavu).
+    where: {
+      project: { ownerId: user.id },
+      OR: [{ stage: null }, { stage: { not: "uhrazeno" } }],
+    },
     include: {
       project: { select: { id: true, name: true } },
       vendor: { select: { name: true, bankAccount: true } },
@@ -59,7 +63,7 @@ export default async function PaymentsPage() {
                 </p>
                 <PaymentInfo
                   expenseId={e.id}
-                  paid={e.paid}
+                  paid={e.stage === "uhrazeno"}
                   dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
                   overdue={!!e.dueDate && new Date(e.dueDate) < todayStart}
                   hasBank={Boolean(e.vendor?.bankAccount)}

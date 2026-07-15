@@ -383,7 +383,6 @@ model Expense {
   hours       Decimal? @db.Decimal(10, 2)
   rate        Decimal? @db.Decimal(12, 2)
   date        DateTime @default(now())
-  paid           Boolean   @default(false)
   dueDate        DateTime?
   variableSymbol String?
   exportedAt  DateTime? // označeno jako vyexportováno do CSV (účetnictví)
