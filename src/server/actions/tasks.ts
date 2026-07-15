@@ -407,6 +407,20 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
   const pred = new Map<string, string[]>(
     units.map((u) => [u.id, u.dependsOn.map((d) => d.dependsOnId).filter((x) => unitIds.has(x))]),
   );
+  // Auto-sekvence fází: každá fáze implicitně navazuje na předchozí (dle pořadí
+  // startu, pak vzniku), aby posun jedné fáze posunul i následující – i bez
+  // ručního „Navazuje na". Posun je jen dopředu (jako zbytek plánovače).
+  const phaseSeq = units
+    .filter((u) => u.kind === "phase")
+    .sort(
+      (a, b) =>
+        (a.startDate?.getTime() ?? a.createdAt.getTime()) -
+        (b.startDate?.getTime() ?? b.createdAt.getTime()),
+    );
+  for (let i = 1; i < phaseSeq.length; i++) {
+    const p = pred.get(phaseSeq[i].id)!;
+    if (!p.includes(phaseSeq[i - 1].id)) p.push(phaseSeq[i - 1].id);
+  }
   const indeg = new Map(units.map((u) => [u.id, pred.get(u.id)!.length]));
   const radj = new Map<string, string[]>(units.map((u) => [u.id, []]));
   for (const u of units) for (const pr of pred.get(u.id)!) radj.get(pr)?.push(u.id);
