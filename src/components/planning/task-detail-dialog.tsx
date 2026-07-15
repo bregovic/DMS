@@ -223,6 +223,47 @@ export function TaskDetailDialog({
               </p>
             </div>
 
+            {(d.odhadDays != null || d.realDays != null || d.actualStart) && (
+              <div className="border border-stone-200 bg-stone-50 px-4 py-3">
+                <p className="kicker mb-1.5">Odhad vs. realita</p>
+                <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+                  <span className="text-stone-500">
+                    Odhad{" "}
+                    <span className="font-mono text-stone-800">
+                      {d.odhadDays != null ? `${d.odhadDays} d` : "—"}
+                    </span>
+                  </span>
+                  <span className="text-stone-500">
+                    Realita{" "}
+                    <span className="font-mono text-stone-800">
+                      {d.realDays != null ? `${d.realDays} d` : "—"}
+                    </span>
+                  </span>
+                  {d.odhadDays != null && d.realDays != null && (
+                    <span
+                      className={
+                        d.realDays > d.odhadDays
+                          ? "font-medium text-red-600"
+                          : "text-emerald-700"
+                      }
+                    >
+                      {d.realDays > d.odhadDays
+                        ? `skluz +${d.realDays - d.odhadDays} d`
+                        : d.realDays < d.odhadDays
+                          ? `náskok ${d.odhadDays - d.realDays} d`
+                          : "přesně dle odhadu"}
+                    </span>
+                  )}
+                  {(d.actualStart || d.actualEnd) && (
+                    <span className="text-stone-400">
+                      {d.actualStart ?? "?"}
+                      {d.actualEnd ? ` → ${d.actualEnd}` : " → (probíhá)"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {d.cost && d.cost.total > 0 && (
               <div className="border border-stone-200 bg-stone-50 px-4 py-3">
                 <p className="kicker mb-1.5">

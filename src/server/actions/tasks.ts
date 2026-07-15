@@ -31,6 +31,26 @@ function toText(v: FormDataEntryValue | null): string | null {
   return String(v || "").trim() || null;
 }
 
+/** Skutečné datumy z přechodu stavu: začátek při rozdělání (probíhá/hotovo),
+ *  konec při dokončení. Realita vs. odhad v Plánování. */
+function actualPatch(
+  prev: { actualStart: Date | null; actualEnd: Date | null },
+  newStatus: string,
+): { actualStart?: Date | null; actualEnd?: Date | null } {
+  const n = new Date();
+  const today = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+  const patch: { actualStart?: Date | null; actualEnd?: Date | null } = {};
+  const started =
+    newStatus === "in_progress" || newStatus === "done" || newStatus === "cancelled";
+  if (started && !prev.actualStart) patch.actualStart = today;
+  if (newStatus === "done") {
+    if (!prev.actualEnd) patch.actualEnd = today;
+  } else if (prev.actualEnd) {
+    patch.actualEnd = null; // vráceno z hotového → zruš skutečný konec
+  }
+  return patch;
+}
+
 export async function createTask(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
@@ -75,6 +95,7 @@ export async function createTask(formData: FormData) {
     }
   }
 
+  const newStatus = String(formData.get("status") || "todo").trim() || "todo";
   await prisma.task.create({
     data: {
       projectId,
@@ -86,7 +107,8 @@ export async function createTask(formData: FormData) {
       assigneeEmail: normEmail(formData.get("assigneeEmail")),
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
-      status: String(formData.get("status") || "todo").trim() || "todo",
+      status: newStatus,
+      ...actualPatch({ actualStart: null, actualEnd: null }, newStatus),
       priority: toPriority(formData.get("priority")),
       profession: toText(formData.get("profession")),
       estimateDays: toInt(formData.get("estimateDays")),
@@ -112,6 +134,8 @@ async function taskCtx(id: string) {
       assigneeEmail: true,
       kind: true,
       subProjectId: true,
+      actualStart: true,
+      actualEnd: true,
     },
   });
   if (!task) throw new Error("Úkol nenalezen.");
@@ -150,6 +174,7 @@ export async function updateTask(formData: FormData) {
     parentUpdate = {}; // fáze: parent neměníme
   }
 
+  const newStatus = String(formData.get("status") || "todo").trim() || "todo";
   await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -158,7 +183,8 @@ export async function updateTask(formData: FormData) {
       assigneeEmail: normEmail(formData.get("assigneeEmail")),
       startDate: toDate(formData.get("startDate")),
       dueDate: toDate(formData.get("dueDate")),
-      status: String(formData.get("status") || "todo").trim() || "todo",
+      status: newStatus,
+      ...actualPatch(task, newStatus),
       priority: toPriority(formData.get("priority")),
       profession: toText(formData.get("profession")),
       estimateDays: toInt(formData.get("estimateDays")),
@@ -557,6 +583,7 @@ export async function getTaskDetail(id: string) {
       startDate: true, dueDate: true, dateLocked: true, assigneeEmail: true, vendorId: true,
       operationId: true, operationParams: true,
       priority: true, profession: true, estimateDays: true, percentDone: true,
+      actualStart: true, actualEnd: true,
       projectId: true, subProjectId: true, createdById: true,
       dependsOn: { select: { dependsOnId: true } },
       project: { select: { ownerId: true } },
@@ -717,6 +744,26 @@ export async function getTaskDetail(id: string) {
     };
   });
 
+  // Odhad vs realita (dny). U fáze se skutečné datumy i odhad berou z dílčích úkolů.
+  let odhadDays = task.estimateDays ?? null;
+  let aStart = task.actualStart;
+  let aEnd = task.actualEnd;
+  if (task.kind === "phase") {
+    const kids = await prisma.task.findMany({
+      where: { parentId: task.id },
+      select: { estimateDays: true, actualStart: true, actualEnd: true },
+    });
+    const est = kids.reduce((s, k) => s + (k.estimateDays ?? 0), 0);
+    if (est > 0) odhadDays = est;
+    const ks = kids.map((k) => k.actualStart?.getTime()).filter((x): x is number => x != null);
+    const ke = kids.map((k) => k.actualEnd?.getTime()).filter((x): x is number => x != null);
+    if (ks.length) aStart = new Date(Math.min(...ks));
+    if (ke.length) aEnd = new Date(Math.max(...ke));
+  }
+  const realDays =
+    aStart && aEnd ? Math.round((aEnd.getTime() - aStart.getTime()) / DAY_MS) + 1 : null;
+  const isoD = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+
   return {
     id: task.id,
     title: task.title,
@@ -731,6 +778,10 @@ export async function getTaskDetail(id: string) {
     priority: task.priority,
     profession: task.profession,
     estimateDays: task.estimateDays,
+    odhadDays,
+    realDays,
+    actualStart: isoD(aStart),
+    actualEnd: isoD(aEnd),
     percentDone: task.percentDone,
     projectId: task.projectId,
     subProjectId: task.subProjectId,
@@ -775,6 +826,7 @@ export async function updateTaskPlan(formData: FormData) {
   // automatický přepočet termín nepřepíše; jinak se blok plánuje automaticky.
   const dateLocked = String(formData.get("dateLocked") || "") === "1";
   const newTitle = String(formData.get("title") || "").trim();
+  const newStatus = String(formData.get("status") || "todo").trim() || "todo";
   await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -785,7 +837,8 @@ export async function updateTaskPlan(formData: FormData) {
       percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       vendorId,
       description: toText(formData.get("description")),
-      status: String(formData.get("status") || "todo").trim() || "todo",
+      status: newStatus,
+      ...actualPatch(task, newStatus),
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
@@ -856,7 +909,10 @@ export async function setTaskStatus(formData: FormData) {
   if (!isOwner && !isCreator && !isAssignee) {
     throw new Error("Stav tohoto úkolu nemůžeš měnit.");
   }
-  await prisma.task.update({ where: { id: task.id }, data: { status } });
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { status, ...actualPatch(task, status) },
+  });
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }

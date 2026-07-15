@@ -293,6 +293,8 @@ model Task {
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech
+  actualStart   DateTime? // skutečný začátek (první rozdělání) – realita vs. odhad
+  actualEnd     DateTime? // skutečný konec (dokončení)
   dateLocked    Boolean   @default(false) // termín zadán ručně → automatický přepočet ho nepřepíše
   operationId     String? // úkon katalogu, ze kterého úkol vznikl (proklik na recept)
   operationParams String? // JSON { values: {...}, multiplier } – zadané parametry (m²/m³, délka…)
