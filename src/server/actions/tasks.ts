@@ -516,7 +516,10 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
       const dates: { start: number; end: number }[] = [];
       for (const k of kids) {
         let s: number, e: number;
-        if (done(k.status) && k.dueDate) {
+        // Kotva: hotový úkol NEBO ručně uzamčený termín (dateLocked) drží svá
+        // data; ostatní se skládají za sebou dle odhadu dní. Díky tomu jde
+        // u dílčího úkolu zafixovat vlastní termín a nepřepíše ho přeplánování.
+        if ((done(k.status) || k.dateLocked) && k.dueDate) {
           s = (k.startDate ?? k.dueDate).getTime();
           e = k.dueDate.getTime();
           cursor = Math.max(cursor, e + DAY_MS);

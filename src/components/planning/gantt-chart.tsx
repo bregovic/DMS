@@ -138,9 +138,11 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     percentDone?: number,
   ) {
     const p = done ? 100 : percentDone ?? 0;
-    if (p >= 100) return "bg-stone-300";
+    if (p >= 100) return "bg-emerald-700"; // hotovo → vkusná tmavší zelená
     const s = start ? startOfDay(start).getTime() : null;
     const e = end ? startOfDay(end).getTime() : null;
+    // otevřené a po termínu → červená (ať pruh, ať milník)
+    if (e != null && e < t0) return "bg-red-500";
     if (s != null && e != null && e > s) {
       if (t0 < s) return "bg-stone-800"; // ještě nezačalo → nikdy červené
       const total = e - s;
@@ -150,14 +152,12 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
       if (e - t0 <= 14 * DAY) return "bg-amber-500";
       return "bg-stone-800";
     }
-    // jen termín (milník) – červená když je po termínu a nehotovo
-    if (e != null && e < t0) return "bg-red-500";
     if (e != null && e - t0 <= 14 * DAY) return "bg-amber-500";
     return "bg-stone-800";
   }
   // VŘ (žádanka) – běžící výběrko není červené; červené až po termínu rozhodnutí.
   function reqColor(end: Date | null, done: boolean) {
-    if (done) return "bg-stone-300";
+    if (done) return "bg-emerald-700";
     if (!end) return "bg-stone-800";
     const e = startOfDay(end).getTime();
     if (e < t0) return "bg-red-500";
@@ -391,11 +391,11 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
 
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> pozadu oproti plánu (% &lt; čas)</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / pozadu</span>
           <span className="flex items-center gap-1.5"><Lock className="size-3 text-red-500" /> čeká na jinou fázi</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-300" /> hotovo</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-emerald-700" /> hotovo</span>
         </div>
       </div>
 
