@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Mail, Phone } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { NewVendorForm } from "@/components/vendors/new-vendor-form";
 import { EditVendorForm } from "@/components/vendors/edit-vendor-form";
@@ -38,9 +39,10 @@ export default async function VendorsPage() {
       </header>
 
       {vendors.length === 0 ? (
-        <p className="py-16 text-center text-sm text-stone-500">
-          Zatím tu nejsou žádní dodavatelé. Přidej prvního tlačítkem výše.
-        </p>
+        <EmptyState
+          title="Žádní dodavatelé"
+          description="Přidej prvního dodavatele tlačítkem výše."
+        />
       ) : (
         <ul className="border-t border-stone-300/80">
           {vendors.map((v) => {

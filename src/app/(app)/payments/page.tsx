@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { setExpensePaid } from "@/server/actions/expenses";
 import { EXPENSE_PAID_STAGE, isExpensePaid } from "@/lib/constants";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function PaymentsPage({
@@ -58,9 +59,10 @@ export default async function PaymentsPage({
       </header>
 
       {expenses.length === 0 ? (
-        <p className="py-16 text-center text-sm text-stone-500">
-          Nic k úhradě.
-        </p>
+        <EmptyState
+          title="Nic k úhradě"
+          description="Všechny výdaje jsou uhrazené."
+        />
       ) : (
         <ul className="border-t border-stone-300/80">
           {expenses.map((e) => (
