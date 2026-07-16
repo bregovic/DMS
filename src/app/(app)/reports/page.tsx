@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ForecastReport } from "@/components/reports/forecast-report";
 import { formatCurrency } from "@/lib/utils";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
+import { ProjectSelect } from "@/components/reports/project-select";
 import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
 
 type BreakRow = { name: string; actual: number; forecast: number };
@@ -43,12 +44,23 @@ function BreakdownList({ rows }: { rows: BreakRow[] }) {
   );
 }
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>;
+}) {
   const user = await requireUser();
+  const projectId = (await searchParams)?.project || null;
+  const projectWhere = { ownerId: user.id, ...(projectId ? { id: projectId } : {}) };
 
-  const [expenses, forecastReqs, catMap] = await Promise.all([
+  const [projects, expenses, forecastReqs, catMap] = await Promise.all([
+    prisma.project.findMany({
+      where: { ownerId: user.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     prisma.expense.findMany({
-      where: { project: { ownerId: user.id } },
+      where: { project: projectWhere },
       select: {
         amount: true,
         category: true,
@@ -58,7 +70,7 @@ export default async function ReportsPage() {
     }),
     prisma.request.findMany({
       where: {
-        project: { ownerId: user.id },
+        project: projectWhere,
         status: { in: REQUEST_FORECAST_STATUSES },
         price: { not: null },
       },
@@ -126,12 +138,14 @@ export default async function ReportsPage() {
   if (expenses.length === 0 && totalForecast === 0) {
     return (
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8 border-b border-stone-300/80 pb-6">
+        <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
           <h1 className="display text-4xl text-stone-950">Reporty</h1>
+          <ProjectSelect projects={projects} />
         </header>
         <p className="py-16 text-center text-sm text-stone-500">
-          Zatím nejsou žádná data. Přidej výdaje nebo potvrzené žádanky a uvidíš
-          tu grafy.
+          {projectId
+            ? "Pro tento projekt zatím nejsou žádná data."
+            : "Zatím nejsou žádná data. Přidej výdaje nebo potvrzené žádanky a uvidíš tu grafy."}
         </p>
       </div>
     );
@@ -140,7 +154,10 @@ export default async function ReportsPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
-        <h1 className="display text-4xl text-stone-950">Reporty</h1>
+        <div className="flex flex-wrap items-end gap-4">
+          <h1 className="display text-4xl text-stone-950">Reporty</h1>
+          <ProjectSelect projects={projects} />
+        </div>
         <div className="flex gap-8">
           <div className="text-right">
             <p className="kicker">Skutečné výdaje</p>

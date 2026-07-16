@@ -97,7 +97,7 @@ export default async function VendorsPage() {
                     <p className="kicker mt-0.5">
                       {v._count.expenses > 0 ? (
                         <Link
-                          href={`/payments?vendor=${v.id}`}
+                          href={`/payments?pvendor=${v.id}`}
                           className="underline-offset-2 hover:text-stone-950 hover:underline"
                           title="Zobrazit platby k úhradě tohoto dodavatele"
                         >
