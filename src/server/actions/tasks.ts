@@ -845,12 +845,54 @@ export async function updateTaskPlan(formData: FormData) {
   const dateLocked = String(formData.get("dateLocked") || "") === "1";
   const newTitle = String(formData.get("title") || "").trim();
   const newStatus = String(formData.get("status") || "todo").trim() || "todo";
+  const newStart = toDate(formData.get("startDate"));
+  const newDue = toDate(formData.get("dueDate"));
+
+  // Fáze s dílčími úkoly: její začátek/termín řídí právě ty úkoly. Když u fáze
+  // změníš datum, posuneme o stejný počet dní celý blok dílčích úkolů (kromě
+  // hotových) – scheduler pak fázi dopočítá z posunutých úkolů, takže termín
+  // reálně sedne. Delta se bere primárně ze změny začátku, jinak ze změny termínu.
+  if (task.kind === "phase") {
+    const [cur, kids] = await Promise.all([
+      prisma.task.findUnique({
+        where: { id: task.id },
+        select: { startDate: true, dueDate: true },
+      }),
+      prisma.task.findMany({
+        where: { parentId: task.id },
+        select: { id: true, startDate: true, dueDate: true, status: true },
+      }),
+    ]);
+    if (kids.length) {
+      let deltaMs = 0;
+      if (newStart && cur?.startDate)
+        deltaMs = newStart.getTime() - cur.startDate.getTime();
+      if (deltaMs === 0 && newDue && cur?.dueDate)
+        deltaMs = newDue.getTime() - cur.dueDate.getTime();
+      const days = Math.round(deltaMs / DAY_MS);
+      if (days !== 0) {
+        const shifts = kids
+          .filter((k) => !TASK_DONE_STATUSES.includes(k.status))
+          .map((k) =>
+            prisma.task.update({
+              where: { id: k.id },
+              data: {
+                startDate: k.startDate ? addDaysUTC(k.startDate, days) : null,
+                dueDate: k.dueDate ? addDaysUTC(k.dueDate, days) : null,
+              },
+            }),
+          );
+        if (shifts.length) await prisma.$transaction(shifts);
+      }
+    }
+  }
+
   await prisma.task.update({
     where: { id: task.id },
     data: {
       ...(newTitle ? { title: newTitle } : {}),
-      startDate: toDate(formData.get("startDate")),
-      dueDate: toDate(formData.get("dueDate")),
+      startDate: newStart,
+      dueDate: newDue,
       dateLocked,
       percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       vendorId,
