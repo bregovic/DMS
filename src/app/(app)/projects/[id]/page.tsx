@@ -402,7 +402,10 @@ export default async function ProjectDetailPage({
   if (etoRaw && !isNaN(etoRaw.getTime()))
     shownExpenses = shownExpenses.filter((e) => e.date <= etoRaw);
   if (evendor) shownExpenses = shownExpenses.filter((e) => e.vendorId === evendor);
-  if (estage) shownExpenses = shownExpenses.filter((e) => e.stage === estage);
+  if (estage === "__unpaid__")
+    // „Neuhrazené" = vše kromě stavu uhrazeno (i výdaje bez nastaveného stavu).
+    shownExpenses = shownExpenses.filter((e) => !isExpensePaid(e.stage));
+  else if (estage) shownExpenses = shownExpenses.filter((e) => e.stage === estage);
   const sign = edir === "asc" ? 1 : -1;
   shownExpenses = [...shownExpenses].sort((a, b) =>
     esort === "amount"
@@ -876,7 +879,10 @@ export default async function ProjectDetailPage({
                 {
                   key: "stage",
                   label: "Stav",
-                  options: expenseStatuses.map((s) => ({ value: s.key, label: s.label })),
+                  options: [
+                    { value: "__unpaid__", label: "— Neuhrazené —" },
+                    ...expenseStatuses.map((s) => ({ value: s.key, label: s.label })),
+                  ],
                 },
               ]}
             />
