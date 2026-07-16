@@ -406,7 +406,27 @@ export function TaskDetailDialog({
                     </div>
                   </div>
 
-                  {d.canEdit && (
+                  {d.canEdit && d.kind === "phase" && d.childCount > 0 && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dd-phasemode">Při změně data fáze</Label>
+                      <select
+                        id="dd-phasemode"
+                        name="phaseMode"
+                        defaultValue="move"
+                        className={fieldClass}
+                      >
+                        <option value="move">Posunout úkoly (zachovat délku)</option>
+                        <option value="stretch">Roztáhnout úkoly (vyplnit interval)</option>
+                      </select>
+                      <p className="text-[11px] text-stone-400">
+                        Fáze nemá vlastní termín — řídí se dílčími úkoly.
+                        „Posunout" zachová délku a posune blok; „Roztáhnout"
+                        přeškáluje odhady úkolů, aby vyplnily interval.
+                      </p>
+                    </div>
+                  )}
+
+                  {d.canEdit && !(d.kind === "phase" && d.childCount > 0) && (
                     <label className="flex items-start gap-2 text-xs text-stone-600">
                       <input
                         type="checkbox"

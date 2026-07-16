@@ -791,6 +791,7 @@ export async function getTaskDetail(id: string) {
     startDate: task.startDate ? task.startDate.toISOString().slice(0, 10) : null,
     dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
     dateLocked: task.dateLocked,
+    childCount: childIds.length,
     assigneeEmail: task.assigneeEmail,
     vendorId: task.vendorId,
     priority: task.priority,
@@ -845,13 +846,16 @@ export async function updateTaskPlan(formData: FormData) {
   const dateLocked = String(formData.get("dateLocked") || "") === "1";
   const newTitle = String(formData.get("title") || "").trim();
   const newStatus = String(formData.get("status") || "todo").trim() || "todo";
-  const newStart = toDate(formData.get("startDate"));
   const newDue = toDate(formData.get("dueDate"));
+  // "move" = posun (zachovat délku), "stretch" = natáhnout (přeškálovat odhady).
+  const phaseMode = String(formData.get("phaseMode") || "move");
+  // Začátek fáze, který nakonec zapíšeme (u fáze s úkoly ho můžeme odvodit).
+  let newStart = toDate(formData.get("startDate"));
 
-  // Fáze s dílčími úkoly: její začátek/termín řídí právě ty úkoly. Když u fáze
-  // změníš datum, posuneme o stejný počet dní celý blok dílčích úkolů (kromě
-  // hotových) – scheduler pak fázi dopočítá z posunutých úkolů, takže termín
-  // reálně sedne. Delta se bere primárně ze změny začátku, jinak ze změny termínu.
+  // Fáze s dílčími úkoly: její interval řídí začátek + odhady úkolů (scheduler je
+  // skládá od začátku fáze za sebou). Ruční termín se proto sám nepromítne –
+  // podle režimu proto buď POSUNEME (nastavíme začátek dle změny začátku/termínu
+  // a zachováme délku), nebo NATÁHNEME (přeškálujeme odhady úkolů na cílovou délku).
   if (task.kind === "phase") {
     const [cur, kids] = await Promise.all([
       prisma.task.findUnique({
@@ -860,29 +864,44 @@ export async function updateTaskPlan(formData: FormData) {
       }),
       prisma.task.findMany({
         where: { parentId: task.id },
-        select: { id: true, startDate: true, dueDate: true, status: true },
+        select: { id: true, estimateDays: true },
       }),
     ]);
-    if (kids.length) {
-      let deltaMs = 0;
-      if (newStart && cur?.startDate)
-        deltaMs = newStart.getTime() - cur.startDate.getTime();
-      if (deltaMs === 0 && newDue && cur?.dueDate)
-        deltaMs = newDue.getTime() - cur.dueDate.getTime();
-      const days = Math.round(deltaMs / DAY_MS);
-      if (days !== 0) {
-        const shifts = kids
-          .filter((k) => !TASK_DONE_STATUSES.includes(k.status))
-          .map((k) =>
-            prisma.task.update({
-              where: { id: k.id },
-              data: {
-                startDate: k.startDate ? addDaysUTC(k.startDate, days) : null,
-                dueDate: k.dueDate ? addDaysUTC(k.dueDate, days) : null,
-              },
-            }),
+    if (kids.length && cur?.startDate && cur?.dueDate) {
+      const startChanged = !!newStart && newStart.getTime() !== cur.startDate.getTime();
+      const dueChanged = !!newDue && newDue.getTime() !== cur.dueDate.getTime();
+
+      if (phaseMode === "stretch" && newDue) {
+        // Natáhnout: rozprostřít odhady dílčích úkolů tak, aby jejich součet
+        // (a tím i délka fáze) vyplnil interval začátek→termín.
+        const start = startChanged && newStart ? newStart : cur.startDate;
+        const targetDays = Math.round((newDue.getTime() - start.getTime()) / DAY_MS) + 1;
+        const curDays = kids.reduce((s, k) => s + Math.max(k.estimateDays ?? 1, 1), 0);
+        if (targetDays > 0 && curDays > 0 && targetDays !== curDays) {
+          const scale = targetDays / curDays;
+          await prisma.$transaction(
+            kids.map((k) =>
+              prisma.task.update({
+                where: { id: k.id },
+                data: {
+                  estimateDays: Math.max(1, Math.round(Math.max(k.estimateDays ?? 1, 1) * scale)),
+                },
+              }),
+            ),
           );
-        if (shifts.length) await prisma.$transaction(shifts);
+        }
+        newStart = start;
+      } else {
+        // Posunout: zachovat délku, jen posunout začátek – přímo dle nového
+        // začátku, nebo (když se změnil jen termín) odvodit začátek z termínu.
+        if (startChanged && newStart) {
+          // newStart je už nastavený
+        } else if (dueChanged && newDue) {
+          const lenMs = cur.dueDate.getTime() - cur.startDate.getTime();
+          newStart = new Date(newDue.getTime() - lenMs);
+        } else {
+          newStart = cur.startDate;
+        }
       }
     }
   }
