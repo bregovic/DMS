@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { storage } from "@/lib/storage";
+import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null) return null;
@@ -30,11 +31,11 @@ export async function createExpense(formData: FormData) {
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
-  // Dodavatel (komu výdaj patří) – ze sdíleného číselníku (ověříme jen existenci)
+  // Dodavatel (komu výdaj patří) – jen vlastníka projektu (izolace mezi účty).
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId },
+      where: { id: vendorId, ownerId: project.ownerId },
       select: { id: true },
     });
     if (!v) vendorId = null;
@@ -173,7 +174,7 @@ export async function updateExpense(formData: FormData) {
 
   const existing = await prisma.expense.findFirst({
     where: { id, projectId },
-    select: { id: true },
+    select: { id: true, project: { select: { ownerId: true } } },
   });
   if (!existing) throw new Error("Výdaj nenalezen.");
 
@@ -183,7 +184,7 @@ export async function updateExpense(formData: FormData) {
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId },
+      where: { id: vendorId, ownerId: existing.project.ownerId },
       select: { id: true },
     });
     if (!v) vendorId = null;
@@ -294,9 +295,9 @@ export async function bulkUpdateExpenses(formData: FormData) {
     await prisma.document.deleteMany({ where: { expenseId: { in: ids } } });
     await prisma.expense.deleteMany({ where });
   } else if (op === "paid") {
-    await prisma.expense.updateMany({ where, data: { stage: "uhrazeno" } });
+    await prisma.expense.updateMany({ where, data: { stage: EXPENSE_PAID_STAGE } });
   } else if (op === "unpaid") {
-    await prisma.expense.updateMany({ where, data: { stage: "k_uhrade" } });
+    await prisma.expense.updateMany({ where, data: { stage: EXPENSE_TOPAY_STAGE } });
   } else if (op === "stage") {
     const stage = String(formData.get("stage") || "").trim() || null;
     await prisma.expense.updateMany({ where, data: { stage } });
@@ -337,7 +338,7 @@ export async function setExpensePaid(formData: FormData) {
   // Úhrada = stav "uhrazeno" (jinak "k úhradě").
   await prisma.expense.updateMany({
     where: { id, projectId },
-    data: { stage: paid ? "uhrazeno" : "k_uhrade" },
+    data: { stage: paid ? EXPENSE_PAID_STAGE : EXPENSE_TOPAY_STAGE },
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/payments");

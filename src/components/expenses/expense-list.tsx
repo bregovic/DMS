@@ -211,7 +211,7 @@ export function ExpenseList({
                 <p className="kicker mt-0.5">
                   {kindLabel(e.kind)} · {e.categoryLabel} · {e.dateLabel}
                   {e.vendorName ? ` · ${e.vendorName}` : ""}
-                  {e.hours ? ` · ${e.hours} h × ${e.rate}` : ""}
+                  {e.hours ? ` · ${e.hours} h × ${formatCurrency(e.rate ?? 0, e.currency)}` : ""}
                   {` · zadal ${e.createdByLabel}`}
                 </p>
                 <PaymentInfo

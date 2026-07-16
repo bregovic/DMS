@@ -136,6 +136,7 @@ async function taskCtx(id: string) {
       subProjectId: true,
       actualStart: true,
       actualEnd: true,
+      project: { select: { ownerId: true } },
     },
   });
   if (!task) throw new Error("Úkol nenalezen.");
@@ -609,7 +610,7 @@ export async function getTaskDetail(id: string) {
       orderBy: { createdAt: "asc" },
     }),
     prisma.vendor.findMany({
-      where: {},
+      where: { ownerId: task.project.ownerId },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -816,7 +817,7 @@ export async function updateTaskPlan(formData: FormData) {
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId },
+      where: { id: vendorId, ownerId: task.project.ownerId },
       select: { id: true },
     });
     if (!v) vendorId = null;

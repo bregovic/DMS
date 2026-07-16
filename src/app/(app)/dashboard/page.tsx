@@ -65,6 +65,7 @@ export default async function DashboardPage() {
     }),
     getExpenseCategoryMap(),
     prisma.vendor.findMany({
+      where: { ownerId: user.id },
       orderBy: { name: "asc" },
       select: { id: true, name: true, email: true, hourlyRate: true },
     }),

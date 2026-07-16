@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { setExpensePaid } from "@/server/actions/expenses";
+import { EXPENSE_PAID_STAGE, isExpensePaid } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function PaymentsPage({
@@ -21,7 +22,7 @@ export default async function PaymentsPage({
     where: {
       project: { ownerId: user.id },
       ...(vendorId ? { vendorId } : {}),
-      OR: [{ stage: null }, { stage: { not: "uhrazeno" } }],
+      OR: [{ stage: null }, { stage: { not: EXPENSE_PAID_STAGE } }],
     },
     include: {
       project: { select: { id: true, name: true } },
@@ -58,7 +59,7 @@ export default async function PaymentsPage({
 
       {expenses.length === 0 ? (
         <p className="py-16 text-center text-sm text-stone-500">
-          Nic k úhradě. 🎉
+          Nic k úhradě.
         </p>
       ) : (
         <ul className="border-t border-stone-300/80">
@@ -82,7 +83,7 @@ export default async function PaymentsPage({
                 </p>
                 <PaymentInfo
                   expenseId={e.id}
-                  paid={e.stage === "uhrazeno"}
+                  paid={isExpensePaid(e.stage)}
                   dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
                   overdue={!!e.dueDate && new Date(e.dueDate) < todayStart}
                   hasBank={Boolean(e.vendor?.bankAccount)}

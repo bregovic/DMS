@@ -41,6 +41,8 @@ import {
   priorityLabel,
   priorityColor,
   REQUEST_FORECAST_STATUSES,
+  TASK_DONE_STATUSES,
+  isExpensePaid,
 } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
 import { colorClasses } from "@/lib/status-colors";
@@ -379,7 +381,7 @@ export default async function ProjectDetailPage({
   for (const t of levelTasks)
     if (t.kind !== "phase" && !t.parentId) orderedTasks.push({ t, level: 0 });
   const phaseOptions = taskPhases.map((p) => ({ id: p.id, title: p.title }));
-  const isTaskDone = (st: string) => st === "done" || st === "cancelled";
+  const isTaskDone = (st: string) => TASK_DONE_STATUSES.includes(st);
   // Náklady přímo na této úrovni (mimo podsložky)
   const levelTotal = levelExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -411,7 +413,7 @@ export default async function ProjectDetailPage({
   // Součty pro zafiltrované výdaje (celkem + kolik z toho ještě k úhradě).
   const shownTotal = shownExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const shownUnpaidTotal = shownExpenses
-    .filter((e) => e.stage !== "uhrazeno")
+    .filter((e) => !isExpensePaid(e.stage))
     .reduce((s, e) => s + Number(e.amount), 0);
   // Volby filtru dodavatele = dodavatelé, co mají na této úrovni výdaj.
   const expVendorOptions = [
@@ -435,10 +437,10 @@ export default async function ProjectDetailPage({
     currency: e.currency,
     stage: e.stage,
     status: e.status,
-    paid: e.stage === "uhrazeno",
+    paid: isExpensePaid(e.stage),
     exported: !!e.exportedAt,
     dueLabel: e.dueDate ? formatDate(e.dueDate) : null,
-    overdue: e.stage !== "uhrazeno" && !!e.dueDate && new Date(e.dueDate) < todayStart,
+    overdue: !isExpensePaid(e.stage) && !!e.dueDate && new Date(e.dueDate) < todayStart,
     hasBank: Boolean(e.vendor?.bankAccount),
     docs: e.documents.map((d) => ({ id: d.id, originalName: d.originalName })),
     createdByLabel: e.createdBy.name ?? e.createdBy.email ?? "?",
@@ -500,7 +502,7 @@ export default async function ProjectDetailPage({
 
   const accountVendors = canAdd
     ? await prisma.vendor.findMany({
-        where: {},
+        where: { ownerId: project.ownerId },
         orderBy: { name: "asc" },
         select: { id: true, name: true, email: true, hourlyRate: true },
       })

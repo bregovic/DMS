@@ -15,13 +15,13 @@ export default async function VendorsPage() {
 
   const [vendors, totals] = await Promise.all([
     prisma.vendor.findMany({
-      where: {},
+      where: { ownerId: user.id },
       orderBy: { name: "asc" },
       include: { _count: { select: { expenses: true, projects: true } } },
     }),
     prisma.expense.groupBy({
       by: ["vendorId"],
-      where: {},
+      where: { project: { ownerId: user.id } },
       _sum: { amount: true },
     }),
   ]);
@@ -107,7 +107,7 @@ export default async function VendorsPage() {
                       · {v._count.projects} proj.
                     </p>
                   </div>
-                  <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                  <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     <VendorAvailabilityDialog vendorId={v.id} vendorName={v.name} />
                     <EditVendorForm
                       vendor={{

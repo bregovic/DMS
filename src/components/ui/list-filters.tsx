@@ -112,6 +112,7 @@ export function ListFilters({
         <button
           type="button"
           title={dir === "asc" ? "Vzestupně" : "Sestupně"}
+          aria-label={dir === "asc" ? "Řadit vzestupně" : "Řadit sestupně"}
           onClick={() => setParam({ [k("dir")]: dir === "asc" ? "desc" : "asc" })}
           className="flex h-8 items-center gap-1 border border-stone-300 px-2 text-xs text-stone-700 hover:border-stone-950 cursor-pointer"
         >
@@ -122,6 +123,7 @@ export function ListFilters({
           <button
             type="button"
             title="Zrušit filtr a řazení"
+            aria-label="Zrušit filtr a řazení"
             onClick={() => {
               setQ("");
               setParam({

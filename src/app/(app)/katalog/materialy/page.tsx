@@ -56,7 +56,7 @@ export default async function MaterialsPage() {
                     {m.priceDate ? ` · ${m.priceDate.toISOString().slice(0, 10)}` : ""}
                   </td>
                   <td className="py-2.5">
-                    <span className="flex items-center justify-end gap-3 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                    <span className="flex items-center justify-end gap-3 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                       <MaterialForm
                         material={{
                           id: m.id,

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess } from "@/server/access";
 import { buildSpd, resolveIban } from "@/lib/payment";
+import { isExpensePaid } from "@/lib/constants";
 
 export type QrGroup = {
   accountLabel: string; // původní účet dodavatele (nebo IBAN)
@@ -61,7 +62,7 @@ export async function aggregateExpensesQr(
   >();
 
   for (const e of expenses) {
-    if (e.stage === "uhrazeno") {
+    if (isExpensePaid(e.stage)) {
       skippedPaid++;
       continue;
     }
