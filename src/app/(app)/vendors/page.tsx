@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Mail, Phone } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -92,7 +93,18 @@ export default async function VendorsPage() {
                       {formatCurrency(spent)}
                     </p>
                     <p className="kicker mt-0.5">
-                      {v._count.expenses} výdajů · {v._count.projects} proj.
+                      {v._count.expenses > 0 ? (
+                        <Link
+                          href={`/payments?vendor=${v.id}`}
+                          className="underline-offset-2 hover:text-stone-950 hover:underline"
+                          title="Zobrazit platby k úhradě tohoto dodavatele"
+                        >
+                          {v._count.expenses} výdajů
+                        </Link>
+                      ) : (
+                        `${v._count.expenses} výdajů`
+                      )}{" "}
+                      · {v._count.projects} proj.
                     </p>
                   </div>
                   <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">

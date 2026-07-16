@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import {
   aggregateExpensesQr,
   type QrGroup,
 } from "@/server/actions/qr-aggregate";
+import { bulkUpdateExpenses } from "@/server/actions/expenses";
 import { formatCurrency } from "@/lib/utils";
 
 export function QrAggregateModal({
@@ -22,6 +24,8 @@ export function QrAggregateModal({
   const [groups, setGroups] = useState<QrGroup[]>([]);
   const [skippedPaid, setSkippedPaid] = useState(0);
   const [skippedNoBank, setSkippedNoBank] = useState<string[]>([]);
+  const [paying, setPaying] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     let alive = true;
@@ -126,6 +130,42 @@ export function QrAggregateModal({
             </div>
           )}
         </div>
+
+        {!loading && !error && groups.length > 0 && (
+          <div className="flex items-center justify-end gap-2 border-t border-stone-200 px-5 py-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 px-3 text-sm text-stone-500 transition-colors hover:text-stone-950 cursor-pointer"
+            >
+              Zavřít
+            </button>
+            <button
+              type="button"
+              disabled={paying}
+              onClick={async () => {
+                const ids = groups.flatMap((g) => g.ids);
+                if (ids.length === 0) return;
+                setPaying(true);
+                try {
+                  const fd = new FormData();
+                  fd.set("projectId", projectId);
+                  fd.set("op", "paid");
+                  fd.set("ids", ids.join(","));
+                  await bulkUpdateExpenses(fd);
+                  router.refresh();
+                  onClose();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Nepodařilo se označit jako uhrazené.");
+                  setPaying(false);
+                }
+              }}
+              className="h-9 border border-emerald-600 bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+            >
+              {paying ? "Ukládám…" : "Potvrdit úhradu (uhrazeno)"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

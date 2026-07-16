@@ -11,10 +11,17 @@ export function ListFilters({
   prefix,
   placeholder = "Hledat v názvu…",
   sortOptions,
+  selects = [],
 }: {
   prefix: string;
   placeholder?: string;
   sortOptions: { value: string; label: string }[];
+  // Volitelné rozbalovací filtry (např. dodavatel, stav) – stav v URL pod prefixem.
+  selects?: {
+    key: string;
+    label: string;
+    options: { value: string; label: string }[];
+  }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,7 +45,8 @@ export function ListFilters({
   }
 
   const active =
-    q || from || to || sp.get(k("sort")) || sp.get(k("dir"));
+    q || from || to || sp.get(k("sort")) || sp.get(k("dir")) ||
+    selects.some((s) => sp.get(k(s.key)));
   const inputClass =
     "h-8 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950";
 
@@ -73,6 +81,22 @@ export function ListFilters({
         />
       </label>
 
+      {selects.map((s) => (
+        <select
+          key={s.key}
+          value={sp.get(k(s.key)) ?? ""}
+          onChange={(e) => setParam({ [k(s.key)]: e.target.value })}
+          className={inputClass}
+        >
+          <option value="">{s.label}</option>
+          {s.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ))}
+
       <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
         <select
           value={sort}
@@ -106,6 +130,7 @@ export function ListFilters({
                 [k("to")]: null,
                 [k("sort")]: null,
                 [k("dir")]: null,
+                ...Object.fromEntries(selects.map((s) => [k(s.key), null])),
               });
             }}
             className="flex size-8 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer"

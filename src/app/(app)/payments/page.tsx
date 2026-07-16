@@ -5,13 +5,22 @@ import { PaymentInfo } from "@/components/expenses/payment-info";
 import { setExpensePaid } from "@/server/actions/expenses";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vendor?: string }>;
+}) {
   const user = await requireUser();
+  const vendorId = (await searchParams)?.vendor || null;
+  const filterVendor = vendorId
+    ? await prisma.vendor.findUnique({ where: { id: vendorId }, select: { name: true } })
+    : null;
 
   const expenses = await prisma.expense.findMany({
     // "K úhradě" = vše kromě stavu "uhrazeno" (i bez stavu).
     where: {
       project: { ownerId: user.id },
+      ...(vendorId ? { vendorId } : {}),
       OR: [{ stage: null }, { stage: { not: "uhrazeno" } }],
     },
     include: {
@@ -28,7 +37,17 @@ export default async function PaymentsPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-8 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
-        <h1 className="display text-4xl text-stone-950">Platby</h1>
+        <div>
+          <h1 className="display text-4xl text-stone-950">Platby</h1>
+          {filterVendor && (
+            <p className="kicker mt-1">
+              Dodavatel: {filterVendor.name} ·{" "}
+              <Link href="/payments" className="underline-offset-2 hover:text-stone-950 hover:underline">
+                zrušit filtr
+              </Link>
+            </p>
+          )}
+        </div>
         <div className="text-right">
           <p className="kicker">K úhradě celkem</p>
           <p className="display mt-1 text-2xl text-stone-950">

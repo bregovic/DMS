@@ -390,6 +390,8 @@ export default async function ProjectDetailPage({
   if (etoRaw) etoRaw.setHours(23, 59, 59, 999);
   const esort = sp?.esort === "amount" ? "amount" : "date";
   const edir = sp?.edir === "asc" ? "asc" : "desc";
+  const evendor = typeof sp?.evendor === "string" ? sp.evendor : "";
+  const estage = typeof sp?.estage === "string" ? sp.estage : "";
 
   let shownExpenses = levelExpenses;
   if (eq) shownExpenses = shownExpenses.filter((e) => e.title.toLowerCase().includes(eq));
@@ -397,13 +399,28 @@ export default async function ProjectDetailPage({
     shownExpenses = shownExpenses.filter((e) => e.date >= efrom);
   if (etoRaw && !isNaN(etoRaw.getTime()))
     shownExpenses = shownExpenses.filter((e) => e.date <= etoRaw);
+  if (evendor) shownExpenses = shownExpenses.filter((e) => e.vendorId === evendor);
+  if (estage) shownExpenses = shownExpenses.filter((e) => e.stage === estage);
   const sign = edir === "asc" ? 1 : -1;
   shownExpenses = [...shownExpenses].sort((a, b) =>
     esort === "amount"
       ? (Number(a.amount) - Number(b.amount)) * sign
       : (a.date.getTime() - b.date.getTime()) * sign,
   );
-  const expenseFilterActive = Boolean(eq || efrom || etoRaw);
+  const expenseFilterActive = Boolean(eq || efrom || etoRaw || evendor || estage);
+  // Součty pro zafiltrované výdaje (celkem + kolik z toho ještě k úhradě).
+  const shownTotal = shownExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const shownUnpaidTotal = shownExpenses
+    .filter((e) => e.stage !== "uhrazeno")
+    .reduce((s, e) => s + Number(e.amount), 0);
+  // Volby filtru dodavatele = dodavatelé, co mají na této úrovni výdaj.
+  const expVendorOptions = [
+    ...new Map(
+      levelExpenses.filter((e) => e.vendor).map((e) => [e.vendor!.id, e.vendor!.name]),
+    ).entries(),
+  ]
+    .map(([value, label]) => ({ value, label: label ?? value }))
+    .sort((a, b) => a.label.localeCompare(b.label, "cs"));
 
   const expenseItems = shownExpenses.map((e) => ({
     id: e.id,
@@ -850,7 +867,31 @@ export default async function ProjectDetailPage({
                 { value: "date", label: "Datum" },
                 { value: "amount", label: "Částka" },
               ]}
+              selects={[
+                ...(expVendorOptions.length > 0
+                  ? [{ key: "vendor", label: "Dodavatel", options: expVendorOptions }]
+                  : []),
+                {
+                  key: "stage",
+                  label: "Stav",
+                  options: expenseStatuses.map((s) => ({ value: s.key, label: s.label })),
+                },
+              ]}
             />
+            {shownExpenses.length > 0 && (
+              <p className="mb-3 text-xs text-stone-500">
+                Součet{expenseFilterActive ? " (filtr)" : ""}:{" "}
+                <span className="font-mono text-stone-800">{formatCurrency(shownTotal)}</span>
+                {shownUnpaidTotal > 0 && (
+                  <>
+                    {" · k úhradě "}
+                    <span className="font-mono text-stone-800">
+                      {formatCurrency(shownUnpaidTotal)}
+                    </span>
+                  </>
+                )}
+              </p>
+            )}
             {isManager && shownExpenses.length > 0 && (
               <div className="mb-3 flex justify-end">
                 <ExportExpensesButton

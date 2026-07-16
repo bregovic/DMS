@@ -14,6 +14,7 @@ export type QrGroup = {
   count: number;
   vs: string | null;
   titles: string[];
+  ids: string[]; // id výdajů reálně v této QR (pro potvrzení úhrady)
   qr: string; // data URL PNG
 };
 
@@ -54,6 +55,7 @@ export async function aggregateExpensesQr(
       currency: string;
       amount: number;
       titles: string[];
+      ids: string[];
       vsSet: Set<string>;
     }
   >();
@@ -78,10 +80,12 @@ export async function aggregateExpensesQr(
         currency: e.currency,
         amount: 0,
         titles: [],
+        ids: [],
         vsSet: new Set<string>(),
       };
     g.amount += Number(e.amount);
     g.titles.push(e.title);
+    g.ids.push(e.id);
     if (e.variableSymbol) g.vsSet.add(e.variableSymbol);
     map.set(key, g);
   }
@@ -116,6 +120,7 @@ export async function aggregateExpensesQr(
       count: g.titles.length,
       vs,
       titles: g.titles,
+      ids: g.ids,
       qr,
     });
   }
