@@ -1,18 +1,21 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { BUILTIN_PROJECT_TYPES } from "@/lib/constants";
 
 export type ProjectTypeOption = { key: string; label: string };
 
-/** Vestavěné typy + vlastní z DB (sdílený číselník). */
-export async function getProjectTypes(): Promise<ProjectTypeOption[]> {
-  const custom = await prisma.projectType.findMany({
-    orderBy: { label: "asc" },
-  });
-  return [
-    ...BUILTIN_PROJECT_TYPES.map((t) => ({ key: t.key, label: t.label })),
-    ...custom.map((t) => ({ key: t.key, label: t.label })),
-  ];
-}
+/** Vestavěné typy + vlastní z DB (cache dedupuje v rámci renderu). */
+export const getProjectTypes = cache(
+  async (): Promise<ProjectTypeOption[]> => {
+    const custom = await prisma.projectType.findMany({
+      orderBy: { label: "asc" },
+    });
+    return [
+      ...BUILTIN_PROJECT_TYPES.map((t) => ({ key: t.key, label: t.label })),
+      ...custom.map((t) => ({ key: t.key, label: t.label })),
+    ];
+  },
+);
 
 /** Mapa key -> label pro zobrazení názvu typu. */
 export async function getProjectTypeMap(): Promise<Map<string, string>> {

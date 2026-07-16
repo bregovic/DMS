@@ -1,18 +1,21 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 
 export type CategoryOption = { key: string; label: string };
 
-/** Vestavěné kategorie + vlastní z DB. */
-export async function getExpenseCategories(): Promise<CategoryOption[]> {
-  const custom = await prisma.expenseCategory.findMany({
-    orderBy: { label: "asc" },
-  });
-  return [
-    ...EXPENSE_CATEGORIES.map((c) => ({ key: c.value, label: c.label })),
-    ...custom.map((c) => ({ key: c.key, label: c.label })),
-  ];
-}
+/** Vestavěné kategorie + vlastní z DB (cache dedupuje v rámci renderu). */
+export const getExpenseCategories = cache(
+  async (): Promise<CategoryOption[]> => {
+    const custom = await prisma.expenseCategory.findMany({
+      orderBy: { label: "asc" },
+    });
+    return [
+      ...EXPENSE_CATEGORIES.map((c) => ({ key: c.value, label: c.label })),
+      ...custom.map((c) => ({ key: c.key, label: c.label })),
+    ];
+  },
+);
 
 export async function getExpenseCategoryMap(): Promise<Map<string, string>> {
   const cats = await getExpenseCategories();

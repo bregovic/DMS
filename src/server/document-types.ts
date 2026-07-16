@@ -1,10 +1,11 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 
 export type DocTypeOption = { value: string; label: string };
 
-/** Vestavěné typy dokumentů + vlastní z DB. */
-export async function getDocumentTypes(): Promise<DocTypeOption[]> {
+/** Vestavěné typy dokumentů + vlastní z DB (cache dedupuje v rámci renderu). */
+export const getDocumentTypes = cache(async (): Promise<DocTypeOption[]> => {
   const custom = await prisma.documentType.findMany({
     orderBy: { label: "asc" },
   });
@@ -12,7 +13,7 @@ export async function getDocumentTypes(): Promise<DocTypeOption[]> {
     ...DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label })),
     ...custom.map((d) => ({ value: d.key, label: d.label })),
   ];
-}
+});
 
 export async function getDocumentTypeMap(): Promise<Map<string, string>> {
   const types = await getDocumentTypes();

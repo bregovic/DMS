@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import {
   REQUEST_STATUSES,
@@ -22,21 +23,24 @@ function builtinColor(scope: StatusScope, value: string): string | null {
   return null;
 }
 
-/** Vestavěné stavy + vlastní z DB (číselník StatusOption). */
-export async function getStatuses(scope: StatusScope): Promise<StatusOption[]> {
-  const custom = await prisma.statusOption.findMany({
-    where: { scope },
-    orderBy: [{ sort: "asc" }, { label: "asc" }],
-  });
-  return [
-    ...BUILTIN[scope].map((s) => ({
-      key: s.value,
-      label: s.label,
-      color: builtinColor(scope, s.value),
-    })),
-    ...custom.map((s) => ({ key: s.key, label: s.label, color: s.color })),
-  ];
-}
+/** Vestavěné stavy + vlastní z DB (číselník StatusOption). Cache dedupuje
+ *  opakované volání v rámci jednoho renderu (stránka volá 4× getStatuses). */
+export const getStatuses = cache(
+  async (scope: StatusScope): Promise<StatusOption[]> => {
+    const custom = await prisma.statusOption.findMany({
+      where: { scope },
+      orderBy: [{ sort: "asc" }, { label: "asc" }],
+    });
+    return [
+      ...BUILTIN[scope].map((s) => ({
+        key: s.value,
+        label: s.label,
+        color: builtinColor(scope, s.value),
+      })),
+      ...custom.map((s) => ({ key: s.key, label: s.label, color: s.color })),
+    ];
+  },
+);
 
 export async function getStatusMap(scope: StatusScope): Promise<Map<string, string>> {
   return new Map((await getStatuses(scope)).map((s) => [s.key, s.label]));

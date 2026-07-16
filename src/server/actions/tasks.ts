@@ -282,6 +282,7 @@ async function recomputePhaseDates(projectId: string) {
     a.push(c);
     byParent.set(c.parentId, a);
   }
+  const writes: ReturnType<typeof prisma.task.update>[] = [];
   for (const p of phases) {
     // Ručně uzamčená fáze (dateLocked) se nepřepisuje; ostatní fáze s dílčími úkoly
     // se přepočítají z min/max termínů dětí (drží reálný rozsah fáze).
@@ -293,9 +294,12 @@ async function recomputePhaseDates(projectId: string) {
     const start = starts.length ? new Date(Math.min(...starts)) : null;
     const due = dues.length ? new Date(Math.max(...dues)) : null;
     if (p.startDate?.getTime() !== start?.getTime() || p.dueDate?.getTime() !== due?.getTime()) {
-      await prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } });
+      writes.push(
+        prisma.task.update({ where: { id: p.id }, data: { startDate: start, dueDate: due } }),
+      );
     }
   }
+  if (writes.length) await prisma.$transaction(writes);
 }
 
 /** Po změně termínu posune navazující úkoly (jen dopředu) a přepočítá fáze. */
@@ -337,6 +341,7 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
       }
     }
     const dm = new Map(tasks.map((t) => [t.id, { start: t.startDate, due: t.dueDate }]));
+    const writes: ReturnType<typeof prisma.task.update>[] = [];
     for (const id of order) {
       if (!affected.has(id)) continue;
       const t = byId.get(id)!;
@@ -356,15 +361,20 @@ async function cascadeReschedule(projectId: string, triggerId: string) {
         const s = await availabilityDates(t.vendorId, newStart, t.estimateDays);
         if (s) {
           dm.set(id, { start: s.start, due: s.due });
-          await prisma.task.update({ where: { id }, data: { startDate: s.start, dueDate: s.due } });
+          writes.push(
+            prisma.task.update({ where: { id }, data: { startDate: s.start, dueDate: s.due } }),
+          );
           continue;
         }
       }
       const durMs = cur.start && cur.due ? cur.due.getTime() - cur.start.getTime() : t.estimateDays ? (t.estimateDays - 1) * DAY_MS : 0;
       const newDue = new Date(newStart.getTime() + durMs);
       dm.set(id, { start: newStart, due: newDue });
-      await prisma.task.update({ where: { id }, data: { startDate: newStart, dueDate: newDue } });
+      writes.push(
+        prisma.task.update({ where: { id }, data: { startDate: newStart, dueDate: newDue } }),
+      );
     }
+    if (writes.length) await prisma.$transaction(writes);
   }
   await recomputePhaseDates(projectId);
 }
@@ -556,8 +566,15 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     if (curS !== s || curE !== e) upd.push({ id: uid, start: new Date(s), due: new Date(e) });
   }
 
-  for (const u of upd)
-    await prisma.task.update({ where: { id: u.id }, data: { startDate: u.start, dueDate: u.due } });
+  if (upd.length)
+    await prisma.$transaction(
+      upd.map((u) =>
+        prisma.task.update({
+          where: { id: u.id },
+          data: { startDate: u.start, dueDate: u.due },
+        }),
+      ),
+    );
 }
 
 /** Tlačítko „Přepočítat termíny". */

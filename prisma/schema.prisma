@@ -407,7 +407,10 @@ model Expense {
   documents  Document[]
 
   @@index([projectId])
+  @@index([projectId, date])
   @@index([date])
+  @@index([stage])
+  @@index([createdById])
   @@index([vendorId])
   @@index([subProjectId])
   @@index([taskId])

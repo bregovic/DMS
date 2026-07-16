@@ -1,8 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ForecastChart } from "@/components/reports/charts";
+import dynamic from "next/dynamic";
 import { formatCurrency } from "@/lib/utils";
+
+// Recharts je těžká knihovna – načíst až na klientu (mimo initial bundle/SSR).
+const ForecastChart = dynamic(
+  () => import("@/components/reports/charts").then((m) => m.ForecastChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 w-full animate-pulse bg-stone-100" />,
+  },
+);
 
 type Row = { date: string; amount: number };
 type Interval = "month" | "quarter" | "year";

@@ -88,12 +88,20 @@ export default async function DashboardPage() {
     ? vendorRows.find((v) => v.email?.toLowerCase() === myEmail)?.id
     : undefined;
 
-  // Subprojekty přístupných projektů pro výběr složky (s odsazením dle vnoření)
-  const subRows = await prisma.subProject.findMany({
-    where: { projectId: { in: writableIds } },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, projectId: true, parentId: true },
-  });
+  // Subprojekty (pro výběr složky) + našeptávání názvů výdajů – nezávislé, paralelně.
+  const [subRows, titleRows] = await Promise.all([
+    prisma.subProject.findMany({
+      where: { projectId: { in: writableIds } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, projectId: true, parentId: true },
+    }),
+    prisma.expense.findMany({
+      where: { projectId: { in: writableIds } },
+      select: { title: true, projectId: true },
+      distinct: ["projectId", "title"],
+      orderBy: { title: "asc" },
+    }),
+  ]);
   const subsByProject: Record<string, { id: string; name: string }[]> = {};
   {
     const byProj = new Map<string, typeof subRows>();
@@ -120,13 +128,6 @@ export default async function DashboardPage() {
     }
   }
 
-  // Našeptávání činností pro rychlé přidání: unikátní názvy výdajů per projekt.
-  const titleRows = await prisma.expense.findMany({
-    where: { projectId: { in: writableIds } },
-    select: { title: true, projectId: true },
-    distinct: ["projectId", "title"],
-    orderBy: { title: "asc" },
-  });
   const titlesByProject: Record<string, string[]> = {};
   for (const t of titleRows) {
     if (!t.title) continue;
