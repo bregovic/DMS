@@ -214,6 +214,11 @@ export function ExpenseList({
                       &bull;
                     </span>
                   )}
+                  {e.amount < 0 && (
+                    <span className="shrink-0 border border-emerald-300 bg-emerald-50 px-1 py-0.5 text-[10px] font-normal uppercase tracking-wide text-emerald-700">
+                      příjem
+                    </span>
+                  )}
                 </p>
                 <p className="kicker mt-0.5">
                   {kindLabel(e.kind)} · {e.categoryLabel} · {e.dateLabel}
@@ -251,7 +256,12 @@ export function ExpenseList({
                   {stageLabel(expenseStage(e.stage))}
                 </span>
               )}
-              <span className="ml-auto font-mono text-sm text-stone-950 sm:ml-0">
+              {/* Příjem je uložený se záporným znaménkem – zeleně, ať je
+                  v seznamu na první pohled poznat od výdaje. */}
+              <span
+                className={`ml-auto font-mono text-sm sm:ml-0 ${e.amount < 0 ? "text-emerald-700" : "text-stone-950"}`}
+                title={e.amount < 0 ? "Příjem – v součtu se odečítá" : undefined}
+              >
                 {formatCurrency(e.amount, e.currency)}
               </span>
               {isOwner && (

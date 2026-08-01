@@ -79,7 +79,8 @@ export default async function PaymentsPage({
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const unpaidTotal = expenses
-    .filter((e) => !isExpensePaid(e.stage))
+    // příjem (záporná částka) není co proplácet
+    .filter((e) => !isExpensePaid(e.stage) && Number(e.amount) > 0)
     .reduce((s, e) => s + Number(e.amount), 0);
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

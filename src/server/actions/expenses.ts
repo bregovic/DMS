@@ -81,6 +81,11 @@ export async function createExpense(formData: FormData) {
     if (!amount || amount <= 0) throw new Error("Zadej částku.");
   }
 
+  /* Příjem se ukládá jako záporná částka. Díky tomu všechny existující
+     součty (projekt, dashboard, reporty, platby) rovnou dávají saldo
+     a nemusí se nikde upravovat. */
+  if (String(formData.get("isIncome") || "") === "on") amount = -Math.abs(amount);
+
   const dateStr = String(formData.get("date") || "");
   const date = dateStr ? new Date(dateStr) : new Date();
   const status = "approved"; // schvalování zrušeno – vše rovnou platné
@@ -220,6 +225,11 @@ export async function updateExpense(formData: FormData) {
     amount = num(formData.get("amount"));
     if (!amount || amount <= 0) throw new Error("Zadej částku.");
   }
+
+  /* Příjem se ukládá jako záporná částka. Díky tomu všechny existující
+     součty (projekt, dashboard, reporty, platby) rovnou dávají saldo
+     a nemusí se nikde upravovat. */
+  if (String(formData.get("isIncome") || "") === "on") amount = -Math.abs(amount);
 
   const dateStr = String(formData.get("date") || "");
   const date = dateStr ? new Date(dateStr) : new Date();

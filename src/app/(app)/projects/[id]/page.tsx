@@ -419,7 +419,8 @@ export default async function ProjectDetailPage({
   // Součty pro zafiltrované výdaje (celkem + kolik z toho ještě k úhradě).
   const shownTotal = shownExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const shownUnpaidTotal = shownExpenses
-    .filter((e) => !isExpensePaid(e.stage))
+    // příjem (záporná částka) není co proplácet – do „k úhradě" nepatří
+    .filter((e) => !isExpensePaid(e.stage) && Number(e.amount) > 0)
     .reduce((s, e) => s + Number(e.amount), 0);
   // Volby filtru dodavatele = dodavatelé, co mají na této úrovni výdaj.
   const expVendorOptions = [
@@ -891,7 +892,10 @@ export default async function ProjectDetailPage({
             />
             {shownExpenses.length > 0 && (
               <p className="mb-3 text-xs text-stone-500">
-                Součet{expenseFilterActive ? " (filtr)" : ""}:{" "}
+                {/* jsou-li mezi záznamy příjmy (záporné částky), není to prostý
+                    součet výdajů, ale saldo – ať to nemate */}
+                {shownExpenses.some((e) => Number(e.amount) < 0) ? "Saldo" : "Součet"}
+                {expenseFilterActive ? " (filtr)" : ""}:{" "}
                 <span className="font-mono text-stone-800">{formatCurrency(shownTotal)}</span>
                 {shownUnpaidTotal > 0 && (
                   <>

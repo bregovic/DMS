@@ -53,6 +53,8 @@ export function EditExpenseForm({
   const [category, setCategory] = useState(expense.category);
   const [currency, setCurrency] = useState(expense.currency);
   const [amountMode, setAmountMode] = useState(expense.hours != null ? "hourly" : "fixed");
+  // záporná částka = příjem (tak se to ukládá, aby součty daly saldo)
+  const [isIncome, setIsIncome] = useState(Number(expense.amount) < 0);
   const [rate, setRate] = useState(expense.rate != null ? String(expense.rate) : "");
   const [hours, setHours] = useState(expense.hours != null ? String(expense.hours) : "");
 
@@ -195,17 +197,29 @@ export function EditExpenseForm({
             ))}
           </div>
 
+          <label className="flex items-center gap-2 text-sm text-stone-700">
+            <input
+              type="checkbox"
+              name="isIncome"
+              checked={isIncome}
+              onChange={(e) => setIsIncome(e.target.checked)}
+              className="size-4 accent-stone-950"
+            />
+            Příjem (přičte se k saldu)
+          </label>
+
           {amountMode === "fixed" ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="ee-amount">Částka</Label>
+                <Label htmlFor="ee-amount">{isIncome ? "Částka příjmu" : "Částka"}</Label>
                 <Input
                   id="ee-amount"
                   name="amount"
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={expense.amount}
+                  // v poli se ukazuje kladné číslo, znaménko řeší zaškrtávátko
+                  defaultValue={Math.abs(Number(expense.amount))}
                   required
                 />
               </div>

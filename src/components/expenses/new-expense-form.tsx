@@ -72,6 +72,7 @@ export function NewExpenseForm({
     defaults?.currency || d.currency || "CZK",
   );
   const [amountMode, setAmountMode] = useState(d.amountMode || "fixed");
+  const [isIncome, setIsIncome] = useState(false);
   const [rate, setRate] = useState("");
   const [hours, setHours] = useState("");
   // Subprojekt: kontext složky má přednost, jinak posledně použitý (localStorage).
@@ -262,10 +263,23 @@ export function NewExpenseForm({
             ))}
           </div>
 
+          {/* Příjem se uloží se záporným znaménkem, takže se v součtech
+              odečte a přehled ukazuje saldo. */}
+          <label className="flex items-center gap-2 text-sm text-stone-700">
+            <input
+              type="checkbox"
+              name="isIncome"
+              checked={isIncome}
+              onChange={(e) => setIsIncome(e.target.checked)}
+              className="size-4 accent-stone-950"
+            />
+            Příjem (přičte se k saldu)
+          </label>
+
           {amountMode === "fixed" ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="amount">Částka</Label>
+                <Label htmlFor="amount">{isIncome ? "Částka příjmu" : "Částka"}</Label>
                 <Input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0" required />
               </div>
               <div className="space-y-1.5">
