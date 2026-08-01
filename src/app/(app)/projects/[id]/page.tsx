@@ -43,6 +43,7 @@ import {
   REQUEST_FORECAST_STATUSES,
   TASK_DONE_STATUSES,
   isExpensePaid,
+  expenseStage,
 } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
 import { colorClasses } from "@/lib/status-colors";
@@ -405,7 +406,9 @@ export default async function ProjectDetailPage({
   if (estage === "__unpaid__")
     // „Neuhrazené" = vše kromě stavu uhrazeno (i výdaje bez nastaveného stavu).
     shownExpenses = shownExpenses.filter((e) => !isExpensePaid(e.stage));
-  else if (estage) shownExpenses = shownExpenses.filter((e) => e.stage === estage);
+  // expenseStage() bere prázdný stav jako „Nový", takže filtr najde i starší
+  // výdaje, které se založily bez stavu.
+  else if (estage) shownExpenses = shownExpenses.filter((e) => expenseStage(e.stage) === estage);
   const sign = edir === "asc" ? 1 : -1;
   shownExpenses = [...shownExpenses].sort((a, b) =>
     esort === "amount"

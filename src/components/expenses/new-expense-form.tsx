@@ -331,8 +331,7 @@ export function NewExpenseForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="stage">Stav</Label>
-            <select id="stage" name="stage" defaultValue="" className={fieldClass}>
-              <option value="">— bez stavu —</option>
+            <select id="stage" name="stage" defaultValue="novy" className={fieldClass}>
               {statuses.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.label}

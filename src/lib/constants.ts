@@ -141,15 +141,34 @@ export function offerStatusLabel(value: string) {
 
 // Životní cyklus výdaje (vestavěné). Vlastní stavy se přidávají do číselníku
 // StatusOption scope "expense". Úhrada a schvalování jsou samostatné.
+export const EXPENSE_NEW_STAGE = "novy";
+export const EXPENSE_EXPORTED_STAGE = "exportovano";
+
+/* Životní cyklus výdaje: vznikne → odejde do účetnictví → jde k proplacení →
+   je zaplacený. Dřívější „K objednání" a „Objednáno" nepoužíval žádný záznam,
+   objednávky řeší žádanky, tak jsou pryč. */
 export const EXPENSE_STATUSES = [
-  { value: "k_objednani", label: "K objednání" },
-  { value: "objednano", label: "Objednáno" },
+  { value: EXPENSE_NEW_STAGE, label: "Nový" },
+  { value: EXPENSE_EXPORTED_STAGE, label: "Exportováno" },
   { value: "k_uhrade", label: "K úhradě" },
   { value: "uhrazeno", label: "Uhrazeno" },
 ] as const;
 
-export function expenseStatusLabel(value: string) {
-  return EXPENSE_STATUSES.find((s) => s.value === value)?.label ?? value;
+/** Pořadí ve fázi – aby export nemohl vrátit už uhrazený výdaj zpátky. */
+export function expenseStageRank(stage: string | null | undefined): number {
+  const i = EXPENSE_STATUSES.findIndex((s) => s.value === expenseStage(stage));
+  return i < 0 ? 0 : i;
+}
+
+/** Výdaje založené dřív stav nemají – bereme je jako „Nový", ať nevypadnou
+ *  z filtrů a přehledů. Šetří to migraci nad stovkou existujících záznamů. */
+export function expenseStage(stage: string | null | undefined): string {
+  return stage || EXPENSE_NEW_STAGE;
+}
+
+export function expenseStatusLabel(value: string | null | undefined) {
+  const v = expenseStage(value);
+  return EXPENSE_STATUSES.find((s) => s.value === v)?.label ?? v;
 }
 
 // Úhrada výdaje se řídí stavem (ne samostatným booleanem). "uhrazeno" = zaplaceno.

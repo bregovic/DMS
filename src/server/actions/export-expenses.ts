@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getProjectAccess, isManager } from "@/server/access";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
 import { csvToWin1250Base64 } from "@/lib/win1250";
+import { EXPENSE_EXPORTED_STAGE, expenseStageRank } from "@/lib/constants";
 
 function csvField(v: string) {
   return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -84,10 +85,27 @@ export async function exportProjectExpenses(
   // Windows-1250 (bez BOM) – český Excel to čte nativně, diakritika sedí.
   const csv = lines.join("\r\n") + "\r\n";
 
-  await prisma.expense.updateMany({
-    where: { id: { in: expenses.map((e) => e.id) }, projectId },
-    data: { exportedAt: new Date() },
-  });
+  /* Označit jako exportované a posunout stav – ale jen tomu, co je zatím
+     „Nový". Už uhrazený výdaj se exportem nesmí vrátit v cyklu zpátky. */
+  const exportedIds = expenses.map((e) => e.id);
+  const toAdvance = expenses
+    .filter((e) => expenseStageRank(e.stage) < expenseStageRank(EXPENSE_EXPORTED_STAGE))
+    .map((e) => e.id);
+
+  await prisma.$transaction([
+    prisma.expense.updateMany({
+      where: { id: { in: exportedIds }, projectId },
+      data: { exportedAt: new Date() },
+    }),
+    ...(toAdvance.length
+      ? [
+          prisma.expense.updateMany({
+            where: { id: { in: toAdvance }, projectId },
+            data: { stage: EXPENSE_EXPORTED_STAGE },
+          }),
+        ]
+      : []),
+  ]);
   revalidatePath(`/projects/${projectId}`);
 
   const stamp = fmtDate(new Date()).replace(/\./g, "-");

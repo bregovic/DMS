@@ -32,6 +32,16 @@ export function ListFilters({
   const [q, setQ] = useState(sp.get(k("q")) ?? "");
   const from = sp.get(k("from")) ?? "";
   const to = sp.get(k("to")) ?? "";
+  /* Rozepsaný filtr se drží stranou od URL a odešle se až potvrzením.
+     Dřív se sahalo do URL při každém úhozu, takže se přehled překresloval
+     nad rozepsaným datem a výsledek působil, jako by filtr nefungoval. */
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
+  const dirty = q !== (sp.get(k("q")) ?? "") || draftFrom !== from || draftTo !== to;
+
+  function applyFilters() {
+    setParam({ [k("q")]: q, [k("from")]: draftFrom, [k("to")]: draftTo });
+  }
   const sort = sp.get(k("sort")) ?? sortOptions[0].value;
   const dir = sp.get(k("dir")) ?? "desc";
 
@@ -43,6 +53,9 @@ export function ListFilters({
     }
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // vynutit nové vykreslení na serveru – samotná změna parametrů v URL
+    // se může obsloužit z klientské cache a přehled by zůstal starý
+    router.refresh();
   }
 
   const active =
@@ -57,28 +70,26 @@ export function ListFilters({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") setParam({ [k("q")]: q });
+          if (e.key === "Enter") applyFilters();
         }}
-        onBlur={() => setParam({ [k("q")]: q })}
         placeholder={placeholder}
         className={`${inputClass} w-full sm:w-44`}
       />
       <label className="flex items-center gap-1 text-xs text-stone-500">
         od
-        <DateInput
-          value={from}
-          onChange={(v) => setParam({ [k("from")]: v })}
-          className={inputClass}
-        />
+        <DateInput value={draftFrom} onChange={setDraftFrom} className={inputClass} />
       </label>
       <label className="flex items-center gap-1 text-xs text-stone-500">
         do
-        <DateInput
-          value={to}
-          onChange={(v) => setParam({ [k("to")]: v })}
-          className={inputClass}
-        />
+        <DateInput value={draftTo} onChange={setDraftTo} className={inputClass} />
       </label>
+      <button
+        type="button"
+        onClick={applyFilters}
+        className={`${inputClass} ${dirty ? "border-stone-950 bg-stone-950 text-white" : "text-stone-600"} cursor-pointer px-3`}
+      >
+        Filtrovat
+      </button>
 
       {selects.map((s) => (
         <select
@@ -125,6 +136,8 @@ export function ListFilters({
             aria-label="Zrušit filtr a řazení"
             onClick={() => {
               setQ("");
+              setDraftFrom("");
+              setDraftTo("");
               setParam({
                 [k("q")]: null,
                 [k("from")]: null,

@@ -10,7 +10,7 @@ import { ExpenseScan } from "@/components/expenses/expense-scan";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
 import { EditExpenseForm, type ExpenseEdit } from "@/components/expenses/edit-expense-form";
 import { DeleteButton } from "@/components/ui/delete-button";
-import { kindLabel } from "@/lib/constants";
+import { kindLabel, expenseStage } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
 type StatusOpt = { key: string; label: string };
@@ -202,9 +202,16 @@ export function ExpenseList({
                   {e.docs.length > 0 && (
                     <Paperclip className="size-3 shrink-0 text-stone-400" />
                   )}
+                  {/* Samostatný odznak „exportováno" tu byl vedle stavu a
+                      tloukly se. Export teď posouvá stav, takže stačí tečka
+                      pro případ, že je výdaj už dál v cyklu (třeba uhrazený). */}
                   {e.exported && (
-                    <span className="shrink-0 border border-emerald-300 bg-emerald-50 px-1 py-0.5 text-[10px] font-normal uppercase tracking-wide text-emerald-700">
-                      exportováno
+                    <span
+                      title="Vyexportováno do účetnictví"
+                      className="shrink-0 text-emerald-600"
+                      aria-label="Vyexportováno do účetnictví"
+                    >
+                      &bull;
                     </span>
                   )}
                 </p>
@@ -240,11 +247,9 @@ export function ExpenseList({
                   statuses={statuses}
                 />
               ) : (
-                e.stage && (
-                  <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
-                    {stageLabel(e.stage)}
-                  </span>
-                )
+                <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">
+                  {stageLabel(expenseStage(e.stage))}
+                </span>
               )}
               <span className="ml-auto font-mono text-sm text-stone-950 sm:ml-0">
                 {formatCurrency(e.amount, e.currency)}

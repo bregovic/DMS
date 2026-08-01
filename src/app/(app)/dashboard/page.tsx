@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DateInput } from "@/components/ui/date-input";
 import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -12,8 +13,29 @@ import { getDocumentTypes } from "@/server/document-types";
 import { getStatuses } from "@/server/statuses";
 import { listProjectsForUser, canWrite } from "@/server/access";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: PageProps<"/dashboard">) {
   const user = await requireUser();
+
+  /* Období pro souhrn nahoře. Bez filtru se počítá všechno, jako dosud. */
+  const sp = await searchParams;
+  const fromStr = typeof sp?.from === "string" ? sp.from : "";
+  const toStr = typeof sp?.to === "string" ? sp.to : "";
+  const from = fromStr ? new Date(fromStr) : null;
+  const to = toStr ? new Date(toStr) : null;
+  if (to) to.setHours(23, 59, 59, 999);
+  const periodOk = (d: Date | null) => d && !isNaN(d.getTime());
+  const dateWhere =
+    periodOk(from) || periodOk(to)
+      ? {
+          date: {
+            ...(periodOk(from) ? { gte: from as Date } : {}),
+            ...(periodOk(to) ? { lte: to as Date } : {}),
+          },
+        }
+      : {};
+  const periodActive = Object.keys(dateWhere).length > 0;
 
   // Projekty s přístupem (vlastní + pozvané) – aby i pozvaný dodavatel mohl
   // rychle přidat výdaj a viděl „svůj" projekt (bez vlastního projektu = prázdno).
@@ -41,12 +63,12 @@ export default async function DashboardPage() {
     fcTaskExpenses,
   ] = await Promise.all([
     prisma.expense.aggregate({
-      where: { project: { ownerId: user.id } },
+      where: { project: { ownerId: user.id }, ...dateWhere },
       _sum: { amount: true },
       _count: true,
     }),
     prisma.income.aggregate({
-      where: { project: { ownerId: user.id } },
+      where: { project: { ownerId: user.id }, ...dateWhere },
       _sum: { amount: true },
     }),
     prisma.request.findMany({
@@ -158,9 +180,19 @@ export default async function DashboardPage() {
 
   const stats = [
     { label: "Projekty", value: String(accessible.length), className: "text-stone-950" },
-    { label: "Celkové příjmy", value: formatCurrency(totalIncome), className: "text-stone-950" },
-    { label: "Celkové výdaje", value: formatCurrency(totalSpent), className: "text-stone-950" },
+    // s filtrem už to nejsou „celkové" částky, ať to nemate
     {
+      label: periodActive ? "Příjmy za období" : "Celkové příjmy",
+      value: formatCurrency(totalIncome),
+      className: "text-stone-950",
+    },
+    {
+      label: periodActive ? "Výdaje za období" : "Celkové výdaje",
+      value: formatCurrency(totalSpent),
+      className: "text-stone-950",
+    },
+    {
+      // forecast = co teprve přijde, obdobím se neomezuje
       label: "Forecast výdajů",
       value: formatCurrency(totalForecast),
       className: "text-amber-600",
@@ -190,6 +222,30 @@ export default async function DashboardPage() {
         expenseStatuses={expenseStatuses}
         taskStatuses={taskStatuses}
       />
+
+      {/* Období pro souhrn. Prostý GET formulář – DateInput posílá ISO
+          skrytým polem, takže tu není potřeba žádný klientský stav. */}
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+        <label className="flex items-center gap-1 text-xs text-stone-500">
+          od
+          <DateInput name="from" defaultValue={fromStr} className="h-8 px-2 text-xs" />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-stone-500">
+          do
+          <DateInput name="to" defaultValue={toStr} className="h-8 px-2 text-xs" />
+        </label>
+        <button
+          type="submit"
+          className="h-8 cursor-pointer border border-stone-300 px-3 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+        >
+          Filtrovat
+        </button>
+        {periodActive && (
+          <Link href="/dashboard" className="h-8 px-2 text-xs leading-8 text-stone-400 hover:text-stone-950">
+            Zrušit období
+          </Link>
+        )}
+      </form>
 
       {/* Statistiky – karty s jemným stínem */}
       <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
