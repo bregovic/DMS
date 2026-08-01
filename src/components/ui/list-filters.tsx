@@ -3,6 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowDownUp, X } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 
 // Obecná lišta filtrace (název, datum od–do) a řazení. Stav drží v URL pod
 // daným prefixem (např. "e" pro výdaje, "r" pro žádanky), ostatní parametry
@@ -64,19 +65,17 @@ export function ListFilters({
       />
       <label className="flex items-center gap-1 text-xs text-stone-500">
         od
-        <input
-          type="date"
+        <DateInput
           value={from}
-          onChange={(e) => setParam({ [k("from")]: e.target.value })}
+          onChange={(v) => setParam({ [k("from")]: v })}
           className={inputClass}
         />
       </label>
       <label className="flex items-center gap-1 text-xs text-stone-500">
         do
-        <input
-          type="date"
+        <DateInput
           value={to}
-          onChange={(e) => setParam({ [k("to")]: e.target.value })}
+          onChange={(v) => setParam({ [k("to")]: v })}
           className={inputClass}
         />
       </label>

@@ -7,6 +7,7 @@ import { getRequestDetail, updateRequestDates } from "@/server/actions/procureme
 import { selectOffer } from "@/server/actions/offers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { REQUEST_STATUSES } from "@/lib/constants";
@@ -86,11 +87,11 @@ export function RequestDetailDialog({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="rq-start">Začátek VŘ</Label>
-                  <Input id="rq-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
+                  <DateInput id="rq-start" name="startDate" defaultValue={d.startDate ?? ""} disabled={!d.canEdit} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="rq-req">Rozhodnout do</Label>
-                  <Input id="rq-req" name="requiredDate" type="date" defaultValue={d.requiredDate ?? ""} disabled={!d.canEdit} />
+                  <DateInput id="rq-req" name="requiredDate" defaultValue={d.requiredDate ?? ""} disabled={!d.canEdit} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="rq-status">Stav</Label>

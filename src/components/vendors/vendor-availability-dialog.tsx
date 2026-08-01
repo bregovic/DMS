@@ -9,6 +9,7 @@ import {
 } from "@/server/actions/availability";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 
 const WD = [
@@ -135,11 +136,11 @@ export function VendorAvailabilityDialog({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="space-y-1">
                 <Label htmlFor="av-from">Od</Label>
-                <Input id="av-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <DateInput id="av-from" value={from} onChange={setFrom} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="av-to">Do</Label>
-                <Input id="av-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <DateInput id="av-to" value={to} onChange={setTo} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="av-state">Stav</Label>

@@ -5,6 +5,7 @@ import { Plus, Pencil, X } from "lucide-react";
 import { createMaterial, updateMaterial } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 
@@ -107,7 +108,7 @@ export function MaterialForm({ material }: { material?: MaterialInput }) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="priceDate">Datum ceny</Label>
-              <Input id="priceDate" name="priceDate" type="date" defaultValue={material?.priceDate ?? ""} />
+              <DateInput id="priceDate" name="priceDate" defaultValue={material?.priceDate ?? ""} />
             </div>
           </div>
           <div className="space-y-1.5">

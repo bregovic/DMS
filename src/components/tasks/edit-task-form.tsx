@@ -5,6 +5,7 @@ import { Pencil, X } from "lucide-react";
 import { updateTask } from "@/server/actions/tasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 
 const fieldClass =
@@ -126,11 +127,11 @@ export function EditTaskForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="et-start">Začátek</Label>
-              <Input id="et-start" name="startDate" type="date" defaultValue={task.startDate ?? ""} />
+              <DateInput id="et-start" name="startDate" defaultValue={task.startDate ?? ""} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="et-due">Termín</Label>
-              <Input id="et-due" name="dueDate" type="date" defaultValue={task.dueDate ?? ""} />
+              <DateInput id="et-due" name="dueDate" defaultValue={task.dueDate ?? ""} />
             </div>
           </div>
 

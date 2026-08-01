@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DateInput } from "@/components/ui/date-input";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/dal";
 import { getProjectAttachments } from "@/server/attachments";
@@ -74,15 +75,15 @@ export default async function AttachmentsPage({
         {sub && <input type="hidden" name="sub" value={sub} />}
         <div className="space-y-1">
           <label className="kicker block" htmlFor="from">Od</label>
-          <input
-            id="from" type="date" name="from" defaultValue={from}
+          <DateInput
+            id="from" name="from" defaultValue={from}
             className="border border-stone-300 px-3 py-2 text-sm focus:border-stone-950 focus:outline-none"
           />
         </div>
         <div className="space-y-1">
           <label className="kicker block" htmlFor="to">Do</label>
-          <input
-            id="to" type="date" name="to" defaultValue={to}
+          <DateInput
+            id="to" name="to" defaultValue={to}
             className="border border-stone-300 px-3 py-2 text-sm focus:border-stone-950 focus:outline-none"
           />
         </div>

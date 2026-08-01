@@ -21,6 +21,7 @@ import {
 } from "@/server/actions/procurement";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
@@ -398,11 +399,11 @@ export function TaskDetailDialog({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-start">Začátek</Label>
-                      <Input key={`s-${d.startDate}`} id="dd-start" name="startDate" type="date" defaultValue={d.startDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
+                      <DateInput key={`s-${d.startDate}`} id="dd-start" name="startDate" defaultValue={d.startDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-due">Termín</Label>
-                      <Input key={`e-${d.dueDate}`} id="dd-due" name="dueDate" type="date" defaultValue={d.dueDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
+                      <DateInput key={`e-${d.dueDate}`} id="dd-due" name="dueDate" defaultValue={d.dueDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
                     </div>
                   </div>
 

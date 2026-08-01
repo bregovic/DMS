@@ -5,6 +5,7 @@ import { Plus, X, Pencil } from "lucide-react";
 import { createIncome, updateIncome, deleteIncome } from "@/server/actions/incomes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { INCOME_CATEGORIES, incomeCategoryLabel } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -188,10 +189,10 @@ export function IncomeSection({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="inc-date">Datum</Label>
-                  <Input
+                  <DateInput
                     id="inc-date"
                     name="date"
-                    type="date"
+                   
                     defaultValue={cur?.date ?? today}
                     required
                   />

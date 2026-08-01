@@ -5,6 +5,7 @@ import { Pencil, X } from "lucide-react";
 import { updateExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { EXPENSE_KINDS } from "@/lib/constants";
@@ -246,11 +247,11 @@ export function EditExpenseForm({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="ee-date">Datum</Label>
-              <Input id="ee-date" name="date" type="date" defaultValue={expense.date} required />
+              <DateInput id="ee-date" name="date" defaultValue={expense.date} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ee-due">Splatnost</Label>
-              <Input id="ee-due" name="dueDate" type="date" defaultValue={expense.dueDate ?? ""} />
+              <DateInput id="ee-due" name="dueDate" defaultValue={expense.dueDate ?? ""} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ee-vs">VS</Label>

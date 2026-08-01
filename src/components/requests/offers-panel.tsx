@@ -13,6 +13,7 @@ import {
 import { deleteDocument } from "@/server/actions/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { DeleteButton } from "@/components/ui/delete-button";
@@ -105,7 +106,7 @@ function OfferForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deliveryDate">Termín dodání</Label>
-              <Input id="deliveryDate" name="deliveryDate" type="date" defaultValue={offer?.deliveryDate ?? ""} />
+              <DateInput id="deliveryDate" name="deliveryDate" defaultValue={offer?.deliveryDate ?? ""} />
             </div>
           </div>
 

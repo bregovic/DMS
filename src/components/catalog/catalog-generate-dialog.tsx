@@ -21,6 +21,7 @@ type PackageDTO = {
 import { calcOperation, calcTotals } from "@/lib/process-calc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 import { ParamField } from "@/components/catalog/param-field";
@@ -243,7 +244,7 @@ export function CatalogGenerateDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cg-start">Začátek fáze (volitelné)</Label>
-              <Input id="cg-start" type="date" value={phaseStartDate} onChange={(e) => setPhaseStartDate(e.target.value)} />
+              <DateInput id="cg-start" value={phaseStartDate} onChange={setPhaseStartDate} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cg-dep">Navazuje na fázi (volitelné)</Label>

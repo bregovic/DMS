@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DateInput } from "@/components/ui/date-input";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/dal";
@@ -186,11 +187,11 @@ export default async function ProjectPlanningPage({
         </label>
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
           Od
-          <input type="date" name="from" defaultValue={sp?.from ?? ""} className={selectClass} />
+          <DateInput name="from" defaultValue={sp?.from ?? ""} className={selectClass} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
           Do
-          <input type="date" name="to" defaultValue={sp?.to ?? ""} className={selectClass} />
+          <DateInput name="to" defaultValue={sp?.to ?? ""} className={selectClass} />
         </label>
         <label className="flex h-8 items-center gap-1.5 text-xs text-stone-600">
           <input type="checkbox" name="vr" value="1" defaultChecked={onlyVR} className="size-4 accent-stone-900" />

@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { EXPENSE_KINDS } from "@/lib/constants";
@@ -305,7 +306,7 @@ export function NewExpenseForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="date">Datum</Label>
-              <Input id="date" name="date" type="date" defaultValue={today} required />
+              <DateInput id="date" name="date" defaultValue={today} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="file">Sken / účtenka</Label>
@@ -321,7 +322,7 @@ export function NewExpenseForm({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="dueDate">Splatnost</Label>
-              <Input id="dueDate" name="dueDate" type="date" />
+              <DateInput id="dueDate" name="dueDate" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="variableSymbol">VS</Label>
