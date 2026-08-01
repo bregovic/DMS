@@ -43,16 +43,43 @@ export function fromIso(iso?: string | null): string {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
 }
 
-/** Doplní, co jde: jednociferný den/měsíc a dvouciferný rok (25 → 2025). */
-function normalize(display: string): string {
-  const parts = display.split(".");
-  if (parts.length !== 3) return display;
-  let [d, m, y] = parts;
-  if (!d || !m || !y) return display;
-  d = d.padStart(2, "0");
-  m = m.padStart(2, "0");
-  if (y.length === 2) y = (Number(y) > 68 ? "19" : "20") + y;
-  return `${d}.${m}.${y}`;
+const daysInMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
+
+/**
+ * Dopočítá nedopsané datum, aby stačilo napsat jen den.
+ *
+ *   „15"        → 15. aktuálního měsíce a roku
+ *   „15.3"      → 15. 3. aktuálního roku
+ *   „15.3.26"   → 15.03.2026
+ *   „31.2."     → 28.02. (nebo 29. v přestupném roce)
+ *
+ * Den nad počet dní v měsíci se srovná na poslední den, měsíc na 1–12.
+ * Prázdný vstup zůstává prázdný – to je „bez filtru".
+ */
+function normalize(display: string, today = new Date()): string {
+  const parts = display.split(".").map((p) => p.trim());
+  const dRaw = parts[0] ?? "";
+  if (!dRaw) return "";
+
+  const mRaw = parts[1] ?? "";
+  const yRaw = parts[2] ?? "";
+
+  let year: number;
+  if (!yRaw) year = today.getFullYear();
+  else if (yRaw.length <= 2) year = (Number(yRaw) > 68 ? 1900 : 2000) + Number(yRaw);
+  else year = Number(yRaw);
+  if (!Number.isFinite(year) || year < 1000) year = today.getFullYear();
+
+  let month = mRaw ? Number(mRaw) : today.getMonth() + 1;
+  if (!Number.isFinite(month) || month < 1) month = 1;
+  if (month > 12) month = 12;
+
+  let day = Number(dRaw);
+  if (!Number.isFinite(day) || day < 1) day = 1;
+  const max = daysInMonth(year, month);
+  if (day > max) day = max;
+
+  return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}`;
 }
 
 type Props = Omit<
@@ -65,13 +92,19 @@ type Props = Omit<
   defaultValue?: string;
   /** Dostane ISO RRRR-MM-DD, nebo prázdný řetězec u nehotového data. */
   onChange?: (iso: string) => void;
+  /** Zadání dopsané a potvrzené (opuštění pole nebo Enter). Dostane hotové
+   *  ISO rovnou v parametru – volající nemusí čekat, až se překreslí stav. */
+  onCommit?: (iso: string) => void;
 };
 
 export const DateInput = React.forwardRef<HTMLInputElement, Props>(
-  ({ className, name, value, defaultValue, onChange, disabled, required, id, ...rest }, ref) => {
+  ({ className, name, value, defaultValue, onChange, onCommit, disabled, required, id, ...rest }, ref) => {
     const controlled = value !== undefined;
     const [text, setText] = React.useState(() => fromIso(controlled ? value : defaultValue));
     const nativeRef = React.useRef<HTMLInputElement>(null);
+    const hiddenRef = React.useRef<HTMLInputElement>(null);
+    const textRef = React.useRef(text);
+    textRef.current = text;
     const boxRef = React.useRef<HTMLDivElement>(null);
 
     // u řízeného pole přijmout změnu zvenčí, ale nepřepisovat rozepsané psaní
@@ -81,13 +114,24 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
     }, [value]);
 
     /* Formuláře se po odeslání resetují přes form.reset(); nativní pole se
-       vrátí samy, tohle si musí uklidit vlastní stav. */
+       vrátí samy, tohle si musí uklidit vlastní stav.
+
+       Při odeslání navíc dopíšeme nedopsané datum rovnou do skrytého pole.
+       Přes stav by to nestihlo – Enter odešle formulář dřív, než se
+       komponenta překreslí, a odešla by se prázdná hodnota. */
     React.useEffect(() => {
       const form = boxRef.current?.closest("form");
       if (!form) return;
       const onReset = () => setText(fromIso(controlled ? value : defaultValue));
+      const onSubmit = () => {
+        if (hiddenRef.current) hiddenRef.current.value = toIso(normalize(textRef.current));
+      };
       form.addEventListener("reset", onReset);
-      return () => form.removeEventListener("reset", onReset);
+      form.addEventListener("submit", onSubmit, true); // capture: dřív než odeslání
+      return () => {
+        form.removeEventListener("reset", onReset);
+        form.removeEventListener("submit", onSubmit, true);
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [controlled, value, defaultValue]);
 
@@ -96,11 +140,19 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
       onChange?.(toIso(next));
     };
 
+    /** Dopsat nedopsané a ohlásit hotovou hodnotu. */
+    const commit = () => {
+      const n = normalize(text);
+      const iso = toIso(n);
+      if (n !== text) push(n);
+      onCommit?.(iso);
+    };
+
     const iso = toIso(text);
 
     return (
       <div ref={boxRef} className="relative">
-        {name && <input type="hidden" name={name} value={iso} />}
+        {name && <input ref={hiddenRef} type="hidden" name={name} value={iso} />}
 
         <input
           {...rest}
@@ -116,9 +168,12 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
           value={text}
           onChange={(e) => push(formatTyped(e.target.value))}
           onBlur={(e) => {
-            const n = normalize(text);
-            if (n !== text) push(n);
             rest.onBlur?.(e);
+            commit();
+          }}
+          onKeyDown={(e) => {
+            rest.onKeyDown?.(e);
+            if (e.key === "Enter") commit();
           }}
           className={cn(
             "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 py-2 pr-9 text-sm text-stone-950 placeholder:text-stone-400 transition-colors focus-visible:outline-none focus-visible:border-stone-950 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50",

@@ -39,8 +39,14 @@ export function ListFilters({
   const [draftTo, setDraftTo] = useState(to);
   const dirty = q !== (sp.get(k("q")) ?? "") || draftFrom !== from || draftTo !== to;
 
-  function applyFilters() {
-    setParam({ [k("q")]: q, [k("from")]: draftFrom, [k("to")]: draftTo });
+  /* Hodnoty se dají předat přímo – po dopsání data (Enter / opuštění pole)
+     je nemá smysl číst ze stavu, ten se ještě nemusel překreslit. */
+  function applyFilters(over?: { from?: string; to?: string }) {
+    setParam({
+      [k("q")]: q,
+      [k("from")]: over?.from ?? draftFrom,
+      [k("to")]: over?.to ?? draftTo,
+    });
   }
   const sort = sp.get(k("sort")) ?? sortOptions[0].value;
   const dir = sp.get(k("dir")) ?? "desc";
@@ -77,15 +83,25 @@ export function ListFilters({
       />
       <label className="flex items-center gap-1 text-xs text-stone-500">
         od
-        <DateInput value={draftFrom} onChange={setDraftFrom} className={inputClass} />
+        <DateInput
+          value={draftFrom}
+          onChange={setDraftFrom}
+          onCommit={(v) => applyFilters({ from: v })}
+          className={inputClass}
+        />
       </label>
       <label className="flex items-center gap-1 text-xs text-stone-500">
         do
-        <DateInput value={draftTo} onChange={setDraftTo} className={inputClass} />
+        <DateInput
+          value={draftTo}
+          onChange={setDraftTo}
+          onCommit={(v) => applyFilters({ to: v })}
+          className={inputClass}
+        />
       </label>
       <button
         type="button"
-        onClick={applyFilters}
+        onClick={() => applyFilters()}
         className={`${inputClass} ${dirty ? "border-stone-950 bg-stone-950 text-white" : "text-stone-600"} cursor-pointer px-3`}
       >
         Filtrovat
