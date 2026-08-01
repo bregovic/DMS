@@ -205,7 +205,7 @@ export function EditExpenseForm({
               onChange={(e) => setIsIncome(e.target.checked)}
               className="size-4 accent-stone-950"
             />
-            Příjem (přičte se k saldu)
+            Příjem
           </label>
 
           {amountMode === "fixed" ? (
