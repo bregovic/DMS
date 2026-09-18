@@ -3,6 +3,10 @@ import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
 import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
 
+/** Plán z dokumentace potřebuje silnější model než vytěžení nabídky (AI_PLAN_MODEL). */
+const PLAN_MODEL = process.env.AI_PLAN_MODEL || "gpt-5";
+const MAX_PLAN_DOCS = 20;
+
 /**
  * AI plán projektu z dokumentace (#34).
  *
@@ -74,6 +78,8 @@ const PLAN_SCHEMA = obj({
 
 const PLAN_INSTRUCTIONS = `Jsi zkušený stavbyvedoucí a rozpočtář v Česku. Z přiložené dokumentace stavby (technická zpráva, výkresy, výkazy, fotky) připrav realistický plán prací.
 - phases: fáze v pořadí, jak jdou na stavbě po sobě (např. Příprava, Zemní práce, Základy, Hrubá stavba, Střecha, Okna a dveře, Instalace – Elektro, Instalace – Voda, Instalace – Vytápění, Omítky a potěry, Fasáda, Dokončovací práce, Venkovní úpravy). Jen fáze, které stavba opravdu potřebuje.
+- ÚROVEŇ DETAILU jako skutečný harmonogram stavbyvedoucího: každá fáze 4–10 konkrétních úkolů. Každé podlaží zvlášť (hrubá stavba 1. NP, strop/věnec, hrubá stavba 2. NP…), střecha rozepsaná po vrstvách (nosná konstrukce, záklop/laťování, pojistná hydroizolace, krytina, oplechování, žlaby a svody, izolace).
+  Kontrolní seznam – zahrň, co se stavby týká: vytyčení stavby geodetem, zařízení staveniště (oplocení, voda, elektro, WC, kontejner), přípojky, sejmutí ornice, výkopy, převzetí základové spáry, základy, hydroizolace a protiradonové lepenky, podkladní desky, zdění po podlažích, překlady, věnce, stropy (bednění, výztuž, betonáž, zrání, odbednění), komíny/prostupy, střecha, klempířské prvky, okna/dveře/vrata (objednávka s dodací lhůtou předem), hrubé rozvody TZB po profesích, omítky, potěry + vysychání, zateplení a fasáda, lešení (montáž/demontáž), podlahy, obklady, kompletace TZB, revize a zkoušky, venkovní úpravy, úklid, geodetické zaměření, kolaudace.
 - tasks: konkrétní úkoly ve fázi v pořadí provádění. Kde odpovídá úkon z katalogu, dej jeho operationCode a množství (quantity, unit) z výkresů/výkazů. estimateDays = pracovní dny party; technologické přestávky (zrání betonu, vysychání) jako samostatný úkol.
 - costEstimate: odhad nákladů úkolu v Kč s DPH (materiál + práce, ceny ČR 2026). Když nejde odhadnout, null.
 - procurement: když se na úkol typicky poptává dodavatel nebo materiál (okna, střecha, elektro, beton, lešení…), krátký text co poptat vč. hlavních parametrů (rozměry, množství); jinak null.
@@ -89,17 +95,63 @@ export async function planDocuments(projectId: string) {
     orderBy: { createdAt: "desc" },
     select: { id: true, originalName: true, mimeType: true, size: true, type: true, requestId: true },
   });
-  return docs.filter((d) => extractable(d.mimeType, d.originalName));
+  // Poznámky uživatele a technické/průvodní zprávy první – nesmí vypadnout z limitu.
+  const rank = (n: string) =>
+    /\.txt$/i.test(n) ? 0 : /zpr[aá]v|technick|souhrn|pr[uů]vodn/i.test(n) ? 1 : /v[yý]kaz|rozpo[cč]et/i.test(n) ? 2 : 3;
+  return docs
+    .filter((d) => extractable(d.mimeType, d.originalName))
+    .sort((a, b) => rank(a.originalName) - rank(b.originalName));
 }
 
-export async function createPlanDraft(projectId: string, userId: string, documentIds: string[], prompt?: string | null) {
+/** Značka úkolů vzniklých z plánu z dokumentace (poznají se při nahrazení). */
+export const PLAN_MARK = "Navrženo z dokumentace.";
+const PLAN_MARKS = [PLAN_MARK, "Navrženo AI z dokumentace."];
+
+/** Úkoly a fáze dřívějšího plánu z dokumentace, které jde bezpečně nahradit
+ *  (nezačaté, bez výdajů a žádanek). */
+export async function replaceableTaskIds(projectId: string) {
+  const tasks = await prisma.task.findMany({
+    where: {
+      projectId,
+      kind: { in: ["task", "phase"] },
+      status: { in: ["todo", "rozhodnout"] },
+      actualStart: null,
+      expenses: { none: {} },
+      requests: { none: {} },
+    },
+    select: { id: true, kind: true, parentId: true, description: true },
+  });
+  const kids = new Set(
+    tasks.filter((t) => t.kind === "task" && PLAN_MARKS.some((m) => t.description?.includes(m))).map((t) => t.id),
+  );
+  const all = await prisma.task.findMany({ where: { projectId }, select: { id: true, parentId: true } });
+  // fáze jen když jsou dřívějším plánem (značka) nebo po smazání zůstanou prázdné
+  const phases = tasks
+    .filter((t) => t.kind === "phase")
+    .filter(
+      (ph) =>
+        PLAN_MARKS.some((m) => ph.description?.includes(m)) ||
+        (all.some((c) => c.parentId === ph.id) && all.filter((c) => c.parentId === ph.id).every((c) => kids.has(c.id))),
+    )
+    .filter((ph) => all.filter((c) => c.parentId === ph.id).every((c) => kids.has(c.id)))
+    .map((ph) => ph.id);
+  return [...kids, ...phases];
+}
+
+export async function createPlanDraft(
+  projectId: string,
+  userId: string,
+  documentIds: string[],
+  prompt?: string | null,
+  replaceExisting = false,
+) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
-  const ids = documentIds.filter((id) => allowed.has(id)).slice(0, 10);
+  const ids = documentIds.filter((id) => allowed.has(id)).slice(0, MAX_PLAN_DOCS);
   const d = await prisma.planDraft.create({
-    data: { projectId, documentIds: ids, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    data: { projectId, documentIds: ids, prompt: prompt?.trim() || null, model: PLAN_MODEL, createdById: userId, replaceExisting },
     select: { id: true },
   });
   return d.id;
@@ -114,6 +166,7 @@ export async function runPlanDraft(draftId: string) {
         model: true,
         prompt: true,
         documentIds: true,
+        replaceExisting: true,
         project: {
           select: {
             id: true,
@@ -123,13 +176,18 @@ export async function runPlanDraft(draftId: string) {
             startDate: true,
             plannedEnd: true,
             ownerId: true,
-            tasks: { select: { title: true, kind: true, status: true }, take: 300 },
+            tasks: { select: { id: true, title: true, kind: true, status: true }, take: 400 },
           },
         },
       },
     });
     if (!d) return;
     const p = d.project;
+    // Při nahrazení se dřívější nezačatý plán neukazuje jako „už existující“.
+    if (d.replaceExisting) {
+      const drop = new Set(await replaceableTaskIds(p.id));
+      p.tasks = p.tasks.filter((t) => !drop.has(t.id));
+    }
 
     const [ops, docs] = await Promise.all([
       prisma.operation.findMany({
@@ -190,7 +248,7 @@ export async function runPlanDraft(draftId: string) {
       ],
       "plan",
       PLAN_SCHEMA,
-      { effort: "medium", maxOutput: 40_000 },
+      { effort: "medium", maxOutput: 60_000 },
     );
     await prisma.planDraft.update({
       where: { id: d.id },

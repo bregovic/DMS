@@ -304,7 +304,7 @@ export async function callModel<T>(
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(420_000), // plán z několika PDF trvá i minuty
+    signal: AbortSignal.timeout(600_000), // plán z mnoha PDF silnějším modelem trvá i minuty
     body: JSON.stringify({
       model,
       input: [

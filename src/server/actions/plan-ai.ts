@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager } from "@/server/access";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
 import {
+  PLAN_MARK,
+  replaceableTaskIds,
   createCostDraft,
   createPlanDraft,
   createVendorSelectionTodos,
@@ -38,6 +40,7 @@ export async function startPlanDraft(formData: FormData) {
     user.id,
     formData.getAll("documentIds").map(String),
     String(formData.get("prompt") || ""),
+    formData.get("replace") === "1",
   );
   after(() => runPlanDraft(id));
   refresh(projectId);
@@ -46,7 +49,7 @@ export async function startPlanDraft(formData: FormData) {
 export async function getPlanDraft(id: string) {
   const d = await prisma.planDraft.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, result: true, prompt: true, costUsd: true, createdAt: true, documentIds: true },
+    select: { id: true, projectId: true, status: true, result: true, prompt: true, costUsd: true, createdAt: true, documentIds: true, replaceExisting: true },
   });
   if (!d) throw new Error("Návrh nenalezen.");
   await managerOf(d.projectId);
@@ -61,7 +64,7 @@ export async function applyPlanDraft(formData: FormData) {
   const id = String(formData.get("id"));
   const d = await prisma.planDraft.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, result: true },
+    select: { id: true, projectId: true, status: true, result: true, replaceExisting: true },
   });
   if (!d?.result) throw new Error("Návrh nenalezen.");
   if (d.status === "applied") throw new Error("Návrh už je v plánu.");
@@ -69,6 +72,16 @@ export async function applyPlanDraft(formData: FormData) {
   const plan = d.result as unknown as PlanResult;
   const chosen = plan.phases.map((ph, i) => ({ ph, i })).filter(({ i }) => formData.get(`phase_${i}`) === "1");
   if (chosen.length === 0) throw new Error("Vyber aspoň jednu fázi.");
+
+  // Nahradit dřívější návrh: smazat jeho nezačaté úkoly (a prázdné fáze).
+  if (d.replaceExisting) {
+    const ids = await replaceableTaskIds(d.projectId);
+    if (ids.length) {
+      await prisma.taskDependency.deleteMany({ where: { OR: [{ taskId: { in: ids } }, { dependsOnId: { in: ids } }] } });
+      await prisma.task.deleteMany({ where: { id: { in: ids }, parentId: { not: null } } });
+      await prisma.task.deleteMany({ where: { id: { in: ids } } });
+    }
+  }
 
   const [project, ops, lastPhase] = await Promise.all([
     prisma.project.findUnique({ where: { id: d.projectId }, select: { startDate: true, plannedEnd: true } }),
@@ -96,6 +109,7 @@ export async function applyPlanDraft(formData: FormData) {
           projectId: d.projectId,
           kind: "phase",
           title: ph.title.slice(0, 200),
+          description: PLAN_MARK,
           status: "todo",
           startDate: new Date(base),
           dueDate: new Date(base),
@@ -109,7 +123,7 @@ export async function applyPlanDraft(formData: FormData) {
         const desc = [
           t.quantity != null ? `Množství: ${t.quantity} ${t.unit ?? ""}`.trim() : null,
           t.note,
-          "Navrženo z dokumentace.",
+          PLAN_MARK,
         ]
           .filter(Boolean)
           .join("\n");

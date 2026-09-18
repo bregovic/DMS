@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ClipboardList, Coins, Loader2, Sparkles } from "lucide-react";
 import {
@@ -59,27 +59,66 @@ export function PlanAi({
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const running = draft?.status === "running" || costDraft?.status === "running";
+  const planRunning = draft?.status === "running";
   const [costAsk, setCostAsk] = useState(false);
   const [costs, setCosts] = useState<Costs | null>(null);
   // Odpovědi k otevřeným bodům návrhu plánu (index bodu → text).
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const answered = Object.values(answers).filter((a) => a.trim()).length;
+  // Poznámky k jednotlivým fázím a k celému plánu.
+  const [phaseNotes, setPhaseNotes] = useState<Record<number, string>>({});
+  const [generalNote, setGeneralNote] = useState("");
+  const answered =
+    Object.values(answers).filter((a) => a.trim()).length +
+    Object.values(phaseNotes).filter((a) => a.trim()).length +
+    (generalNote.trim() ? 1 : 0);
+
+  // Nový návrh (po doplnění) se po dokončení sám otevře.
+  const prevStatus = useRef(draft?.status);
+  useEffect(() => {
+    if (prevStatus.current === "running" && draft?.status === "ready") {
+      getPlanDraft(draft.id).then(setReview).catch(() => {});
+    }
+    prevStatus.current = draft?.status;
+  }, [draft?.status, draft?.id]);
 
   /** Otevřené body doplnit a plán připravit znovu se stejnými dokumenty. */
   async function refine() {
     if (!review?.result) return;
+    const NL = String.fromCharCode(10);
+    const MARK = NL + NL + "=== Úprava předchozího návrhu ===" + NL;
     const pairs = review.result.missingInfo
       .map((q, i) => ({ q, a: (answers[i] ?? "").trim() }))
       .filter((x) => x.a);
+    const notes = review.result.phases
+      .map((ph, i) => ({ ph: ph.title, n: (phaseNotes[i] ?? "").trim() }))
+      .filter((x) => x.n);
+    // Předchozí návrh stručně (fáze → úkoly), ať se upravuje, ne vymýšlí znovu.
+    const prev = review.result.phases
+      .map((ph) => `${ph.title}: ${ph.tasks.map((t) => `${t.title} (${t.estimateDays} d)`).join("; ")}`)
+      .join(NL);
+    const base = (review.prompt ?? "").split(MARK)[0];
     setBusy(true);
     setErr(null);
     try {
       const fd = new FormData();
       fd.set("projectId", projectId);
       for (const id of review.documentIds ?? []) fd.append("documentIds", id);
+      if (review.replaceExisting) fd.set("replace", "1");
       fd.set(
         "prompt",
-        [review.prompt, "Doplnění k otevřeným bodům:", ...pairs.map((x) => `- ${x.q} → ${x.a}`)].filter(Boolean).join(String.fromCharCode(10)),
+        base +
+          MARK +
+          [
+            "Předchozí návrh (zachovej, co je v pořádku, a uprav podle poznámek):",
+            prev,
+            pairs.length ? "Doplnění k otevřeným bodům:" : "",
+            ...pairs.map((x) => `- ${x.q} → ${x.a}`),
+            notes.length ? "Poznámky k fázím:" : "",
+            ...notes.map((x) => `- ${x.ph}: ${x.n}`),
+            generalNote.trim() ? `Poznámka k celému plánu: ${generalNote.trim()}` : "",
+          ]
+            .filter(Boolean)
+            .join(NL),
       );
       const old = new FormData();
       old.set("id", review.id);
@@ -87,7 +126,9 @@ export function PlanAi({
       await startPlanDraft(fd);
       setReview(null);
       setAnswers({});
-      setMsg("Plán se připravuje znovu s doplněnými údaji.");
+      setPhaseNotes({});
+      setGeneralNote("");
+      setMsg("Plán se připravuje znovu podle doplnění – po dokončení se sám otevře.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
     }
@@ -105,7 +146,7 @@ export function PlanAi({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        {running ? (
+        {planRunning ? (
           <span className={`${chip} border-stone-200 text-stone-500`}>
             <Loader2 className="size-3.5 animate-spin" /> Připravuji plán…
           </span>
@@ -350,15 +391,24 @@ export function PlanAi({
                       type="checkbox"
                       name="documentIds"
                       value={d.id}
-                      defaultChecked={i < 10}
+                      defaultChecked={i < 20}
                       className="size-4 accent-stone-900"
                     />
                     <span className="truncate">{d.name}</span>
                   </label>
                 ))}
-                <p className="text-[11px] text-stone-400">Najednou nejvýš 10 dokumentů.</p>
+                <p className="text-[11px] text-stone-400">Najednou nejvýš 20 dokumentů – poznámky a technické zprávy jsou nahoře.</p>
               </fieldset>
             )}
+            <label className="flex items-start gap-2 text-sm text-stone-700">
+              <input type="checkbox" name="replace" value="1" className="mt-0.5 size-4 shrink-0 accent-stone-900" />
+              <span>
+                Nahradit dříve navržený plán
+                <span className="block text-[11px] text-stone-400">
+                  Po potvrzení se smažou nezačaté úkoly z předchozího plánu z dokumentace (bez výdajů a žádanek).
+                </span>
+              </span>
+            </label>
             <label className="block text-xs text-stone-500">
               Upřesnění (volitelné)
               <textarea
@@ -426,11 +476,7 @@ export function PlanAi({
                     />
                   </div>
                 ))}
-                {answered > 0 && (
-                  <Button type="button" size="sm" disabled={busy} onClick={refine}>
-                    Doplnit a připravit znovu ({answered})
-                  </Button>
-                )}
+
               </div>
             )}
             {review.result.assumptions.length > 0 && (
@@ -486,9 +532,38 @@ export function PlanAi({
                         </tbody>
                       </table>
                     </div>
+                    <div className="border-t border-stone-100 px-3 py-2">
+                      <textarea
+                        rows={1}
+                        value={phaseNotes[i] ?? ""}
+                        onChange={(e) => setPhaseNotes((a) => ({ ...a, [i]: e.target.value }))}
+                        placeholder="Poznámka k fázi – co přidat, změnit nebo vynechat"
+                        aria-label={`Poznámka k fázi ${ph.title}`}
+                        className="flex w-full rounded-none border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+                      />
+                    </div>
                   </details>
                 );
               })}
+            </div>
+
+            <div className="space-y-2 border border-stone-200 p-3">
+              <label className="block text-xs text-stone-500">
+                Poznámka k celému plánu
+                <textarea
+                  rows={2}
+                  value={generalNote}
+                  onChange={(e) => setGeneralNote(e.target.value)}
+                  placeholder="Např. chybí hrubá stavba 2. NP; rozepiš střechu po vrstvách; lepenky a hydroizolace samostatně"
+                  className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+                />
+              </label>
+              <Button type="button" size="sm" variant="outline" disabled={busy || answered === 0} onClick={refine}>
+                Upravit plán podle doplnění a poznámek{answered ? ` (${answered})` : ""}
+              </Button>
+              <p className="text-[11px] text-stone-400">
+                Připraví se nový návrh se stejnými dokumenty – po dokončení se sám zobrazí.
+              </p>
             </div>
 
             {err && <p className="text-sm text-red-600">{err}</p>}
