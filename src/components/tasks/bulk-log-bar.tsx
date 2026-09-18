@@ -7,7 +7,7 @@ import { prepareUpload } from "@/lib/client-upload";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-export const PICK_ATTR = "data-pick-task";
+import { PICK_ATTR } from "@/lib/bulk-ids";
 
 type T = { id: string; title: string; percent: number; due: string | null };
 
@@ -127,6 +127,8 @@ export function BulkLogBar({ tasks, defaultRate }: { tasks: T[]; defaultRate: nu
               {chosen.map((t) => (
                 <div key={t.id} className="grid grid-cols-3 items-center gap-2 border-b border-stone-100 pb-2 sm:grid-cols-[1fr_6rem_5rem_9rem] sm:border-0 sm:pb-0">
                   <input type="hidden" name="taskIds" value={t.id} />
+                  <input type="hidden" name={`pct_orig_${t.id}`} value={t.percent || ""} />
+                  <input type="hidden" name={`due_orig_${t.id}`} value={t.due ?? ""} />
                   <span className="col-span-3 truncate text-sm text-stone-900 sm:col-span-1" title={t.title}>
                     {t.title}
                   </span>

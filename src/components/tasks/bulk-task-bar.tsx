@@ -5,7 +5,7 @@ import { ListChecks, X } from "lucide-react";
 import { bulkUpdateTasks } from "@/server/actions/tasks";
 import { Combobox } from "@/components/ui/combobox";
 
-export const BULK_FORM_ID = "bulk-tasks";
+import { BULK_FORM_ID } from "@/lib/bulk-ids";
 const LIST_ID = "task-list";
 
 /**

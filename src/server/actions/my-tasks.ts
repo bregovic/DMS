@@ -21,6 +21,16 @@ function dateOrNull(v: FormDataEntryValue | null): Date | null {
 }
 const MAX_FILE = 14 * 1024 * 1024;
 
+/** Hodnota jen když se oproti původní (předvyplněné) změnila. */
+function changedNum(v: FormDataEntryValue | null, orig: FormDataEntryValue | null) {
+  const n = num(v);
+  return n != null && n !== num(orig) ? n : null;
+}
+function changedDate(v: FormDataEntryValue | null, orig: FormDataEntryValue | null) {
+  const s = String(v || "").trim();
+  return s && s !== String(orig || "").trim() ? dateOrNull(s) : null;
+}
+
 type SessionUser = { id: string; email?: string | null };
 type LogInput = {
   hours: number | null;
@@ -193,8 +203,8 @@ export async function logTaskExpense(formData: FormData) {
     hours: num(formData.get("hours")),
     rate: num(formData.get("rate")),
     amount: num(formData.get("amount")),
-    percent: num(formData.get("percent")),
-    expectedEnd: dateOrNull(formData.get("expectedEnd")),
+    percent: changedNum(formData.get("percent"), formData.get("pct_orig")),
+    expectedEnd: changedDate(formData.get("expectedEnd"), formData.get("due_orig")),
     date: dateOrNull(formData.get("date")) ?? new Date(),
     note: String(formData.get("description") || "").trim(),
     files: filesFrom(formData),
@@ -220,8 +230,8 @@ export async function logTasksExpenseBulk(formData: FormData) {
   for (const id of ids) {
     const hours = num(formData.get(`hours_${id}`));
     const amount = num(formData.get(`amount_${id}`));
-    const percent = num(formData.get(`percent_${id}`));
-    const expectedEnd = dateOrNull(formData.get(`end_${id}`));
+    const percent = changedNum(formData.get(`percent_${id}`), formData.get(`pct_orig_${id}`));
+    const expectedEnd = changedDate(formData.get(`end_${id}`), formData.get(`due_orig_${id}`));
     if (!hours && !amount && percent == null && !expectedEnd) continue; // řádek bez údajů přeskočit
     results.push(
       await logOne(user, id, { ...common, hours, amount, percent, expectedEnd, files }),

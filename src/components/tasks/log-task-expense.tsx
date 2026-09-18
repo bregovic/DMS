@@ -85,6 +85,8 @@ export function LogTaskExpense({
         className="space-y-4 p-5"
       >
         <input type="hidden" name="taskId" value={taskId} />
+        <input type="hidden" name="pct_orig" value={percentDone || ""} />
+        <input type="hidden" name="due_orig" value={dueDate ?? ""} />
 
         <div className="grid grid-cols-2 gap-2">
           {(
