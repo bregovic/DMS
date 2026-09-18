@@ -464,6 +464,7 @@ model Document {
   createdAt    DateTime @default(now())
   exportedAt   DateTime? // označeno jako stažené/vyexportováno (hromadné stažení příloh)
 
+  extractions Extraction[]
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   offer      Offer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
@@ -608,4 +609,29 @@ model CatalogWish {
   owner User @relation("CatalogWishOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+}
+
+// Vytěžení nabídky přes AI (#33): návrh dodavatele a nabídek z přílohy žádanky.
+// Nic se nezakládá samo – návrh čeká na potvrzení (status pending → applied/dismissed).
+model Extraction {
+  id           String   @id @default(cuid())
+  projectId    String
+  requestId    String // žádanka, u které příloha leží
+  documentId   String
+  status       String   @default("running") // running | ready | error | applied | dismissed
+  result       Json?
+  error        String?
+  model        String
+  inputTokens  Int?
+  outputTokens Int?
+  costUsd      Float?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([documentId])
+  @@index([createdAt])
 }

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { createExtraction, extractable, runExtraction } from "@/server/extraction";
 import { requestFolder } from "@/server/document-files";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -184,7 +186,7 @@ export async function attachRequestFiles(formData: FormData) {
       file.name,
       requestFolder(request.project.ownerId, projectId, request.id),
     );
-    await prisma.document.create({
+    const doc = await prisma.document.create({
       data: {
         projectId,
         requestId: request.id,
@@ -197,6 +199,16 @@ export async function attachRequestFiles(formData: FormData) {
         uploadedById: user.id,
       },
     });
+
+    // Nabídka v PDF / na fotce → rovnou vytěžit přes AI (#33). Běží na pozadí,
+    // výsledek je jen návrh k potvrzení. Bez klíče nebo po vyčerpání limitu se
+    // prostě nespustí – nahrání přílohy tím nesmí selhat.
+    if (docType === offerType && extractable(mimeType, file.name)) {
+      try {
+        const exId = await createExtraction(doc.id, user.id);
+        after(() => runExtraction(exId));
+      } catch {}
+    }
   }
 
   revalidatePath(`/projects/${projectId}`);

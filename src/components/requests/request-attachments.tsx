@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Mail, Paperclip, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
 import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
+import { startExtraction } from "@/server/actions/extraction";
 import { DeleteButton } from "@/components/ui/delete-button";
+import { ExtractionDialog } from "@/components/requests/extraction-dialog";
 
 export type RequestDoc = {
   id: string;
@@ -12,7 +15,52 @@ export type RequestDoc = {
   isEmail: boolean;
   size: number;
   canDelete: boolean;
+  /** Poslední vytěžení přes AI (#33). */
+  ai?: { id: string; status: string; error: string | null } | null;
+  canExtract?: boolean;
 };
+
+/** Stav vytěžení u přílohy: tlačítko / běží / návrh k potvrzení / hotovo. */
+function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!d.canExtract) return null;
+  const run = async () => {
+    setBusy(true);
+    setErr(null);
+    const fd = new FormData();
+    fd.set("documentId", d.id);
+    try {
+      await startExtraction(fd);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+    }
+    setBusy(false);
+  };
+  const base = "flex shrink-0 items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 text-[11px]";
+  const st = d.ai?.status;
+  if (busy || st === "running")
+    return (
+      <span className={`${base} border-stone-200 text-stone-500`}>
+        <Loader2 className="size-3 animate-spin" /> AI čte nabídku…
+      </span>
+    );
+  if (st === "ready")
+    return (
+      <button type="button" onClick={() => onOpen(d.ai!.id)} className={`${base} cursor-pointer border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100`}>
+        <Sparkles className="size-3" /> Návrh k potvrzení
+      </button>
+    );
+  const again = (label: string, cls: string, title?: string) => (
+    <button type="button" onClick={run} title={title ?? err ?? undefined} className={`${base} cursor-pointer ${cls}`}>
+      <Sparkles className="size-3" /> {err ? "Nejde spustit" : label}
+    </button>
+  );
+  if (st === "applied") return again("Založeno · znovu", "border-emerald-300 text-emerald-700 hover:border-emerald-600");
+  if (st === "error") return again("AI chyba · znovu", "border-red-300 text-red-700 hover:border-red-600", d.ai?.error ?? undefined);
+  if (st === "dismissed") return again("Zamítnuto · znovu", "border-stone-300 text-stone-500 hover:border-stone-950");
+  return again("Vyhodnotit AI", "border-stone-300 text-stone-600 hover:border-stone-950");
+}
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPT = ".eml,.msg,.pdf,image/*,.doc,.docx,.xls,.xlsx";
@@ -44,6 +92,16 @@ export function RequestAttachments({
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [aiOpen, setAiOpen] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Dokud AI čte nabídku, obnovovat stránku – výsledek se objeví sám.
+  const running = docs.some((d) => d.ai?.status === "running");
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(t);
+  }, [running, router]);
 
   async function upload(list: FileList | File[]) {
     const files = [...list];
@@ -115,6 +173,7 @@ export function RequestAttachments({
                   </span>
                 )}
               </a>
+              <AiChip d={d} onOpen={setAiOpen} />
               {d.canDelete && (
                 <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat tuto přílohu?" />
@@ -148,6 +207,15 @@ export function RequestAttachments({
         </div>
       )}
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {aiOpen && (
+        <ExtractionDialog
+          id={aiOpen}
+          onClose={() => {
+            setAiOpen(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

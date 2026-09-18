@@ -138,6 +138,11 @@ export default async function ProjectDetailPage({
                 mimeType: true,
                 size: true,
                 uploadedById: true,
+                extractions: {
+                  orderBy: { createdAt: "desc" },
+                  take: 1,
+                  select: { id: true, status: true, error: true },
+                },
               },
               orderBy: { createdAt: "asc" },
             },
@@ -1183,6 +1188,22 @@ export default async function ProjectDetailPage({
                       {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
                       {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
                     </p>
+                    {r.offers.length > 0 &&
+                      (() => {
+                        // Průběžné vyhodnocení: kolik nabídek, nejlevnější, vybraná.
+                        const priced = r.offers.filter((o) => o.price != null);
+                        const best = priced.sort((x, y) => Number(x.price) - Number(y.price))[0];
+                        const chosen = r.offers.find((o) => o.selected);
+                        const who = (o: (typeof r.offers)[number]) => o.vendor?.name ?? o.vendorName ?? "?";
+                        const n = r.offers.length;
+                        return (
+                          <p className="mt-1 text-xs text-stone-600">
+                            {n} {n === 1 ? "nabídka" : n < 5 ? "nabídky" : "nabídek"}
+                            {best ? ` · nejlevnější ${formatCurrency(Number(best.price))} (${who(best)})` : ""}
+                            {chosen ? ` · vybraná: ${who(chosen)}` : ""}
+                          </p>
+                        );
+                      })()}
                     {r.description && (
                       <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs text-stone-600">
                         {r.description}
@@ -1240,6 +1261,14 @@ export default async function ProjectDetailPage({
                       d.mimeType === "application/vnd.ms-outlook",
                     size: d.size,
                     canDelete: isManager || d.uploadedById === user.id,
+                    ai: d.extractions[0]
+                      ? { id: d.extractions[0].id, status: d.extractions[0].status, error: d.extractions[0].error }
+                      : null,
+                    canExtract:
+                      isManager &&
+                      (d.mimeType === "application/pdf" ||
+                        d.mimeType.startsWith("image/") ||
+                        d.originalName.toLowerCase().endsWith(".pdf")),
                   }))}
                 />
 
