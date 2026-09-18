@@ -7,7 +7,7 @@
  *   <prefix>from   datum od (YYYY-MM-DD)
  *   <prefix>to     datum do
  *   <prefix>st     stavy, víc najednou: "todo,in_progress"; "all" = všechny;
- *                  bez parametru platí výchozí výběr seznamu (typicky nezavřené)
+ *                  bez parametru platí výchozí výběr seznamu (typicky neukončené)
  *   <prefix>sort   pole řazení, <prefix>dir = asc | desc
  *   <prefix><key>  další rozbalovací filtry (dodavatel…)
  *

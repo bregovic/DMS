@@ -419,7 +419,7 @@ export default async function ProjectDetailPage({
    * její dílčí úkol – jinak by dílčí úkoly visely bez souvislosti.
    */
   // Standard filtrů (src/lib/list-filter.ts), prefix "t". Bez parametru
-  // stavu jsou vidět jen nezavřené úkoly.
+  // stavu jsou vidět jen neukončené úkoly.
   const tstRaw = sp?.tst;
   const tstSel = parseStatusFilter(tstRaw, []);
   const tq = (typeof sp?.tq === "string" ? sp.tq : "").trim().toLowerCase();
@@ -552,7 +552,7 @@ export default async function ProjectDetailPage({
   const rsort = sp?.rsort === "price" ? "price" : "date";
   const rdir = sp?.rdir === "asc" ? "asc" : "desc";
 
-  // Stav (standard filtrů, prefix "r"): bez parametru jen nezavřené –
+  // Stav (standard filtrů, prefix "r"): bez parametru jen neukončené –
   // schválené (převedené na výdaj) a zrušené se schovají.
   const rstRaw = sp?.rst;
   const rstSel = parseStatusFilter(rstRaw, []);

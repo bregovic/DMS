@@ -35,7 +35,7 @@ export function ListFilters({
   }[];
   /** Stavy jako čipy (víc najednou), parametr <prefix>st. */
   statuses?: { key: string; label: string; color?: string | null; count?: number }[];
-  /** Výběr stavů bez parametru v adrese – typicky nezavřené. */
+  /** Výběr stavů bez parametru v adrese – typicky neukončené. */
   defaultStatuses?: string[];
   /** Zobrazit filtr datum od–do. */
   dates?: boolean;
@@ -79,6 +79,11 @@ export function ListFilters({
         ? null
         : new Set(stRaw.split(",").filter(Boolean));
   const isDefaultSt = stRaw === null;
+  // Doplněk výchozího výběru = ukončené (hotové, zrušené…) – vlastní čip.
+  const closedStatuses = defaultStatuses.length
+    ? (statuses ?? []).map((s) => s.key).filter((key) => !defaultStatuses.includes(key))
+    : [];
+  const sameSet = (a: Set<string>, b: string[]) => a.size === b.length && b.every((x) => a.has(x));
 
   function setParam(updates: Record<string, string | null>) {
     const params = new URLSearchParams(sp.toString());
@@ -117,7 +122,8 @@ export function ListFilters({
     if (v) summary.push(s.options.find((o) => o.value === v)?.label ?? v);
   }
   if (statuses) {
-    if (isDefaultSt && defaultStatuses.length) summary.push("nezavřené");
+    if (isDefaultSt && defaultStatuses.length) summary.push("neukončené");
+    else if (closedStatuses.length && stSelected && sameSet(stSelected, closedStatuses)) summary.push("ukončené");
     else if (stSelected)
       summary.push(
         statuses
@@ -284,7 +290,16 @@ export function ListFilters({
               <span className="kicker mr-1">Stav</span>
               {defaultStatuses.length > 0 && (
                 <button type="button" onClick={() => setParam({ [k("st")]: null })} className={chip(isDefaultSt)}>
-                  Nezavřené
+                  Neukončené
+                </button>
+              )}
+              {closedStatuses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStatuses(new Set(closedStatuses))}
+                  className={chip(!isDefaultSt && !!stSelected && sameSet(stSelected, closedStatuses))}
+                >
+                  Ukončené
                 </button>
               )}
               <button type="button" onClick={() => setStatuses(null)} className={chip(!isDefaultSt && stSelected === null)}>
