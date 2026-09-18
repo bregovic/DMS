@@ -20,3 +20,12 @@ export async function deleteWithFiles(
   await removeRows();
   await Promise.all(files.map((f) => storage.delete(f.fileName).catch(() => undefined)));
 }
+
+/**
+ * Složka žádanky v úložišti: všechno k jedné žádance (e-maily, nabídky,
+ * podklady) leží pohromadě a jde to projít i přímo v Cloudflare R2.
+ * Podle id, ne podle názvu – přejmenování žádanky složku nerozdělí.
+ */
+export function requestFolder(ownerId: string, projectId: string, requestId: string) {
+  return `${ownerId}/${projectId}/zadanky/${requestId}`;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   fillAvailability,
   clearAvailability,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 const WD = [
   { v: 1, l: "Po" },
@@ -94,18 +95,7 @@ export function VendorAvailabilityDialog({
   const months = [view, addMonths(view, 1), addMonths(view, 2)];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
-      <div className="w-full max-w-3xl border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Dostupnost · {vendorName}</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title={`Dostupnost · ${vendorName}`} size="3xl" onClose={() => setOpen(false)}>
 
         <div className="space-y-5 p-5">
           {/* plnění */}
@@ -199,8 +189,7 @@ export function VendorAvailabilityDialog({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

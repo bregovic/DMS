@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Paperclip, Pencil, Plus, X } from "lucide-react";
+import { Check, Paperclip, Pencil, Plus } from "lucide-react";
 import {
   createOffer,
   updateOffer,
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 export type OfferView = {
   id: string;
@@ -60,14 +61,7 @@ function OfferForm({
   if (!open) return <>{trigger(() => setOpen(true))}</>;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
-      <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">{mode === "create" ? "Nová nabídka" : "Upravit nabídku"}</h3>
-          <button type="button" onClick={() => setOpen(false)} className="text-stone-400 hover:text-stone-950 cursor-pointer">
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title={mode === "create" ? "Nová nabídka" : "Upravit nabídku"} size="md" onClose={() => setOpen(false)}>
         <form
           ref={formRef}
           action={async (fd) => {
@@ -138,15 +132,14 @@ function OfferForm({
             termín, body i komentář můžeš doplnit i později.
           </p>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zrušit
             </Button>
             <Button type="submit">Uložit</Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

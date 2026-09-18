@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Clock, X } from "lucide-react";
+import { Clock } from "lucide-react";
 import { logTaskExpense } from "@/server/actions/my-tasks";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 const fieldClass =
   "flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 text-base text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:h-10 sm:text-sm";
@@ -46,29 +47,7 @@ export function LogTaskExpense({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Vykázat: ${taskTitle}`}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-stone-950/30 sm:items-start sm:p-4 sm:py-12"
-      onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-    >
-      <div className="max-h-full w-full max-w-md overflow-y-auto border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <div className="min-w-0">
-            <h3 className="kicker">Vykázat</h3>
-            <p className="mt-0.5 truncate text-sm font-medium text-stone-950">{taskTitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Zavřít"
-            className="p-1 text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
+    <Dialog title={`Vykázat · ${taskTitle}`} size="md" onClose={() => setOpen(false)}>
         <form
           ref={formRef}
           action={async (fd) => {
@@ -174,7 +153,7 @@ export function LogTaskExpense({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-2 pt-1">
+          <DialogFooter>
             <Button type="submit" disabled={busy} className="h-11 flex-1 sm:h-10">
               {busy ? "Ukládám…" : "Vykázat"}
             </Button>
@@ -186,9 +165,8 @@ export function LogTaskExpense({
             >
               Zrušit
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

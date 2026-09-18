@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Plus, Pencil, X } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { addRecipe, updateRecipe } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 
 export type MaterialOption = { id: string; code: string; name: string; unit: string };
@@ -65,18 +65,7 @@ export function RecipeForm({
   }
 
   return (
-    <ModalBackdrop onClose={() => setOpen(false)}>
-      <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">{editing ? "Upravit materiál v receptu" : "Materiál do receptu"}</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title={editing ? "Upravit materiál v receptu" : "Materiál do receptu"} size="md" onClose={() => setOpen(false)}>
         <form ref={formRef} action={action} className="space-y-5 p-5">
           {editing ? (
             <input type="hidden" name="id" value={recipe.id} />
@@ -127,16 +116,15 @@ export function RecipeForm({
               {state.error}
             </p>
           )}
-          <div className="flex justify-end gap-2 pt-1">
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zrušit
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Ukládám…" : "Uložit"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </ModalBackdrop>
+    </Dialog>
   );
 }

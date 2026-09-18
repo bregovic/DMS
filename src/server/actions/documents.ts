@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requestFolder } from "@/server/document-files";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
@@ -181,7 +182,7 @@ export async function attachRequestFiles(formData: FormData) {
     const key = await storage.save(
       buffer,
       file.name,
-      `${request.project.ownerId}/${projectId}/${docType}`,
+      requestFolder(request.project.ownerId, projectId, request.id),
     );
     await prisma.document.create({
       data: {

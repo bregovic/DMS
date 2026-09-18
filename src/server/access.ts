@@ -77,7 +77,9 @@ export async function listProjectsForUser(user: SessionUser) {
     }
   }
 
-  return result;
+  // Abecedně (česky: "Č" hned za "C", ne až za "Z"). Dřív vlastní projekty
+  // podle poslední změny a sdílené za nimi, takže se pořadí pořád měnilo.
+  return result.sort((a, b) => a.project.name.localeCompare(b.project.name, "cs"));
 }
 
 export type ProjectAccess = {

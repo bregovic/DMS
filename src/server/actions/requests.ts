@@ -32,8 +32,10 @@ export async function createRequest(formData: FormData) {
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
+    // Jen dodavatel z evidence vlastníka projektu – cizí id se zahodí
+    // (u výdajů opraveno při review 16. 7., tady zůstalo).
     const v = await prisma.vendor.findFirst({
-      where: { id: vendorId },
+      where: { id: vendorId, ownerId: project.ownerId },
       select: { id: true },
     });
     if (!v) vendorId = null;
@@ -76,6 +78,59 @@ export async function createRequest(formData: FormData) {
     },
   });
 
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/**
+ * Úprava žádanky – název, množství, specifikace, dodavatel, cena, termín.
+ *
+ * Dřív šlo u žádanky jen změnit stav a smazat ji; specifikace se nedala
+ * ani zobrazit, natož opravit. Smí správce projektu a autor žádanky.
+ */
+export async function updateRequest(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("id"));
+  const projectId = String(formData.get("projectId"));
+
+  const access = await getProjectAccess(projectId, user);
+  const existing = await prisma.request.findFirst({
+    where: { id, projectId },
+    select: { id: true, createdById: true, project: { select: { ownerId: true } } },
+  });
+  if (!existing) throw new Error("Žádanka nenalezena.");
+  const mayEdit =
+    !!access &&
+    (isManager(access.role) || (canWrite(access.role) && existing.createdById === user.id));
+  if (!mayEdit) throw new Error("Tuto žádanku nemůžeš upravit.");
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) throw new Error("Zadej, co se poptává.");
+
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (vendorId) {
+    const v = await prisma.vendor.findFirst({
+      where: { id: vendorId, ownerId: existing.project.ownerId },
+      select: { id: true },
+    });
+    if (!v) vendorId = null;
+  }
+
+  const reqDateStr = String(formData.get("requiredDate") || "");
+  const requiredDate = reqDateStr ? new Date(reqDateStr) : null;
+
+  await prisma.request.update({
+    where: { id: existing.id },
+    data: {
+      title,
+      description: String(formData.get("description") || "").trim() || null,
+      quantity: num(formData.get("quantity")),
+      unit: String(formData.get("unit") || "ks"),
+      category: String(formData.get("category") || "other"),
+      price: num(formData.get("price")),
+      vendorId,
+      requiredDate: requiredDate && !isNaN(requiredDate.getTime()) ? requiredDate : null,
+    },
+  });
   revalidatePath(`/projects/${projectId}`);
 }
 

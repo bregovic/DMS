@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+
 import {
   aggregateExpensesQr,
   type QrGroup,
 } from "@/server/actions/qr-aggregate";
 import { bulkUpdateExpenses } from "@/server/actions/expenses";
 import { formatCurrency } from "@/lib/utils";
+import { Dialog } from "@/components/ui/dialog";
 
 export function QrAggregateModal({
   projectId,
@@ -52,27 +53,8 @@ export function QrAggregateModal({
   }, [projectId, ids]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/50 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3.5">
-          <h2 className="text-sm font-medium text-stone-950">QR platba</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-stone-400 transition-colors hover:text-stone-950 cursor-pointer"
-            aria-label="Zavřít"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
+    <Dialog title="QR platba" size="lg" onClose={onClose}>
+        <div className="px-5 py-4">
           {loading ? (
             <p className="py-12 text-center text-sm text-stone-500">
               Vytvářím QR platby…
@@ -132,7 +114,7 @@ export function QrAggregateModal({
         </div>
 
         {!loading && !error && groups.length > 0 && (
-          <div className="flex items-center justify-end gap-2 border-t border-stone-200 px-5 py-3">
+          <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-stone-200 bg-white px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <button
               type="button"
               onClick={onClose}
@@ -166,7 +148,6 @@ export function QrAggregateModal({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Dialog>
   );
 }

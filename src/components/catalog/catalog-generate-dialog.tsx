@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, Trash2, X } from "lucide-react";
+import { Boxes, Trash2 } from "lucide-react";
 import {
   listOperationsForCalc,
   listPackagesForCalc,
@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
-import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { Dialog } from "@/components/ui/dialog";
 import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
@@ -224,18 +224,10 @@ export function CatalogGenerateDialog({
   }
 
   return (
-    <ModalBackdrop onClose={close}>
-      <div className="w-full max-w-2xl border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">
-            {phase ? `Přidat do fáze · ${phase.title}` : "Nová fáze z katalogu"}
-          </h3>
-          <button type="button" onClick={close} className="text-stone-400 hover:text-stone-950 cursor-pointer">
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title={phase ? `Přidat do fáze · ${phase.title}` : "Nová fáze z katalogu"} size="2xl" onClose={close}>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
+        {/* Roluje celý dialog (ui/dialog) – hlavička drží nahoře, tlačítka dole. */}
+        <div className="space-y-5 p-5">
           {!phase && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
@@ -466,7 +458,7 @@ export function CatalogGenerateDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-stone-200 px-5 py-4">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <p className="text-[11px] text-stone-400">
             {phase
               ? "Přidá do fáze dílčí úkoly (pracnost → dny, 8 h/den) a žádanky na materiál i práci; termíny se přepočítají."
@@ -481,7 +473,6 @@ export function CatalogGenerateDialog({
             </Button>
           </div>
         </div>
-      </div>
-    </ModalBackdrop>
+    </Dialog>
   );
 }

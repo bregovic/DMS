@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, X } from "lucide-react";
+import { Boxes } from "lucide-react";
 import {
   listOperationsForCalc,
   fillTaskFromCatalog,
@@ -12,7 +12,7 @@ import { calcOperation } from "@/lib/process-calc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { Dialog } from "@/components/ui/dialog";
 import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
@@ -108,16 +108,10 @@ export function TaskCatalogFillDialog({
   }
 
   return (
-    <ModalBackdrop onClose={() => setOpen(false)}>
-      <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Naplnit úkol z katalogu · {taskTitle}</h3>
-          <button type="button" onClick={() => setOpen(false)} className="text-stone-400 hover:text-stone-950 cursor-pointer">
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title={`Naplnit úkol z katalogu · ${taskTitle}`} size="lg" onClose={() => setOpen(false)}>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
+        {/* Roluje celý dialog (ui/dialog) – hlavička drží nahoře, tlačítka dole. */}
+        <div className="space-y-5 p-5">
           <div className="space-y-1.5">
             <Label>Činnost z katalogu</Label>
             {op ? (
@@ -171,7 +165,7 @@ export function TaskCatalogFillDialog({
           {error && <p className="border-l-2 border-red-600 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-stone-200 px-5 py-4">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <p className="text-[11px] text-stone-400">
             Doplní úkolu odhad dní a přidá žádanky na materiál i práci (Poptávka).
           </p>
@@ -184,7 +178,6 @@ export function TaskCatalogFillDialog({
             </Button>
           </div>
         </div>
-      </div>
-    </ModalBackdrop>
+    </Dialog>
   );
 }

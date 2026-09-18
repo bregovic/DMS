@@ -13,7 +13,7 @@ import { ExportExpensesButton } from "@/components/expenses/export-expenses-butt
 import { IncomeSection } from "@/components/incomes/income-section";
 import { ListFilters } from "@/components/ui/list-filters";
 import { EscBack } from "@/components/app/esc-back";
-import { NewRequestForm } from "@/components/requests/new-request-form";
+import { EditRequestForm, NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { RequestAttachments } from "@/components/requests/request-attachments";
@@ -1112,7 +1112,31 @@ export default async function ProjectDetailPage({
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
                   <div className="min-w-0 flex-1 basis-60">
-                    <p className="text-sm font-medium text-stone-950">{r.title}</p>
+                    {(isManager || (canAdd && r.createdById === user.id)) ? (
+                      <EditRequestForm
+                        projectId={project.id}
+                        vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+                        categories={categories}
+                        request={{
+                          id: r.id,
+                          title: r.title,
+                          description: r.description,
+                          quantity: r.quantity != null ? Number(r.quantity) : null,
+                          unit: r.unit,
+                          category: r.category,
+                          price: r.price != null ? Number(r.price) : null,
+                          vendorId: r.vendorId,
+                          requiredDate: r.requiredDate ? r.requiredDate.toISOString().slice(0, 10) : null,
+                        }}
+                        trigger={
+                          <span className="text-sm font-medium text-stone-950 underline-offset-2 hover:underline">
+                            {r.title}
+                          </span>
+                        }
+                      />
+                    ) : (
+                      <p className="text-sm font-medium text-stone-950">{r.title}</p>
+                    )}
                     <p className="kicker mt-0.5">
                       {r.quantity != null
                         ? `${Number(r.quantity)} ${unitLabel(r.unit)} · `
@@ -1123,6 +1147,11 @@ export default async function ProjectDetailPage({
                       {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
                       {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
                     </p>
+                    {r.description && (
+                      <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs text-stone-600">
+                        {r.description}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {isManager ? (

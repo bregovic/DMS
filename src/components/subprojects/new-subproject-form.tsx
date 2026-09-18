@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FolderPlus, X } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import { createSubProject } from "@/server/actions/subprojects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 export function NewSubProjectForm({
   projectId,
@@ -27,18 +28,7 @@ export function NewSubProjectForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-16">
-      <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nový subprojekt</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title="Nový subprojekt" size="md" onClose={() => setOpen(false)}>
         <form
           ref={formRef}
           action={async (fd) => {
@@ -67,14 +57,13 @@ export function NewSubProjectForm({
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
             />
           </div>
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zrušit
             </Button>
             <Button type="submit">Vytvořit</Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

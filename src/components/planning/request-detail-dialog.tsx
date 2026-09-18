@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { X, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { getRequestDetail, updateRequestDates } from "@/server/actions/procurement";
 import { selectOffer } from "@/server/actions/offers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
-import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { Dialog } from "@/components/ui/dialog";
 import { REQUEST_STATUSES } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
@@ -58,14 +58,7 @@ export function RequestDetailDialog({
     : "#";
 
   return (
-    <ModalBackdrop onClose={onClose}>
-      <div className="w-full max-w-xl border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Výběrové řízení</h3>
-          <button type="button" onClick={onClose} className="text-stone-400 hover:text-stone-950 cursor-pointer">
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title="Výběrové řízení" size="xl" onClose={onClose}>
 
         {err && <p className="p-5 text-sm text-red-600">{err}</p>}
         {!d && !err && <p className="p-5 text-sm text-stone-500">Načítám…</p>}
@@ -148,7 +141,6 @@ export function RequestDetailDialog({
             </div>
           </div>
         )}
-      </div>
-    </ModalBackdrop>
+    </Dialog>
   );
 }

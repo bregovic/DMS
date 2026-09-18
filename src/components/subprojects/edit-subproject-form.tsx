@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Settings, X } from "lucide-react";
+import { Pencil, Settings } from "lucide-react";
 import { updateSubProject } from "@/server/actions/subprojects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProjectAccess } from "@/components/projects/project-access";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -55,18 +56,7 @@ export function EditSubProjectForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
-      <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nastavení složky</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title="Nastavení složky" size="md" onClose={() => setOpen(false)}>
         <form
           action={async (fd) => {
             try {
@@ -103,12 +93,12 @@ export function EditSubProjectForm({
             />
           </div>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zrušit
             </Button>
             <Button type="submit">Uložit</Button>
-          </div>
+          </DialogFooter>
         </form>
 
         <div className="border-t border-stone-200 p-5">
@@ -120,7 +110,6 @@ export function EditSubProjectForm({
             canManage
           />
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

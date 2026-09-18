@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Users, X } from "lucide-react";
+import { Settings, Users } from "lucide-react";
 import { updateProject } from "@/server/actions/projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProjectAccess } from "@/components/projects/project-access";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -52,18 +53,7 @@ export function ProjectSettings({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/30 p-0 py-0 sm:p-4 sm:py-12">
-      <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">Nastavení projektu</h3>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-stone-400 hover:text-stone-950 cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog title="Nastavení projektu" size="lg" onClose={() => setOpen(false)}>
 
         <form
           action={async (fd) => {
@@ -158,36 +148,15 @@ export function ProjectSettings({
             </p>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zavřít
             </Button>
             <Button type="submit" disabled={saving}>
               {saving ? "Ukládám…" : "Uložit"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-
-      {membersOpen && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-stone-950/40 p-0 py-0 sm:p-4 sm:py-12">
-          <div className="w-full max-w-md border border-stone-300 bg-white shadow-lift">
-            <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-              <h3 className="kicker">Přístup k celému projektu</h3>
-              <button
-                type="button"
-                onClick={() => setMembersOpen(false)}
-                className="text-stone-400 hover:text-stone-950 cursor-pointer"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="p-5">
-              <ProjectAccess projectId={project.id} members={members} canManage />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </Dialog>
   );
 }

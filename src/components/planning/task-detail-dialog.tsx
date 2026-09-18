@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
-import { ModalBackdrop } from "@/components/app/modal-backdrop";
+import { Dialog } from "@/components/ui/dialog";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { taskStatusLabel, TASK_STATUSES, REQUEST_STATUSES, requestStatusLabel } from "@/lib/constants";
@@ -154,13 +154,12 @@ export function TaskDetailDialog({
     : "#";
 
   return (
-    <ModalBackdrop onClose={onClose}>
-      <div className="w-full max-w-lg border border-stone-300 bg-white shadow-lift">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
-          <h3 className="kicker">
-            {d ? (d.kind === "phase" ? "Detail fáze" : "Detail úkolu") : "Detail"}
-          </h3>
-          <div className="flex items-center gap-3">
+    <Dialog
+      title={d ? (d.kind === "phase" ? "Detail fáze" : "Detail úkolu") : "Detail"}
+      size="lg"
+      onClose={onClose}
+      actions={
+        <>
             {d && d.canEdit && d.kind === "phase" && (
               <CatalogGenerateDialog
                 projectId={d.projectId}
@@ -171,15 +170,9 @@ export function TaskDetailDialog({
             {d && d.canEdit && d.kind !== "phase" && (
               <TaskCatalogFillDialog taskId={d.id} taskTitle={d.title} onDone={reload} />
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-stone-400 hover:text-stone-950 cursor-pointer"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
+        </>
+      }
+    >
 
         {err && <p className="p-5 text-sm text-red-600">{err}</p>}
         {!d && !err && <p className="p-5 text-sm text-stone-500">Načítám…</p>}
@@ -738,7 +731,9 @@ export function TaskDetailDialog({
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-2">
+            {/* Uložit přilepené dole – detail je dlouhý a na telefonu by se
+                k tlačítku muselo rolovat přes celý formulář. */}
+            <div className="sticky bottom-0 z-10 -mx-5 -mb-5 flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 bg-white px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <div className="flex items-center gap-3">
                 {d.canDelete && (
                   <button
@@ -767,7 +762,6 @@ export function TaskDetailDialog({
             </div>
           </form>
         )}
-      </div>
-    </ModalBackdrop>
+    </Dialog>
   );
 }

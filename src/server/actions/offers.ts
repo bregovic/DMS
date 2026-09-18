@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
-import { deleteWithFiles } from "@/server/document-files";
+import { deleteWithFiles, requestFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -165,7 +165,7 @@ export async function attachOfferFile(formData: FormData) {
   const key = await storage.save(
     buffer,
     file.name,
-    `${project.ownerId}/${projectId}/nabidky`,
+    `${requestFolder(project.ownerId, projectId, offer.requestId)}/nabidky`,
   );
   await prisma.document.create({
     data: {
