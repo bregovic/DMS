@@ -150,6 +150,7 @@ model Request {
   task       Task?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
   offers     Offer[]
+  documents  Document[] // e-maily a přílohy hlavičky žádanky (#32)
   expenses   Expense[] // realizované výdaje k této žádance
 
   @@index([projectId])
@@ -450,6 +451,8 @@ model Document {
   projectId    String
   expenseId    String?
   offerId      String?
+  requestId    String? // příloha hlavičky žádanky – e-mail, nabídka v PDF (#32)
+  summary      String? // u e-mailu "Od · Předmět", ať je vidět bez otevírání
   fileName     String // klíč v úložišti (storage key)
   originalName String
   mimeType     String
@@ -462,11 +465,13 @@ model Document {
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   offer      Offer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
   uploadedBy User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([projectId])
   @@index([expenseId])
   @@index([offerId])
+  @@index([requestId])
 }
 
 // ---------------------------------------------------------------------------

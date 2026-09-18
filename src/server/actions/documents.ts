@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { resolveDocTypeKey } from "@/server/document-types";
+import { emlSummary, parseEmlHeader } from "@/lib/eml";
 
 const MAX_UPLOAD = 8 * 1024 * 1024; // 8 MB
 
@@ -110,6 +111,92 @@ export async function uploadDocument(formData: FormData) {
       uploadedById: user.id,
     },
   });
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/** Kolik souborů jde k žádance přiložit najednou. */
+const MAX_REQUEST_FILES = 10;
+
+/**
+ * E-maily a přílohy hlavičky žádanky (#32).
+ *
+ * Nabídky chodí e-mailem – ukládá se buď celý e-mail (.eml z pošty,
+ * .msg z Outlooku), nebo rovnou PDF/obrázek nabídky. U .eml se z hlavičky
+ * vytáhne odesílatel a předmět, ať je v seznamu vidět, o čem zpráva je.
+ * Z těchhle podkladů se později dají vytěžit dodavatelé a nabídky (#33).
+ *
+ * Správce smí přikládat ke všem žádankám, aktivní dodavatel jen ke svým.
+ */
+export async function attachRequestFiles(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const requestId = String(formData.get("requestId"));
+
+  const role = await getProjectRole(projectId, user);
+  if (!canWrite(role)) throw new Error("Nemáš oprávnění.");
+
+  const request = await prisma.request.findFirst({
+    where: {
+      id: requestId,
+      projectId,
+      ...(role === "active" ? { createdById: user.id } : {}),
+    },
+    select: { id: true, project: { select: { ownerId: true } } },
+  });
+  if (!request) throw new Error("Žádanka nenalezena.");
+
+  const files = formData
+    .getAll("files")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) throw new Error("Vyber soubor.");
+  if (files.length > MAX_REQUEST_FILES) {
+    throw new Error(`Najednou jde přiložit nejvýš ${MAX_REQUEST_FILES} souborů.`);
+  }
+  const tooBig = files.find((f) => f.size > MAX_UPLOAD);
+  if (tooBig) throw new Error(`Soubor „${tooBig.name}" je větší než 8 MB.`);
+
+  const [emailType, offerType] = await Promise.all([
+    resolveDocTypeKey("E-mail"),
+    resolveDocTypeKey("Nabídka"),
+  ]);
+
+  for (const file of files) {
+    const lower = file.name.toLowerCase();
+    const isEml = lower.endsWith(".eml");
+    const isMsg = lower.endsWith(".msg");
+    const docType = isEml || isMsg ? emailType : offerType;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Typ podle přípony, ne podle prohlížeče: .eml jako message/rfc822 se
+    // stáhne, místo aby se zkoušel zobrazit jako text.
+    const mimeType = isEml
+      ? "message/rfc822"
+      : isMsg
+        ? "application/vnd.ms-outlook"
+        : file.type || "application/octet-stream";
+
+    const summary = isEml ? emlSummary(parseEmlHeader(buffer)) : null;
+
+    const key = await storage.save(
+      buffer,
+      file.name,
+      `${request.project.ownerId}/${projectId}/${docType}`,
+    );
+    await prisma.document.create({
+      data: {
+        projectId,
+        requestId: request.id,
+        fileName: key,
+        originalName: file.name,
+        mimeType,
+        size: file.size,
+        type: docType,
+        summary,
+        uploadedById: user.id,
+      },
+    });
+  }
 
   revalidatePath(`/projects/${projectId}`);
 }

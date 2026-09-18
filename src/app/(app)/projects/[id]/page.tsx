@@ -16,6 +16,7 @@ import { EscBack } from "@/components/app/esc-back";
 import { NewRequestForm } from "@/components/requests/new-request-form";
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { OffersPanel } from "@/components/requests/offers-panel";
+import { RequestAttachments } from "@/components/requests/request-attachments";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
@@ -125,6 +126,17 @@ export default async function ProjectDetailPage({
           include: {
             vendor: { select: { name: true } },
             createdBy: { select: { name: true, email: true } },
+            documents: {
+              select: {
+                id: true,
+                originalName: true,
+                summary: true,
+                mimeType: true,
+                size: true,
+                uploadedById: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
             offers: {
               orderBy: [
                 { selected: "desc" },
@@ -614,10 +626,13 @@ export default async function ProjectDetailPage({
             )}
           </div>
         </div>
-        <div className="flex items-stretch gap-3">
+        {/* Na mobilu se řada zalamuje: box s výdaji nahoře přes celou šířku,
+            tlačítka pod ním. Dřív se nezalamovala a stránka byla širší než
+            displej (568 px na 390px telefonu). */}
+        <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
           <Link
             href={`/projects/${project.id}/prilohy${sub ? `?sub=${sub}` : ""}`}
-            className="flex items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+            className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white sm:py-0"
             title="Přílohy (skeny) – přehled a stažení za období"
           >
             <Paperclip className="size-4" />
@@ -625,7 +640,7 @@ export default async function ProjectDetailPage({
           </Link>
           <Link
             href={`/projects/${project.id}/planning${sub ? `?sub=${sub}` : ""}`}
-            className="flex items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+            className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white sm:py-0"
             title="Plánování (Gantt) pro tuto úroveň"
           >
             <CalendarRange className="size-4" />
@@ -639,7 +654,7 @@ export default async function ProjectDetailPage({
             const expSaldo = incLevel - expLevel - fcLevel;
             const hasExtra = incLevel > 0 || incomeTotal > 0 || fcLevel > 0;
             return (
-              <div className="bg-stone-950 px-6 py-4 text-right text-white shadow-lift">
+              <div className="order-first w-full bg-stone-950 px-6 py-4 text-right text-white shadow-lift sm:order-none sm:w-auto">
                 <p className="kicker !text-stone-400">
                   {currentSub ? "Složka — výdaje" : "Výdaje"}
                 </p>
@@ -1095,8 +1110,8 @@ export default async function ProjectDetailPage({
                 key={r.id}
                 className="group border-b border-stone-200 py-3.5"
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+                  <div className="min-w-0 flex-1 basis-60">
                     <p className="text-sm font-medium text-stone-950">{r.title}</p>
                     <p className="kicker mt-0.5">
                       {r.quantity != null
@@ -1109,7 +1124,7 @@ export default async function ProjectDetailPage({
                       {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {isManager ? (
                       <RequestStatusSelect
                         projectId={project.id}
@@ -1146,6 +1161,22 @@ export default async function ProjectDetailPage({
                     )}
                   </div>
                 </div>
+
+                <RequestAttachments
+                  projectId={project.id}
+                  requestId={r.id}
+                  canAdd={isManager || (canAdd && r.createdById === user.id)}
+                  docs={r.documents.map((d) => ({
+                    id: d.id,
+                    originalName: d.originalName,
+                    summary: d.summary,
+                    isEmail:
+                      d.mimeType === "message/rfc822" ||
+                      d.mimeType === "application/vnd.ms-outlook",
+                    size: d.size,
+                    canDelete: isManager || d.uploadedById === user.id,
+                  }))}
+                />
 
                 <OffersPanel
                   requestId={r.id}
@@ -1187,6 +1218,36 @@ export default async function ProjectDetailPage({
 
       {/* Úkoly */}
       {tab === "ukoly" && (
+      <>
+        {/* Todo nad plánem: nadpis Plán patří k seznamu pod ním, ne k todo. */}
+        <div className="mt-6">
+          {(canAdd || todoTasks.length > 0) && (
+            <TodoList
+              projectId={project.id}
+              subProjectId={sub ?? undefined}
+              canAdd={canAdd}
+              vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+              items={todoTasks.map((t) => {
+                const canEditTodo = isManager || t.createdById === user.id;
+                return {
+                  id: t.id,
+                  title: t.title,
+                  priority: t.priority,
+                  ready: t.ready,
+                  done: isTaskDone(t.status),
+                  vendorId: t.vendorId,
+                  vendorName: t.vendor?.name ?? null,
+                  createdAt: t.createdAt.toISOString(),
+                  canEdit: canEditTodo,
+                  canStatus:
+                    canEditTodo ||
+                    (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+                    (!!t.vendorId && myVendorIds.has(t.vendorId)),
+                };
+              })}
+            />
+          )}
+        </div>
       <TabSection
         title={
           <h2 className="kicker">
@@ -1208,32 +1269,6 @@ export default async function ProjectDetailPage({
           )
         }
       >
-        {(canAdd || todoTasks.length > 0) && (
-          <TodoList
-            projectId={project.id}
-            subProjectId={sub ?? undefined}
-            canAdd={canAdd}
-            vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
-            items={todoTasks.map((t) => {
-              const canEditTodo = isManager || t.createdById === user.id;
-              return {
-                id: t.id,
-                title: t.title,
-                priority: t.priority,
-                ready: t.ready,
-                done: isTaskDone(t.status),
-                vendorId: t.vendorId,
-                vendorName: t.vendor?.name ?? null,
-                createdAt: t.createdAt.toISOString(),
-                canEdit: canEditTodo,
-                canStatus:
-                  canEditTodo ||
-                  (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
-                  (!!t.vendorId && myVendorIds.has(t.vendorId)),
-              };
-            })}
-          />
-        )}
         {planTasks.length > 0 && (
           <TaskStatusFilter
             projectId={project.id}
@@ -1270,12 +1305,12 @@ export default async function ProjectDetailPage({
               return (
                 <li
                   key={t.id}
-                  className={`group flex items-start justify-between gap-3 border-b border-stone-200 py-3.5 ${
+                  className={`group flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-stone-200 py-3.5 ${
                     isPhase ? "bg-stone-50/60" : ""
                   }`}
                   style={level > 0 ? { paddingLeft: `${level * 24}px` } : undefined}
                 >
-                  <div className="flex min-w-0 items-start gap-2.5">
+                  <div className="flex min-w-0 flex-1 basis-60 items-start gap-2.5">
                     {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
                     <div className="min-w-0">
                       <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
@@ -1334,7 +1369,7 @@ export default async function ProjectDetailPage({
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 pl-7 sm:pl-0">
                     {canStatusTask ? (
                       <TaskStatusSelect id={t.id} status={t.status} statuses={taskStatuses} />
                     ) : (
@@ -1392,6 +1427,7 @@ export default async function ProjectDetailPage({
           </ul>
         )}
       </TabSection>
+      </>
       )}
     </div>
   );
