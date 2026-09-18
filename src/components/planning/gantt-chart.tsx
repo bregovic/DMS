@@ -376,7 +376,7 @@ export function GanttChart({
   const LABEL = "var(--gantt-label)";
 
   return (
-    <div className="[--gantt-label:8.5rem] sm:[--gantt-label:13rem]">
+    <div className="[--gantt-label:9.5rem] sm:[--gantt-label:15rem] lg:[--gantt-label:22rem] 2xl:[--gantt-label:26rem]">
       {/* Co brání v příštích 4 týdnech */}
       {blockers.length > 0 && (
         <div className="mb-5 border border-orange-200 bg-orange-50/60 p-3">
@@ -544,7 +544,7 @@ export function GanttChart({
                   }
                 >
                   <div
-                    className="sticky left-0 z-10 flex shrink-0 items-center gap-1 truncate bg-white py-2.5 pr-3 text-sm group-hover:bg-stone-50"
+                    className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-white py-1.5 pr-3 text-sm leading-tight group-hover:bg-stone-50"
                     style={{ width: LABEL }}
                     title={it.name}
                   >
@@ -563,7 +563,7 @@ export function GanttChart({
                     ) : (
                       <span className="w-3.5 shrink-0" />
                     )}
-                    <span className={`truncate ${isPhase ? "font-semibold text-stone-900" : "text-stone-800"}`}>
+                    <span className={`line-clamp-2 min-w-0 break-words ${isPhase ? "font-semibold text-stone-900" : "text-stone-800"}`}>
                       {it.kind === "request" && (
                         <span className="kicker mr-1 !text-red-500">VŘ</span>
                       )}
@@ -582,7 +582,7 @@ export function GanttChart({
                       )
                     )}
                   </div>
-                  <div className="relative h-10 flex-1">
+                  <div className="relative min-h-10 flex-1 self-stretch">
                     {bar && s != null && e != null && (
                       <div
                         {...(it.kind !== "request" ? dragHandlers(it.id, !(isPhase && kids.length > 0)) : {})}
@@ -660,14 +660,14 @@ export function GanttChart({
                                 <ChildCheck id={k.id} done={k.done} />
                               )}
                               <span
-                                className={`truncate ${k.done ? "text-stone-400 line-through" : "text-stone-700"}`}
+                                className={`line-clamp-2 min-w-0 break-words leading-tight ${k.done ? "text-stone-400 line-through" : "text-stone-700"}`}
                                 title={k.title}
                               >
                                 {k.title}
                               </span>
                               {k.readiness && k.readiness.state !== "ready" && <ReadinessIcon r={k.readiness} small />}
                             </div>
-                            <div className="relative h-7 flex-1">
+                            <div className="relative min-h-7 flex-1 self-stretch">
                               {kbar && ks != null && ke != null && (
                                 <div
                                   {...(!k.requestId ? dragHandlers(k.id, true) : {})}
