@@ -7,8 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { ProjectSettings } from "@/components/projects/project-settings";
-import { Collapsible } from "@/components/app/collapsible";
-import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { NewExpenseForm } from "@/components/expenses/new-expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
 import { ExportExpensesButton } from "@/components/expenses/export-expenses-button";
@@ -26,7 +24,14 @@ import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-di
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
+import { TaskStatusFilter } from "@/components/tasks/task-status-filter";
 import { UploadForm } from "@/components/documents/upload-form";
+import {
+  ProjectTabs,
+  TabSection,
+  parseProjectTab,
+  projectHref,
+} from "@/components/projects/project-tabs";
 import { deleteProject } from "@/server/actions/projects";
 import { deleteSubProject } from "@/server/actions/subprojects";
 import { deleteTask } from "@/server/actions/tasks";
@@ -161,10 +166,13 @@ export default async function ProjectDetailPage({
 
   // --- Subprojekty (drill-down) ---
   const sub = typeof sp?.sub === "string" ? sp.sub : null;
+  // Dokumenty jsou jen v kořeni projektu – ve složce se spadne na výchozí.
+  const requestedTab = parseProjectTab(sp?.tab);
+  const tab = requestedTab === "dokumenty" && sub ? parseProjectTab(null) : requestedTab;
 
   // Dodavatel s přístupem jen k jedné složce: pusť ho rovnou do ní (ne na root projektu)
   if (scopeSubIds && scopeSubIds.length === 1 && sub === null) {
-    redirect(`/projects/${id}?sub=${scopeSubIds[0]}`);
+    redirect(projectHref(id, scopeSubIds[0], tab));
   }
   const subs = project.subProjects;
   const subById = new Map(subs.map((s) => [s.id, s]));
@@ -374,13 +382,29 @@ export default async function ProjectDetailPage({
       taskChildren.set(t.parentId, a);
     }
   const taskPhases = levelTasks.filter((t) => t.kind === "phase");
+
+  /**
+   * Filtr úkolů podle stavu (`tst=todo,doing`, víc stavů najednou).
+   *
+   * Fáze zůstane vidět, když odpovídá sama, nebo když odpovídá některý
+   * její dílčí úkol – jinak by dílčí úkoly visely bez souvislosti.
+   */
+  const tstSet = new Set(
+    (typeof sp?.tst === "string" ? sp.tst : "").split(",").filter(Boolean),
+  );
+  const taskStatusCounts: Record<string, number> = {};
+  for (const t of levelTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
+  const statusMatch = (t: (typeof levelTasks)[number]) => tstSet.size === 0 || tstSet.has(t.status);
+
   const orderedTasks: { t: (typeof levelTasks)[number]; level: number }[] = [];
   for (const ph of taskPhases) {
+    const kids = (taskChildren.get(ph.id) ?? []).filter(statusMatch);
+    if (!statusMatch(ph) && kids.length === 0) continue;
     orderedTasks.push({ t: ph, level: 0 });
-    for (const ch of taskChildren.get(ph.id) ?? []) orderedTasks.push({ t: ch, level: 1 });
+    for (const ch of kids) orderedTasks.push({ t: ch, level: 1 });
   }
   for (const t of levelTasks)
-    if (t.kind !== "phase" && !t.parentId) orderedTasks.push({ t, level: 0 });
+    if (t.kind !== "phase" && !t.parentId && statusMatch(t)) orderedTasks.push({ t, level: 0 });
   const phaseOptions = taskPhases.map((p) => ({ id: p.id, title: p.title }));
   const isTaskDone = (st: string) => TASK_DONE_STATUSES.includes(st);
   // Náklady přímo na této úrovni (mimo podsložky)
@@ -548,13 +572,7 @@ export default async function ProjectDetailPage({
   return (
     <div className="mx-auto max-w-7xl">
       {currentSub && (
-        <EscBack
-          href={
-            currentSub.parentId
-              ? `/projects/${project.id}?sub=${currentSub.parentId}`
-              : `/projects/${project.id}`
-          }
-        />
+        <EscBack href={projectHref(project.id, currentSub.parentId ?? null, tab)} />
       )}
       <Link
         href="/projects"
@@ -705,7 +723,7 @@ export default async function ProjectDetailPage({
       {/* Breadcrumb subprojektů */}
       <nav className="mt-4 flex flex-wrap items-center gap-1.5 text-sm">
         <Link
-          href={`/projects/${project.id}`}
+          href={projectHref(project.id, null, tab)}
           className={
             sub
               ? "text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
@@ -718,7 +736,7 @@ export default async function ProjectDetailPage({
           <span key={cs.id} className="flex items-center gap-1.5">
             <span className="text-stone-300">/</span>
             <Link
-              href={`/projects/${project.id}?sub=${cs.id}`}
+              href={projectHref(project.id, cs.id, tab)}
               className={
                 i === crumb.length - 1
                   ? "font-medium text-stone-950"
@@ -771,7 +789,7 @@ export default async function ProjectDetailPage({
                   className="group relative border border-stone-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift"
                 >
                   <Link
-                    href={`/projects/${project.id}?sub=${s.id}`}
+                    href={projectHref(project.id, s.id, tab)}
                     className="block"
                   >
                     <div className="flex items-center gap-2">
@@ -819,21 +837,38 @@ export default async function ProjectDetailPage({
         )}
       </section>
 
-      <div className="mt-8 flex flex-col gap-10">
+      <ProjectTabs
+        projectId={project.id}
+        sub={sub}
+        active={tab}
+        tabs={[
+          { key: "vydaje", label: "Výdaje", count: levelExpenses.length },
+          { key: "ukoly", label: "Úkoly", count: levelTasks.length },
+          { key: "zadanky", label: "Žádanky", count: levelRequests.length },
+          { key: "prijmy", label: "Příjmy", count: levelIncomes.length },
+          ...(sub === null
+            ? [{ key: "dokumenty" as const, label: "Dokumenty", count: project.documents.length }]
+            : []),
+        ]}
+      />
+
+      <div>
         {/* Příjmy (saldo = příjmy − výdaje) */}
-        <IncomeSection
-          projectId={project.id}
-          subProjectId={sub ?? undefined}
-          incomes={incomeRows}
-          canAdd={canAdd}
-          canManage={isManager}
-        />
+        {tab === "prijmy" && (
+          <div className="mt-6">
+            <IncomeSection
+              projectId={project.id}
+              subProjectId={sub ?? undefined}
+              incomes={incomeRows}
+              canAdd={canAdd}
+              canManage={isManager}
+            />
+          </div>
+        )}
 
         {/* Výdaje */}
-        <CollapsibleSection
-          className="order-2"
-          storageKey={`dms-sec:${project.id}:${sub ?? "root"}:expenses`}
-          defaultOpen
+        {tab === "vydaje" && (
+        <TabSection
           title={
             <h2 className="kicker">
               Výdaje · {shownExpenses.length}
@@ -938,26 +973,25 @@ export default async function ProjectDetailPage({
             )}
             </>
           )}
-        </CollapsibleSection>
+        </TabSection>
+        )}
 
         {/* Dokumenty (jen v kořeni). Přístup k projektu je v Nastavení. */}
-        <div className="order-1 space-y-4">
-          {sub === null && (
-          <Collapsible
-            title={`Dokumenty · ${project.documents.length}`}
-          >
+        <div>
+          {tab === "dokumenty" && sub === null && (
+          <TabSection title={<h2 className="kicker">Dokumenty · {project.documents.length}</h2>}>
           <section>
             {isManager && <UploadForm projectId={project.id} types={docTypes} />}
 
             {docTypesPresent.length > 1 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
-                <Link href={`/projects/${project.id}`} className={chipClass(!docFilter)}>
+                <Link href={`/projects/${project.id}?tab=dokumenty`} className={chipClass(!docFilter)}>
                   Vše
                 </Link>
                 {docTypesPresent.map((t) => (
                   <Link
                     key={t.value}
-                    href={`/projects/${project.id}?docType=${t.value}`}
+                    href={`/projects/${project.id}?tab=dokumenty&docType=${t.value}`}
                     className={chipClass(docFilter === t.value)}
                   >
                     {t.label}
@@ -1006,16 +1040,14 @@ export default async function ProjectDetailPage({
               )
             )}
           </section>
-          </Collapsible>
+          </TabSection>
           )}
         </div>
       </div>
 
       {/* Žádanky */}
-      <CollapsibleSection
-        className="mt-12"
-        storageKey={`dms-sec:${project.id}:${sub ?? "root"}:requests`}
-        defaultOpen
+      {tab === "zadanky" && (
+      <TabSection
         title={
           <h2 className="kicker">
             Žádanky · {shownRequests.length}
@@ -1141,16 +1173,15 @@ export default async function ProjectDetailPage({
           )}
           </>
         )}
-      </CollapsibleSection>
+      </TabSection>
+      )}
 
       {/* Úkoly */}
-      <CollapsibleSection
-        className="mt-12"
-        storageKey={`dms-sec:${project.id}:${sub ?? "root"}:tasks`}
-        defaultOpen
+      {tab === "ukoly" && (
+      <TabSection
         title={
           <h2 className="kicker">
-            Úkoly · {levelTasks.length}
+            Úkoly · {tstSet.size > 0 ? `${orderedTasks.length} z ${levelTasks.length}` : levelTasks.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
         }
@@ -1168,8 +1199,17 @@ export default async function ProjectDetailPage({
           )
         }
       >
+        {levelTasks.length > 0 && (
+          <TaskStatusFilter
+            projectId={project.id}
+            statuses={taskStatuses.filter((s) => (taskStatusCounts[s.key] ?? 0) > 0 || tstSet.has(s.key))}
+            counts={taskStatusCounts}
+          />
+        )}
         {levelTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné úkoly.</p>
+        ) : orderedTasks.length === 0 ? (
+          <p className="py-6 text-sm text-stone-500">Žádný úkol v tomhle stavu.</p>
         ) : (
           <ul>
             {orderedTasks.map(({ t, level }) => {
@@ -1316,7 +1356,8 @@ export default async function ProjectDetailPage({
             })}
           </ul>
         )}
-      </CollapsibleSection>
+      </TabSection>
+      )}
     </div>
   );
 }
