@@ -241,3 +241,21 @@ export async function logTasksExpenseBulk(formData: FormData) {
   await afterLog(results);
   return { logged: results.length };
 }
+
+/** Rychlá změna % hotovo z Moje úkoly (bez vykázání) – 100 % = hotovo. */
+export async function setMyTaskProgress(formData: FormData) {
+  const user = await requireUser();
+  const percent = num(formData.get("percent"));
+  if (percent == null) return;
+  const r = await logOne(user, String(formData.get("taskId") || ""), {
+    hours: null,
+    rate: null,
+    amount: null,
+    percent,
+    expectedEnd: null,
+    date: new Date(),
+    note: "",
+    files: [],
+  });
+  await afterLog([r]);
+}

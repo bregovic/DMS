@@ -376,7 +376,7 @@ export function GanttChart({
   const LABEL = "var(--gantt-label)";
 
   return (
-    <div className="[--gantt-label:9.5rem] sm:[--gantt-label:15rem] lg:[--gantt-label:22rem] 2xl:[--gantt-label:26rem]">
+    <div className="[--gantt-label:9rem] sm:[--gantt-label:11rem] lg:[--gantt-label:14rem] 2xl:[--gantt-label:16rem]">
       {/* Co brání v příštích 4 týdnech */}
       {blockers.length > 0 && (
         <div className="mb-5 border border-orange-200 bg-orange-50/60 p-3">

@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { ChevronDown, Plus } from "lucide-react";
 import { createTask, deleteTask, updateTodo } from "@/server/actions/tasks";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
+import { BULK_FORM_ID } from "@/lib/bulk-ids";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { PRIORITIES, priorityColor, priorityLabel } from "@/lib/constants";
 import { colorClasses } from "@/lib/status-colors";
@@ -204,10 +205,20 @@ function TodoRow({
   const prio = colorClasses(priorityColor(t.priority));
   return (
     <li className="group flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-stone-100 px-4 py-2.5 first:border-t-0">
+      {/* Zaškrtávátko úkol VYBÍRÁ pro hromadnou úpravu (stejně jako v plánu);
+          hotovo je tlačítko ✓ na konci řádku. */}
       {t.canStatus ? (
-        <TaskDoneCheckbox id={t.id} done={t.done} />
+        <input
+          type="checkbox"
+          name="ids"
+          value={t.id}
+          form={BULK_FORM_ID}
+          aria-label={`Vybrat: ${t.title}`}
+          title="Vybrat pro hromadnou úpravu"
+          className="size-4 shrink-0 cursor-pointer accent-stone-900"
+        />
       ) : (
-        <span className="size-5 shrink-0" />
+        <span className="size-4 shrink-0" />
       )}
       <span
         className={`min-w-0 flex-1 basis-40 text-sm ${
@@ -279,6 +290,7 @@ function TodoRow({
           t.vendorName && <span className="text-xs text-stone-500">{t.vendorName}</span>
         )}
 
+        {t.canStatus && <TaskDoneCheckbox id={t.id} done={t.done} variant="button" />}
         {t.canEdit && (
           <span className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
             <DeleteButton action={deleteTask} fields={{ id: t.id }} confirm="Smazat tento úkol?" />

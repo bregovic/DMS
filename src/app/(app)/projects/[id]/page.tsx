@@ -1428,7 +1428,7 @@ export default async function ProjectDetailPage({
         actions={
           canAdd && (
             <div className="flex flex-wrap items-center gap-2">
-              {planTasks.length > 0 && (
+              {(planTasks.length > 0 || todoTasks.length > 0) && (
                 <BulkTaskBar
                   projectId={project.id}
                   statuses={taskStatuses}

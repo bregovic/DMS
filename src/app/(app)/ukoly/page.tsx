@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { listProjectsForUser } from "@/server/access";
 import { getStatuses } from "@/server/statuses";
 import { BulkLogBar } from "@/components/tasks/bulk-log-bar";
+import { TaskStatusSelect } from "@/components/tasks/task-status-select";
+import { TaskProgressInput } from "@/components/tasks/task-progress-input";
 import { PICK_ATTR } from "@/lib/bulk-ids";
 import { LogTaskExpense } from "@/components/tasks/log-task-expense";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -195,6 +197,10 @@ export default async function MyTasksPage() {
               {hours > 0 ? ` · ${hours.toLocaleString("cs-CZ")} h` : ""}
             </p>
           )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pl-8 sm:pl-0">
+          <TaskStatusSelect id={t.id} status={t.status} statuses={statuses.map((s) => ({ key: s.key, label: s.label }))} />
+          {!finished && <TaskProgressInput taskId={t.id} percent={t.percentDone} />}
         </div>
         {!finished && (
           <div className="pl-8 sm:pl-0">
