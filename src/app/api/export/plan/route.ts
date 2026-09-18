@@ -109,7 +109,8 @@ export async function GET(req: NextRequest) {
 
   const phases = tasks.filter((t) => t.kind === "phase");
   const childTasks = tasks.filter((t) => t.kind !== "phase" && t.parentId);
-  const looseTasks = tasks.filter((t) => t.kind !== "phase" && !t.parentId);
+  // Todo list (#28) není plán – do exportu plánu nepatří.
+  const looseTasks = tasks.filter((t) => t.kind !== "phase" && t.kind !== "todo" && !t.parentId);
 
   const taskToPlan = (t: (typeof tasks)[number]) => ({
     id: t.id,

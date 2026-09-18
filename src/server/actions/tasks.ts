@@ -71,8 +71,10 @@ export async function createTask(formData: FormData) {
     if (!sub) subProjectId = null;
   }
 
-  // Typ a vazba na fázi
-  const kind = String(formData.get("kind") || "task") === "phase" ? "phase" : "task";
+  // Typ a vazba na fázi. "todo" = úkol mimo plánování (#28): bez fáze,
+  // v Ganttu se neukazuje a přepočet termínů ho nechává být.
+  const rawKind = String(formData.get("kind") || "task");
+  const kind = rawKind === "phase" ? "phase" : rawKind === "todo" ? "todo" : "task";
   let parentId: string | null = null;
   if (kind === "task") {
     const pid = String(formData.get("parentId") || "") || null;
@@ -96,6 +98,24 @@ export async function createTask(formData: FormData) {
   }
 
   const newStatus = String(formData.get("status") || "todo").trim() || "todo";
+
+  // Dodavatel jen z evidence vlastníka projektu - cizí id se zahodí.
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (vendorId) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { ownerId: true },
+    });
+    const v = project
+      ? await prisma.vendor.findFirst({
+          where: { id: vendorId, ownerId: project.ownerId },
+          select: { id: true },
+        })
+      : null;
+    if (!v) vendorId = null;
+  }
+  const readyRaw = formData.get("ready");
+
   await prisma.task.create({
     data: {
       projectId,
@@ -112,6 +132,8 @@ export async function createTask(formData: FormData) {
       priority: toPriority(formData.get("priority")),
       profession: toText(formData.get("profession")),
       estimateDays: toInt(formData.get("estimateDays")),
+      vendorId,
+      ...(readyRaw != null ? { ready: readyRaw === "1" || readyRaw === "true" } : {}),
       createdById: user.id,
     },
   });
@@ -997,6 +1019,55 @@ export async function setTaskStatus(formData: FormData) {
   });
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
+}
+
+/**
+ * Rychlá úprava položky todo listu (#28) – jedno pole na klik.
+ *
+ * Todo se upravuje přímo v řádku (připraveno, priorita, dodavatel, název),
+ * ne přes plný formulář úkolu: ten je stavěný na plánování a pro "koupit
+ * hmoždinky" je zbytečně těžký.
+ */
+export async function updateTodo(formData: FormData) {
+  const id = String(formData.get("id"));
+  const { task, isOwner, isCreator, isAssignee } = await taskCtx(id);
+  if (!isOwner && !isCreator && !isAssignee) {
+    throw new Error("Tento úkol nemůžeš upravit.");
+  }
+
+  const data: {
+    ready?: boolean;
+    priority?: string | null;
+    vendorId?: string | null;
+    title?: string;
+  } = {};
+
+  if (formData.has("ready")) {
+    const r = String(formData.get("ready"));
+    data.ready = r === "1" || r === "true";
+  }
+  if (formData.has("priority")) data.priority = toPriority(formData.get("priority"));
+  if (formData.has("title")) {
+    const title = String(formData.get("title") || "").trim();
+    if (!title) throw new Error("Zadej název úkolu.");
+    data.title = title;
+  }
+  // Přidělit dodavatele smí jen ten, kdo úkol spravuje - ne sám dodavatel.
+  if (formData.has("vendorId") && (isOwner || isCreator)) {
+    let vendorId = String(formData.get("vendorId") || "") || null;
+    if (vendorId) {
+      const v = await prisma.vendor.findFirst({
+        where: { id: vendorId, ownerId: task.project.ownerId },
+        select: { id: true },
+      });
+      if (!v) vendorId = null;
+    }
+    data.vendorId = vendorId;
+  }
+
+  await prisma.task.update({ where: { id: task.id }, data });
+  revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/ukoly");
 }
 
 export async function deleteTask(formData: FormData) {

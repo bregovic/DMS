@@ -282,7 +282,7 @@ model Task {
   projectId     String
   subProjectId  String?
   parentId      String? // dílčí úkol patří pod fázi (Task kind=phase)
-  kind          String    @default("task") // task | phase
+  kind          String    @default("task") // task | phase | todo (todo = mimo plánování, bez Ganttu a přepočtu termínů)
   title         String
   description   String?
   assigneeEmail String?
@@ -290,6 +290,7 @@ model Task {
   dueDate       DateTime?
   status        String    @default("todo") // editovatelný číselník scope "task"
   percentDone   Int       @default(0) // 0–100 % dokončení
+  ready         Boolean   @default(true) // připraveno k práci (false = čeká na materiál, jiný úkol…)
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech

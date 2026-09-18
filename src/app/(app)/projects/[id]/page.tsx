@@ -26,6 +26,7 @@ import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
 import { TaskStatusFilter } from "@/components/tasks/task-status-filter";
 import { RememberProject } from "@/components/projects/remember-project";
+import { TodoList } from "@/components/tasks/todo-list";
 import { UploadForm } from "@/components/documents/upload-form";
 import {
   ProjectTabs,
@@ -145,6 +146,7 @@ export default async function ProjectDetailPage({
           orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
           include: {
             createdBy: { select: { name: true, email: true } },
+            vendor: { select: { name: true } },
             dependsOn: {
               include: {
                 dependsOn: { select: { id: true, title: true, status: true } },
@@ -382,7 +384,10 @@ export default async function ProjectDetailPage({
       a.push(t);
       taskChildren.set(t.parentId, a);
     }
-  const taskPhases = levelTasks.filter((t) => t.kind === "phase");
+  // Todo list (#28) žije vedle plánu, ne v něm - fáze a termíny se ho netýkají.
+  const todoTasks = levelTasks.filter((t) => t.kind === "todo");
+  const planTasks = levelTasks.filter((t) => t.kind !== "todo");
+  const taskPhases = planTasks.filter((t) => t.kind === "phase");
 
   /**
    * Filtr úkolů podle stavu (`tst=todo,doing`, víc stavů najednou).
@@ -394,7 +399,7 @@ export default async function ProjectDetailPage({
     (typeof sp?.tst === "string" ? sp.tst : "").split(",").filter(Boolean),
   );
   const taskStatusCounts: Record<string, number> = {};
-  for (const t of levelTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
+  for (const t of planTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
   const statusMatch = (t: (typeof levelTasks)[number]) => tstSet.size === 0 || tstSet.has(t.status);
 
   const orderedTasks: { t: (typeof levelTasks)[number]; level: number }[] = [];
@@ -404,7 +409,7 @@ export default async function ProjectDetailPage({
     orderedTasks.push({ t: ph, level: 0 });
     for (const ch of kids) orderedTasks.push({ t: ch, level: 1 });
   }
-  for (const t of levelTasks)
+  for (const t of planTasks)
     if (t.kind !== "phase" && !t.parentId && statusMatch(t)) orderedTasks.push({ t, level: 0 });
   const phaseOptions = taskPhases.map((p) => ({ id: p.id, title: p.title }));
   const isTaskDone = (st: string) => TASK_DONE_STATUSES.includes(st);
@@ -1183,7 +1188,7 @@ export default async function ProjectDetailPage({
       <TabSection
         title={
           <h2 className="kicker">
-            Úkoly · {tstSet.size > 0 ? `${orderedTasks.length} z ${levelTasks.length}` : levelTasks.length}
+            Plán · {tstSet.size > 0 ? `${orderedTasks.length} z ${planTasks.length}` : planTasks.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
         }
@@ -1201,15 +1206,41 @@ export default async function ProjectDetailPage({
           )
         }
       >
-        {levelTasks.length > 0 && (
+        {(canAdd || todoTasks.length > 0) && (
+          <TodoList
+            projectId={project.id}
+            subProjectId={sub ?? undefined}
+            canAdd={canAdd}
+            vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+            items={todoTasks.map((t) => {
+              const canEditTodo = isManager || t.createdById === user.id;
+              return {
+                id: t.id,
+                title: t.title,
+                priority: t.priority,
+                ready: t.ready,
+                done: isTaskDone(t.status),
+                vendorId: t.vendorId,
+                vendorName: t.vendor?.name ?? null,
+                createdAt: t.createdAt.toISOString(),
+                canEdit: canEditTodo,
+                canStatus:
+                  canEditTodo ||
+                  (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+                  (!!t.vendorId && myVendorIds.has(t.vendorId)),
+              };
+            })}
+          />
+        )}
+        {planTasks.length > 0 && (
           <TaskStatusFilter
             projectId={project.id}
             statuses={taskStatuses.filter((s) => (taskStatusCounts[s.key] ?? 0) > 0 || tstSet.has(s.key))}
             counts={taskStatusCounts}
           />
         )}
-        {levelTasks.length === 0 ? (
-          <p className="py-6 text-sm text-stone-500">Zatím žádné úkoly.</p>
+        {planTasks.length === 0 ? (
+          <p className="py-6 text-sm text-stone-500">Zatím žádné naplánované úkoly.</p>
         ) : orderedTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Žádný úkol v tomhle stavu.</p>
         ) : (

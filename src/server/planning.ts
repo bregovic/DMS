@@ -97,10 +97,13 @@ export function buildProjectGantt(
     );
   }
 
+  // Todo list (#28) do Ganttu nepatří, ani když má termín.
   const topRows = vtasks.filter((t) =>
-    t.kind === "phase"
-      ? !!(t.startDate || t.dueDate)
-      : !t.parentId && !!(t.startDate || t.dueDate),
+    t.kind === "todo"
+      ? false
+      : t.kind === "phase"
+        ? !!(t.startDate || t.dueDate)
+        : !t.parentId && !!(t.startDate || t.dueDate),
   );
 
   const name = (t: { subProject: { name: string } | null; title: string }) =>
