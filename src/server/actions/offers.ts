@@ -316,6 +316,6 @@ async function createPlanTasksFromOffer(offerId: string, userId: string) {
       ids.push(t.id);
     }
     await tx.offer.update({ where: { id: offer.id }, data: { tasksCreatedAt: new Date() } });
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // hodně zápisů – výchozí 5 s nestačí
   return ids.length;
 }

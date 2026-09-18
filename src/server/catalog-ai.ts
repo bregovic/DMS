@@ -122,7 +122,8 @@ export async function proposeOperation(title: string, userId: string, note?: str
 /** Kontrola vzorců a údajů – do katalogu nesmí jít nevyhodnotitelný vzorec. */
 export function validateProposal(p: CatalogProposal): CatalogProposal {
   const keyOk = /^[a-z][a-z0-9_]*$/;
-  p.params = (p.params ?? []).filter((x) => keyOk.test(x.key));
+  const seen = new Set<string>();
+  p.params = (p.params ?? []).filter((x) => keyOk.test(x.key) && !seen.has(x.key) && !!seen.add(x.key));
   if (!p.params.some((x) => x.key === "mnozstvi") && !p.params.length)
     p.params = [{ key: "mnozstvi", label: "Množství", unit: p.operation.unit, defaultValue: 1 }];
   const vars = Object.fromEntries(p.params.map((x) => [x.key, Number(x.defaultValue ?? 1) || 1]));
@@ -138,6 +139,15 @@ export function validateProposal(p: CatalogProposal): CatalogProposal {
   for (const m of p.materials) check(m.quantityFormula, `materiálu ${m.name}`);
   p.operation.code = p.operation.code.toUpperCase().replace(/[^A-Z0-9-]/g, "-").slice(0, 40) || "AI-UKON";
   p.operation.crew = Math.max(1, Math.round(p.operation.crew || 1));
+  p.operation.techPauseDays =
+    p.operation.techPauseDays != null && p.operation.techPauseDays > 0 ? Math.round(p.operation.techPauseDays) : null;
+  p.operation.laborRate = Math.max(0, Number(p.operation.laborRate) || 0);
+  for (const m of p.materials) {
+    m.unitPrice = Math.max(0, Number(m.unitPrice) || 0);
+    m.wastePct = m.wastePct != null && m.wastePct >= 0 && m.wastePct < 1000 ? m.wastePct : null;
+    m.category = (m.category || "other").slice(0, 60);
+    m.unit = (m.unit || "ks").slice(0, 20);
+  }
   return p;
 }
 
@@ -199,5 +209,5 @@ export async function saveProposal(p: CatalogProposal, userId: string) {
       });
     }
     return op.id;
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // hodně zápisů – výchozí 5 s nestačí
 }

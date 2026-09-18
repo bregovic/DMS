@@ -133,7 +133,7 @@ export async function applyPlanDraft(formData: FormData) {
       }
     }
     await tx.planDraft.update({ where: { id: d.id }, data: { status: "applied" } });
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // hodně zápisů – výchozí 5 s nestačí
 
   // Termíny spočítá plánovač z odhadů dní a pořadí (jako „Přepočítat termíny“).
   const fd = new FormData();
