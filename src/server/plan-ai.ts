@@ -95,7 +95,7 @@ export async function planDocuments(projectId: string) {
 export async function createPlanDraft(projectId: string, userId: string, documentIds: string[], prompt?: string | null) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Plán se už připravuje.");
+  if (busy) throw new Error("AI už na plánu projektu pracuje – počkej, až doběhne.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
   const ids = documentIds.filter((id) => allowed.has(id)).slice(0, 10);
   const d = await prisma.planDraft.create({
@@ -208,7 +208,7 @@ export async function planAiProps(projectId: string) {
   const [docs, draft, procurable] = await Promise.all([
     planDocuments(projectId),
     prisma.planDraft.findFirst({
-      where: { projectId, status: { in: ["running", "ready", "error"] } },
+      where: { projectId, kind: "plan", status: { in: ["running", "ready", "error"] } },
       orderBy: { createdAt: "desc" },
       select: { id: true, status: true, error: true },
     }),
@@ -221,8 +221,24 @@ export async function planAiProps(projectId: string) {
       },
     }),
   ]);
-  const vendorSelection = (await vendorSelectionCandidates(projectId)).length;
-  return { projectId, docs: docs.map((d) => ({ id: d.id, name: d.originalName })), draft, procurable, vendorSelection };
+  const [vendorSelection, costDraft, unestimated] = await Promise.all([
+    vendorSelectionCandidates(projectId).then((c) => c.length),
+    prisma.planDraft.findFirst({
+      where: { projectId, kind: "costs", status: { in: ["running", "ready", "error"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, error: true },
+    }),
+    costCandidates(projectId).then((c) => c.length),
+  ]);
+  return {
+    projectId,
+    docs: docs.map((d) => ({ id: d.id, name: d.originalName })),
+    draft,
+    procurable,
+    vendorSelection,
+    costDraft,
+    unestimated,
+  };
 }
 
 /** Kolik dní před začátkem fáze má být vybraný dodavatel (poptávka, nabídky, smlouva). */
@@ -298,4 +314,111 @@ export async function createVendorSelectionTodos(projectId: string, userId: stri
     }),
   });
   return cands.length;
+}
+
+// ---------------------------------------------------------------------------
+// Odhad nákladů stávajícího plánu
+// ---------------------------------------------------------------------------
+
+export type CostEstimateResult = {
+  summary: string;
+  items: { id: string; costEstimate: number | null; note: string | null }[];
+};
+const COST_SCHEMA = obj({
+  summary: { type: "string" },
+  items: {
+    type: "array",
+    items: obj({ id: { type: "string" }, costEstimate: n, note: str }),
+  },
+});
+const COST_INSTRUCTIONS = `Jsi rozpočtář stavby v Česku. U každého úkolu stavebního plánu odhadni náklady v Kč s DPH (materiál + práce, ceny ČR 2026).
+Vycházej z názvu, popisu, fáze, řemesla a délky (dny práce party). Úkol, který je jen administrativní nebo bez nákladů (rozhodnutí, kontrola, pauza), dej 0.
+Když opravdu nejde odhadnout, null. note: krátce z čeho odhad vychází (max ~10 slov).
+summary: 1–2 věty – celkový odhad a hlavní nejistoty. Vrať položku pro každé zadané id. Pokyn uživatele má přednost.`;
+
+/** Úkoly bez odhadu nákladů, které ještě nejsou hotové (a fáze bez úkolů). */
+export async function costCandidates(projectId: string) {
+  const tasks = await prisma.task.findMany({
+    where: { projectId, kind: { in: ["task", "phase"] }, costEstimate: null, status: { notIn: ["done", "cancelled"] } },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      description: true,
+      estimateDays: true,
+      profession: true,
+      parent: { select: { title: true } },
+      subProject: { select: { name: true } },
+      _count: { select: { children: true } },
+    },
+    orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
+  });
+  // fáze s úkoly se odhaduje přes své úkoly
+  return tasks.filter((t) => !(t.kind === "phase" && t._count.children > 0));
+}
+
+export async function createCostDraft(projectId: string, userId: string, prompt?: string | null) {
+  await assertBudget(userId);
+  const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
+  if (busy) throw new Error("AI už na plánu projektu pracuje – počkej, až doběhne.");
+  const n = (await costCandidates(projectId)).length;
+  if (n === 0) throw new Error("Všechny nehotové úkoly už odhad nákladů mají.");
+  const d = await prisma.planDraft.create({
+    data: { projectId, kind: "costs", documentIds: [], prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    select: { id: true },
+  });
+  return d.id;
+}
+
+export async function runCostDraft(draftId: string) {
+  try {
+    const d = await prisma.planDraft.findUnique({
+      where: { id: draftId },
+      select: { id: true, model: true, prompt: true, project: { select: { id: true, name: true, type: true, description: true } } },
+    });
+    if (!d) return;
+    const cands = (await costCandidates(d.project.id)).slice(0, 250);
+    const list = cands.map((t) => ({
+      id: t.id,
+      ukol: t.title,
+      faze: t.parent?.title ?? (t.kind === "phase" ? "(samostatná fáze)" : null),
+      slozka: t.subProject?.name ?? null,
+      popis: t.description?.slice(0, 300) ?? null,
+      dny: t.estimateDays,
+      remeslo: t.profession,
+    }));
+    const { data, costUsd } = await callModel<CostEstimateResult>(
+      d.model,
+      COST_INSTRUCTIONS,
+      [
+        {
+          type: "input_text",
+          text:
+            `Projekt: ${d.project.name} (${d.project.type})${d.project.description ? ` – ${d.project.description}` : ""}
+
+Úkoly:
+${JSON.stringify(list, null, 1)}` +
+            (d.prompt ? `
+
+Pokyn uživatele: ${d.prompt}` : ""),
+        },
+      ],
+      "costs",
+      COST_SCHEMA,
+      { effort: "low", maxOutput: 30_000 },
+    );
+    const known = new Set(cands.map((c) => c.id));
+    data.items = data.items.filter((i) => known.has(i.id));
+    await prisma.planDraft.update({
+      where: { id: d.id },
+      data: { status: "ready", result: data as unknown as Prisma.InputJsonValue, costUsd },
+    });
+  } catch (err) {
+    await prisma.planDraft
+      .update({
+        where: { id: draftId },
+        data: { status: "error", error: err instanceof Error ? err.message.slice(0, 500) : "Neznámá chyba" },
+      })
+      .catch(() => {});
+  }
 }

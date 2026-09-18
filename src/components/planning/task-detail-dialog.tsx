@@ -393,7 +393,7 @@ export function TaskDetailDialog({
               const lock = !d.canEdit;
               return (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 items-end gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-start">Začátek</Label>
                       <DateInput key={`s-${d.startDate}`} id="dd-start" name="startDate" defaultValue={d.startDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
@@ -407,7 +407,7 @@ export function TaskDetailDialog({
                   {!(d.kind === "phase" && d.childCount > 0) && (
                     <div className="space-y-1.5">
                       {d.canEdit && <input type="hidden" name="actualForm" value="1" />}
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 items-end gap-4">
                         <div className="space-y-1.5">
                           <Label htmlFor="dd-astart">Skutečný začátek</Label>
                           <DateInput key={`as-${d.actualStart}`} id="dd-astart" name="actualStart" defaultValue={d.actualStart ?? ""} disabled={lock} />
@@ -470,6 +470,23 @@ export function TaskDetailDialog({
                 </>
               );
             })()}
+
+            <div className="space-y-1.5">
+              {d.canEdit && <input type="hidden" name="costForm" value="1" />}
+              <Label htmlFor="dd-cost">Odhad nákladů (Kč s DPH)</Label>
+              <Input
+                key={`c-${d.id}`}
+                id="dd-cost"
+                name="costEstimate"
+                inputMode="decimal"
+                defaultValue={d.costEstimate ?? ""}
+                placeholder="např. 45000"
+                disabled={!d.canEdit}
+              />
+              <p className="text-[11px] text-stone-400">
+                Počítá se do forecastu, dokud ho nenahradí cena žádanky nebo nabídky.
+              </p>
+            </div>
 
             {d.canEdit && <input type="hidden" name="readinessForm" value="1" />}
             <div className="space-y-1.5 border border-stone-200 p-3">

@@ -6,7 +6,15 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager } from "@/server/access";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
-import { createPlanDraft, createVendorSelectionTodos, runPlanDraft, type PlanResult } from "@/server/plan-ai";
+import {
+  createCostDraft,
+  createPlanDraft,
+  createVendorSelectionTodos,
+  runCostDraft,
+  runPlanDraft,
+  type CostEstimateResult,
+  type PlanResult,
+} from "@/server/plan-ai";
 import { recomputeSchedule } from "@/server/actions/tasks";
 
 async function managerOf(projectId: string) {
@@ -198,4 +206,69 @@ export async function addVendorSelectionTodos(formData: FormData) {
   refresh(projectId);
   revalidatePath("/ukoly");
   return { created: n };
+}
+
+/** AI odhad nákladů pro úkoly stávajícího plánu, které odhad nemají. Běží na pozadí. */
+export async function startCostDraft(formData: FormData) {
+  const projectId = String(formData.get("projectId"));
+  const user = await managerOf(projectId);
+  const id = await createCostDraft(projectId, user.id, String(formData.get("prompt") || ""));
+  after(() => runCostDraft(id));
+  refresh(projectId);
+}
+
+/** Návrh odhadů + názvy úkolů a fází pro kontrolu. */
+export async function getCostDraft(id: string) {
+  const d = await prisma.planDraft.findUnique({
+    where: { id },
+    select: { id: true, projectId: true, kind: true, status: true, result: true },
+  });
+  if (!d || d.kind !== "costs") throw new Error("Návrh nenalezen.");
+  await managerOf(d.projectId);
+  const result = d.result as unknown as CostEstimateResult | null;
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: (result?.items ?? []).map((i) => i.id) } },
+    select: { id: true, title: true, kind: true, parent: { select: { title: true } } },
+  });
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  return {
+    id: d.id,
+    status: d.status,
+    summary: result?.summary ?? "",
+    items: (result?.items ?? [])
+      .filter((i) => byId.has(i.id))
+      .map((i) => ({
+        ...i,
+        title: byId.get(i.id)!.title,
+        phase: byId.get(i.id)!.parent?.title ?? (byId.get(i.id)!.kind === "phase" ? "Samostatné fáze" : "Bez fáze"),
+      })),
+  };
+}
+
+/** Uložit (případně upravené) odhady do úkolů – jen těm, které odhad pořád nemají. */
+export async function applyCostDraft(formData: FormData) {
+  const id = String(formData.get("id"));
+  const d = await prisma.planDraft.findUnique({ where: { id }, select: { id: true, projectId: true, kind: true, result: true } });
+  if (!d?.result || d.kind !== "costs") throw new Error("Návrh nenalezen.");
+  await managerOf(d.projectId);
+  const items = (d.result as unknown as CostEstimateResult).items;
+  const updates: { id: string; v: number }[] = [];
+  for (const it of items) {
+    const raw = String(formData.get(`cost_${it.id}`) ?? "").replace(/s/g, "").replace(",", ".");
+    if (!raw) continue;
+    const v = Number(raw);
+    if (!isNaN(v) && v >= 0) updates.push({ id: it.id, v });
+  }
+  await prisma.$transaction([
+    ...updates.map((u) =>
+      prisma.task.updateMany({
+        where: { id: u.id, projectId: d.projectId, costEstimate: null },
+        data: { costEstimate: u.v },
+      }),
+    ),
+    prisma.planDraft.update({ where: { id: d.id }, data: { status: "applied" } }),
+  ]);
+  refresh(d.projectId);
+  revalidatePath("/dashboard");
+  return { updated: updates.length };
 }

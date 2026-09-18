@@ -97,7 +97,7 @@ export function EditTaskForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 items-end gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="et-assignee">Komu (e‑mail)</Label>
               <Input id="et-assignee" name="assigneeEmail" type="email" defaultValue={task.assigneeEmail ?? ""} placeholder="kdo@to.cz" />
@@ -114,7 +114,7 @@ export function EditTaskForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 items-end gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="et-start">Začátek</Label>
               <DateInput id="et-start" name="startDate" defaultValue={task.startDate ?? ""} />
@@ -125,7 +125,7 @@ export function EditTaskForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="et-priority">Priorita</Label>
               <select id="et-priority" name="priority" defaultValue={task.priority ?? ""} className={fieldClass}>

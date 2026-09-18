@@ -81,7 +81,7 @@ export function ProjectSettings({
             <Input id="ps-name" name="name" defaultValue={project.name} required />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 items-end gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="ps-type">Typ</Label>
               <select id="ps-type" name="type" defaultValue={project.type} className={fieldClass}>
@@ -120,7 +120,7 @@ export function ProjectSettings({
 
           <div>
             <p className="kicker mb-2">Výchozí hodnoty pro nový výdaj</p>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="ps-kind">Druh</Label>
                 <select id="ps-kind" name="defaultKind" defaultValue={project.defaultKind ?? ""} className={fieldClass}>

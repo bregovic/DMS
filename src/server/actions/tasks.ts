@@ -482,7 +482,11 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
         (a.startDate?.getTime() ?? a.createdAt.getTime()) -
         (b.startDate?.getTime() ?? b.createdAt.getTime()),
     );
+  // Výslovné „Navazuje na“ = přilepit hned za předchůdce (co nejdřív).
+  // Takové fáze nedostávají implicitní návaznost na předchozí fázi podle data.
+  const explicitPred = new Set(units.filter((u) => (pred.get(u.id) ?? []).length > 0).map((u) => u.id));
   for (let i = 1; i < phaseSeq.length; i++) {
+    if (explicitPred.has(phaseSeq[i].id)) continue;
     const p = pred.get(phaseSeq[i].id)!;
     if (!p.includes(phaseSeq[i - 1].id)) p.push(phaseSeq[i - 1].id);
   }
@@ -565,7 +569,9 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
         lockedStart != null
           ? lockedStart
           : depFloor != null
-            ? Math.max(depFloor, curS ?? depFloor)
+            ? explicitPred.has(uid)
+              ? depFloor // výslovná návaznost: hned za předchůdcem
+              : Math.max(depFloor, curS ?? depFloor) // implicitní pořadí: jen dopředu
             : (curS ?? TODAY);
       const dates: { start: number; end: number }[] = [];
       for (const k of kids) {
@@ -636,7 +642,8 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     if (curS == null && curE == null) continue; // není co plánovat
     const dur = curS != null && curE != null ? curE - curS : 0;
     let s = curS ?? curE!;
-    if (depFloor != null && s < depFloor) s = depFloor;
+    // hotová fáze drží skutečné datumy – nepřilepuje se
+    if (depFloor != null && (s < depFloor || (explicitPred.has(uid) && !done(u.status)))) s = depFloor;
     const e = s + dur;
     uStart.set(uid, s);
     uDue.set(uid, e);
@@ -676,7 +683,7 @@ export async function getTaskDetail(id: string) {
     select: {
       id: true, title: true, kind: true, description: true, status: true,
       startDate: true, dueDate: true, dateLocked: true, assigneeEmail: true, vendorId: true,
-      ready: true, blockNote: true, selfPerformed: true,
+      ready: true, blockNote: true, selfPerformed: true, costEstimate: true,
       operationId: true, operationParams: true,
       priority: true, profession: true, estimateDays: true, percentDone: true,
       actualStart: true, actualEnd: true,
@@ -874,6 +881,7 @@ export async function getTaskDetail(id: string) {
     vendorId: task.vendorId,
     ready: task.ready,
     blockNote: task.blockNote,
+    costEstimate: task.costEstimate != null ? Number(task.costEstimate) : null,
     selfPerformed: task.selfPerformed,
     priority: task.priority,
     profession: task.profession,
@@ -1013,6 +1021,14 @@ export async function updateTaskPlan(formData: FormData) {
       description: toText(formData.get("description")),
       status: newStatus,
       ...actualPatch(task, newStatus),
+      // Odhad nákladů (do forecastu) – jen když ho formulář posílá.
+      ...(formData.get("costForm") === "1"
+        ? (() => {
+            const raw = String(formData.get("costEstimate") ?? "").replace(/s/g, "").replace(",", ".");
+            const v = raw ? Number(raw) : null;
+            return { costEstimate: v != null && !isNaN(v) && v >= 0 ? v : null };
+          })()
+        : {}),
       // Skutečné datumy zadané ručně (podle skutečnosti) mají přednost.
       ...(formData.get("actualForm") === "1"
         ? {

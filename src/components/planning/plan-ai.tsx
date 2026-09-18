@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ClipboardList, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, ClipboardList, Coins, Loader2, Sparkles } from "lucide-react";
 import {
   addVendorSelectionTodos,
+  applyCostDraft,
+  getCostDraft,
+  startCostDraft,
   applyPlanDraft,
   createRequestsFromPlan,
   dismissPlanDraft,
@@ -17,6 +20,7 @@ import { formatCurrency } from "@/lib/utils";
 
 type Draft = { id: string; status: string; error: string | null } | null;
 type Full = Awaited<ReturnType<typeof getPlanDraft>>;
+type Costs = Awaited<ReturnType<typeof getCostDraft>>;
 
 /**
  * AI plán z dokumentace projektu (#34) + žádanky z plánu.
@@ -34,6 +38,8 @@ export function PlanAi({
   draft,
   procurable,
   vendorSelection = 0,
+  costDraft = null,
+  unestimated = 0,
 }: {
   projectId: string;
   docs: { id: string; name: string }[];
@@ -41,6 +47,10 @@ export function PlanAi({
   procurable: number;
   /** Fáze bez dodavatele a bez úkolu na jeho výběr. */
   vendorSelection?: number;
+  /** Poslední AI odhad nákladů stávajícího plánu. */
+  costDraft?: Draft;
+  /** Nehotové úkoly bez odhadu nákladů. */
+  unestimated?: number;
 }) {
   const router = useRouter();
   const [ask, setAsk] = useState(false);
@@ -48,7 +58,9 @@ export function PlanAi({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const running = draft?.status === "running";
+  const running = draft?.status === "running" || costDraft?.status === "running";
+  const [costAsk, setCostAsk] = useState(false);
+  const [costs, setCosts] = useState<Costs | null>(null);
 
   useEffect(() => {
     if (!running) return;
@@ -128,8 +140,148 @@ export function PlanAi({
             <ClipboardList className="size-3.5" /> Doplnit výběr dodavatelů ({vendorSelection})
           </button>
         )}
+        {costDraft?.status === "running" ? (
+          <span className={`${chip} border-stone-200 text-stone-500`}>
+            <Loader2 className="size-3.5 animate-spin" /> AI odhaduje náklady…
+          </span>
+        ) : costDraft?.status === "ready" ? (
+          <button
+            type="button"
+            onClick={async () => setCosts(await getCostDraft(costDraft.id))}
+            className={`${chip} border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100`}
+          >
+            <Coins className="size-3.5" /> Odhad nákladů k potvrzení
+          </button>
+        ) : (
+          unestimated > 0 && (
+            <button
+              type="button"
+              onClick={() => setCostAsk(true)}
+              className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
+              title="AI doplní odhad nákladů úkolům, které ho nemají – kvůli forecastu"
+            >
+              <Coins className="size-3.5" /> Odhadnout náklady (AI) · {unestimated}
+            </button>
+          )
+        )}
+        {costDraft?.status === "error" && (
+          <span className="text-xs text-red-600" title={costDraft.error ?? undefined}>
+            Odhad se nepodařil
+          </span>
+        )}
         {msg && <span className="text-xs text-stone-600">{msg}</span>}
       </div>
+
+      {costAsk && (
+        <Dialog title="Odhadnout náklady plánu (AI)" size="md" onClose={() => setCostAsk(false)}>
+          <form
+            action={async (fd) => {
+              setBusy(true);
+              setErr(null);
+              try {
+                await startCostDraft(fd);
+                setCostAsk(false);
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+              }
+              setBusy(false);
+            }}
+            className="space-y-3 p-5"
+          >
+            <input type="hidden" name="projectId" value={projectId} />
+            <p className="text-sm text-stone-600">
+              AI odhadne náklady {unestimated} úkolům bez odhadu (materiál + práce, s DPH). Odhady pak zkontroluješ
+              a upravíš – promítnou se do forecastu, dokud je nenahradí cena žádanky nebo nabídky.
+            </p>
+            <label className="block text-xs text-stone-500">
+              Pokyn pro AI (volitelné)
+              <textarea
+                name="prompt"
+                rows={2}
+                placeholder="Např. zednické a pomocné práce svépomocí – počítej jen materiál"
+                className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+              />
+            </label>
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setCostAsk(false)}>
+                Zrušit
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Spouštím…" : "Odhadnout"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Dialog>
+      )}
+
+      {costs && (
+        <Dialog title="Odhad nákladů (AI)" size="2xl" onClose={() => setCosts(null)}>
+          <form
+            action={async (fd) => {
+              setBusy(true);
+              setErr(null);
+              try {
+                const r = await applyCostDraft(fd);
+                setCosts(null);
+                setMsg(`Uloženo ${r.updated} odhadů – forecast je aktualizovaný.`);
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Nepodařilo se.");
+              }
+              setBusy(false);
+            }}
+            className="space-y-4 p-5"
+          >
+            <input type="hidden" name="id" value={costs.id} />
+            <p className="text-sm text-stone-800">{costs.summary}</p>
+            <p className="kicker">
+              Celkem {formatCurrency(costs.items.reduce((a, i) => a + (i.costEstimate ?? 0), 0))} · {costs.items.length} úkolů
+            </p>
+            {[...new Set(costs.items.map((i) => i.phase))].map((ph) => (
+              <div key={ph} className="border border-stone-200">
+                <p className="border-b border-stone-100 px-3 py-2 text-sm font-medium text-stone-950">{ph}</p>
+                {costs.items
+                  .filter((i) => i.phase === ph)
+                  .map((i) => (
+                    <div key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-50 px-3 py-1.5 text-xs">
+                      <span className="min-w-0 flex-1 basis-48 text-stone-800">
+                        {i.title}
+                        {i.note && <span className="block text-[11px] text-stone-400">{i.note}</span>}
+                      </span>
+                      <input
+                        name={`cost_${i.id}`}
+                        inputMode="decimal"
+                        defaultValue={i.costEstimate ?? ""}
+                        aria-label={`Odhad nákladů – ${i.title}`}
+                        className="h-8 w-28 rounded-none border border-stone-300 bg-white px-2 text-right font-mono text-xs focus-visible:border-stone-950 focus-visible:outline-none"
+                      />
+                      <span className="text-stone-400">Kč</span>
+                    </div>
+                  ))}
+              </div>
+            ))}
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={async () => {
+                  const fd = new FormData();
+                  fd.set("id", costs.id);
+                  await dismissPlanDraft(fd);
+                  setCosts(null);
+                }}
+              >
+                Zamítnout
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Ukládám…" : "Uložit odhady"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Dialog>
+      )}
 
       {ask && (
         <Dialog title="Plán z dokumentace (AI)" size="lg" onClose={() => setAsk(false)}>

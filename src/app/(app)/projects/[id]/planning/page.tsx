@@ -9,6 +9,11 @@ import { GanttChart } from "@/components/planning/gantt-chart";
 import { buildProjectGantt } from "@/server/planning";
 import { recomputeSchedule } from "@/server/actions/tasks";
 import { PlanAi } from "@/components/planning/plan-ai";
+import { NewTaskForm } from "@/components/tasks/new-task-form";
+import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
+import { getStatuses } from "@/server/statuses";
+import { canWrite } from "@/server/access";
+import { CalendarDays } from "lucide-react";
 import { planAiProps } from "@/server/plan-ai";
 import { isManager } from "@/server/access";
 
@@ -135,6 +140,11 @@ export default async function ProjectPlanningPage({
   }
 
   const today = new Date();
+  const taskStatuses = await getStatuses("task");
+  // Fáze pro „patří pod fázi“ – na úrovni složky jen její fáze.
+  const phaseOptions = project.tasks
+    .filter((t) => t.kind === "phase" && (!subId || (!!t.subProjectId && !!scope?.has(t.subProjectId))))
+    .map((t) => ({ id: t.id, title: t.title }));
   const myVendorIds = taskOnly || mine
     ? new Set(
         (
@@ -182,8 +192,26 @@ export default async function ProjectPlanningPage({
             Termíny a stavy se nastavují u úkolů.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {(access.role === "owner" || access.role === "active") && (
+        <div className="flex flex-wrap items-center gap-2">
+          {canWrite(access.role) && (
+            <>
+              <NewTaskForm
+                projectId={project.id}
+                subProjectId={subId ?? undefined}
+                statuses={taskStatuses}
+                phases={phaseOptions}
+              />
+              <CatalogGenerateDialog projectId={project.id} subProjectId={subId} phases={phaseOptions} />
+              <Link
+                href="/vendors"
+                title="Dostupnost dodavatelů (kalendáře) – plánovač podle ní skládá úkoly"
+                className="inline-flex h-8 items-center gap-1.5 border border-stone-300 px-3 text-xs text-stone-700 transition-colors hover:border-stone-950"
+              >
+                <CalendarDays className="size-3.5" /> Kalendáře dodavatelů
+              </Link>
+            </>
+          )}
+          {(access.role === "owner" || access.role === "active" || access.role === "member") && (
             <form action={recomputeSchedule}>
               <input type="hidden" name="projectId" value={project.id} />
               <input type="hidden" name="subProjectId" value={subId ?? ""} />

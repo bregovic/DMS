@@ -89,7 +89,7 @@ export function AresLookup({ initial, autoFocus }: { initial?: Initial; autoFocu
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 items-end gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="dic">DIČ</Label>
           <Input id="dic" name="dic" value={dic} onChange={(e) => setDic(e.target.value)} placeholder="CZ…" />

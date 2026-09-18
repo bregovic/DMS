@@ -675,6 +675,7 @@ model OfferComparison {
 model PlanDraft {
   id          String   @id @default(cuid())
   projectId   String
+  kind        String   @default("plan") // plan = plán z dokumentace | costs = odhad nákladů stávajícího plánu
   status      String   @default("running") // running | ready | error | applied | dismissed
   prompt      String?
   documentIds String[]

@@ -229,7 +229,7 @@ export function CatalogGenerateDialog({
         {/* Roluje celý dialog (ui/dialog) – hlavička drží nahoře, tlačítka dole. */}
         <div className="space-y-5 p-5">
           {!phase && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="cg-phase">Název fáze</Label>
               <Input id="cg-phase" value={phaseName} onChange={(e) => setPhaseName(e.target.value)} placeholder="Např. Hrubá stavba 1.NP" />

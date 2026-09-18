@@ -196,7 +196,7 @@ export function NewExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 items-end gap-4">
             <div className="space-y-1.5">
               <Label>Dodavatel</Label>
               <Combobox
@@ -267,7 +267,7 @@ export function NewExpenseForm({
           </label>
 
           {amountMode === "fixed" ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="amount">{isIncome ? "Částka příjmu" : "Částka"}</Label>
                 <Input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0" required />
@@ -283,7 +283,7 @@ export function NewExpenseForm({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="hours">Hodiny</Label>
                   <Input id="hours" name="hours" type="number" step="0.25" min="0" placeholder="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
@@ -307,7 +307,7 @@ export function NewExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 items-end gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="date">Datum</Label>
               <DateInput id="date" name="date" defaultValue={today} required />
@@ -323,7 +323,7 @@ export function NewExpenseForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="dueDate">Splatnost</Label>
               <DateInput id="dueDate" name="dueDate" />
