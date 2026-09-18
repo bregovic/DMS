@@ -20,8 +20,20 @@ const DAY_MS = 86400000;
  *      (nedostupné dny posunou termín), jinak kalendářní dny od kurzoru;
  *   5) jednotka bez odhadu dní → drží délku, jde za předchůdcem (hotová jen dopředu). */
 export async function scheduleProject(projectId: string, subProjectId: string | null) {
+  if (subProjectId) return scheduleGroup(projectId, subProjectId);
+  // Celý projekt: každá složka (a kořen) má vlastní řadu fází – jinak by se
+  // fáze Garáže, Pergoly a Retence přilepovaly za sebe do jedné řady.
+  const groups = await prisma.task.findMany({
+    where: { projectId, kind: { not: "todo" } },
+    distinct: ["subProjectId"],
+    select: { subProjectId: true },
+  });
+  for (const g of groups) await scheduleGroup(projectId, g.subProjectId);
+}
+
+async function scheduleGroup(projectId: string, subProjectId: string | null) {
   const tasks = await prisma.task.findMany({
-    where: { projectId, ...(subProjectId ? { subProjectId } : {}) },
+    where: { projectId, subProjectId },
     select: {
       id: true, kind: true, parentId: true, estimateDays: true, status: true,
       vendorId: true, startDate: true, dueDate: true, dateLocked: true, createdAt: true,
