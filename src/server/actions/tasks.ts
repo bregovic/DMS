@@ -421,6 +421,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     select: {
       id: true, kind: true, parentId: true, estimateDays: true, status: true,
       vendorId: true, startDate: true, dueDate: true, dateLocked: true, createdAt: true,
+      actualStart: true, actualEnd: true,
       dependsOn: { select: { dependsOnId: true } },
     },
   });
@@ -500,6 +501,32 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
   const done = (s: string) => TASK_DONE_STATUSES.includes(s);
   const now = new Date();
   const TODAY = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  /**
+   * Datumy podle skutečnosti, nebo null (plánuje se dál podle odhadu).
+   * Hotový úkol se skutečným koncem: skutečný začátek–konec. Rozpracovaný:
+   * skutečný (jinak plánovaný) začátek a konec podle odhadu, ale nejdřív
+   * dnes – co se protáhlo, posune vše, co na to navazuje.
+   */
+  const actualDates = (t: {
+    status: string; estimateDays: number | null; startDate: Date | null; dueDate: Date | null;
+    actualStart: Date | null; actualEnd: Date | null;
+  }) => {
+    const day = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    if (done(t.status) && t.actualEnd) {
+      const e = day(t.actualEnd);
+      const s0 = t.actualStart ? day(t.actualStart) : t.startDate ? day(t.startDate) : e;
+      return { s: Math.min(s0, e), e };
+    }
+    if (t.status === "in_progress") {
+      const s = t.actualStart ? day(t.actualStart) : t.startDate ? day(t.startDate) : null;
+      if (s == null) return null;
+      // délka podle plánu (termín − začátek), jinak odhad dní; od skutečného začátku
+      const len = t.startDate && t.dueDate ? day(t.dueDate) - day(t.startDate) : (Math.max(t.estimateDays ?? 1, 1) - 1) * DAY_MS;
+      const planned = s + Math.max(len, 0);
+      return { s, e: Math.max(planned, s, TODAY) };
+    }
+    return null;
+  };
   const uStart = new Map<string, number>();
   const uDue = new Map<string, number>();
   const upd: { id: string; start: Date; due: Date }[] = [];
@@ -546,12 +573,23 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
         // Kotva: hotový úkol NEBO ručně uzamčený termín (dateLocked) drží svá
         // data; ostatní se skládají za sebou dle odhadu dní. Díky tomu jde
         // u dílčího úkolu zafixovat vlastní termín a nepřepíše ho přeplánování.
-        if ((done(k.status) || k.dateLocked) && k.dueDate) {
+        const real = actualDates(k);
+        if (real) {
+          // Podle skutečnosti: hotový drží skutečné datumy, rozpracovaný
+          // skutečný začátek a konec nejdřív dnes – navazující se posunou.
+          s = real.s;
+          e = real.e;
+          cursor = Math.max(cursor, e + DAY_MS);
+          if (k.startDate?.getTime() !== s || k.dueDate?.getTime() !== e)
+            upd.push({ id: k.id, start: new Date(s), due: new Date(e) });
+        } else if ((done(k.status) || k.dateLocked) && k.dueDate) {
           s = (k.startDate ?? k.dueDate).getTime();
           e = k.dueDate.getTime();
           cursor = Math.max(cursor, e + DAY_MS);
         } else {
           const dur = Math.max(k.estimateDays ?? 1, 1);
+          // Nezačatá práce nemůže začít v minulosti.
+          cursor = Math.max(cursor, TODAY);
           const av = bookAvail(k.vendorId, cursor, dur);
           if (av) { s = av.start; e = av.end; } // dle dostupnosti dodavatele
           else { s = cursor; e = s + (dur - 1) * DAY_MS; } // kalendářní dny
@@ -571,10 +609,19 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
       continue;
     }
 
+    // 3b) Samostatný úkol podle skutečnosti (hotový / rozpracovaný).
+    const realU = u.kind !== "phase" ? actualDates(u) : null;
+    if (realU) {
+      uStart.set(uid, realU.s);
+      uDue.set(uid, realU.e);
+      if (curS !== realU.s || curE !== realU.e) upd.push({ id: uid, start: new Date(realU.s), due: new Date(realU.e) });
+      continue;
+    }
+
     // 4) Samostatný úkol (nebo prázdná fáze) s odhadem dní → plán dle dostupnosti.
     const hasDur = (u.estimateDays ?? 0) > 0;
     if (hasDur && !(u.kind === "phase" && done(u.status))) {
-      const cursor = depFloor ?? curS ?? TODAY;
+      const cursor = Math.max(depFloor ?? curS ?? TODAY, TODAY);
       const dur = Math.max(u.estimateDays!, 1);
       const av = bookAvail(u.vendorId, cursor, dur);
       const s = av ? av.start : cursor;
@@ -1040,6 +1087,8 @@ export async function setTaskStatus(formData: FormData) {
     where: { id: task.id },
     data: { status, ...actualPatch(task, status) },
   });
+  // Plán podle skutečnosti: hotovo dřív/později nebo rozpracováno posune navazující.
+  if (task.kind !== "todo") await scheduleProject(task.projectId, task.subProjectId);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
   revalidatePath("/ukoly");
@@ -1141,7 +1190,7 @@ export async function bulkUpdateTasks(formData: FormData) {
 
   const tasks = await prisma.task.findMany({
     where: { id: { in: ids }, projectId },
-    select: { id: true, createdById: true, actualStart: true, actualEnd: true },
+    select: { id: true, createdById: true, actualStart: true, actualEnd: true, kind: true, subProjectId: true },
   });
   const allowed = tasks.filter((t) => isManager(access.role) || t.createdById === user.id);
 
@@ -1157,6 +1206,10 @@ export async function bulkUpdateTasks(formData: FormData) {
     ),
   );
 
+  // Změna stavu mění skutečnost → přepočítat plán dotčených složek.
+  if (status)
+    for (const sub of new Set(allowed.filter((t) => t.kind !== "todo").map((t) => t.subProjectId)))
+      await scheduleProject(projectId, sub);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/planning");
   revalidatePath("/ukoly");

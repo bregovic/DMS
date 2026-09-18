@@ -86,8 +86,10 @@ export async function uploadDocument(formData: FormData) {
     throw new Error("Soubor je větší než 14 MB.");
   }
 
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: user.id },
+  // Vlastník i spolusprávce (dřív jen vlastník).
+  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Dokumenty projektu nahrává správce projektu.");
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
     select: { id: true, ownerId: true },
   });
   if (!project) throw new Error("Projekt nenalezen.");

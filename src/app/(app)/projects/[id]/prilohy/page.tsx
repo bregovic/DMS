@@ -4,6 +4,13 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/dal";
 import { getProjectAttachments } from "@/server/attachments";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { prisma } from "@/lib/prisma";
+import { getProjectAccess, isManager } from "@/server/access";
+import { getDocumentTypes } from "@/server/document-types";
+import { UploadForm } from "@/components/documents/upload-form";
+import { DeleteButton } from "@/components/ui/delete-button";
+import { deleteDocument } from "@/server/actions/documents";
+import { FileText } from "lucide-react";
 import {
   AttachmentsBrowser,
   type BrowserItem,
@@ -41,6 +48,23 @@ export default async function AttachmentsPage({
   });
   if (!res) notFound();
 
+  // Dokumentace projektu (technická zpráva, výkresy, smlouvy…) – soubory, které
+  // nepatří k výdaji, žádance ani nabídce. Dřív se nahrávaly jen v záložce
+  // Dokumenty a tady na stránce Přílohy nešly vůbec přidat.
+  const access = await getProjectAccess(id, user);
+  const canUpload = !sub && isManager(access?.role);
+  const [projectDocs, docTypes] = sub
+    ? [[], []]
+    : await Promise.all([
+        prisma.document.findMany({
+          where: { projectId: id, expenseId: null, requestId: null, offerId: null },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, originalName: true, size: true, type: true, createdAt: true },
+        }),
+        getDocumentTypes(),
+      ]);
+  const typeLabel = new Map(docTypes.map((t) => [t.value, t.label]));
+
   const total = res.items.reduce((s, i) => s + i.amount, 0);
   const totalSize = res.items.reduce((s, i) => s + i.size, 0);
   const exportedCount = res.items.filter((i) => i.exported).length;
@@ -69,6 +93,39 @@ export default async function AttachmentsPage({
           {exportedCount > 0 ? ` · ${exportedCount} staženo` : ""}
         </p>
       </header>
+
+      {!sub && (
+        <section className="mb-10">
+          <h2 className="kicker mb-3">Dokumentace projektu · {projectDocs.length}</h2>
+          {canUpload && <UploadForm projectId={id} types={docTypes} />}
+          {projectDocs.length > 0 && (
+            <ul className="mt-3">
+              {projectDocs.map((d) => (
+                <li key={d.id} className="group flex items-center gap-2 border-b border-stone-200 py-2.5 text-sm">
+                  <FileText className="size-4 shrink-0 text-stone-400" />
+                  <a
+                    href={`/api/documents/${d.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-w-0 flex-1 truncate text-stone-900 underline-offset-4 hover:underline"
+                  >
+                    {d.originalName}
+                  </a>
+                  <span className="shrink-0 text-xs text-stone-400">
+                    {typeLabel.get(d.type) ?? d.type} · {formatBytes(d.size)} · {formatDate(d.createdAt)}
+                  </span>
+                  {canUpload && (
+                    <span className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                      <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat tento dokument?" />
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <h2 className="kicker mb-3 mt-10">Účtenky a doklady k výdajům</h2>
+        </section>
+      )}
 
       {/* Filtr období (podle data výdaje) */}
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
