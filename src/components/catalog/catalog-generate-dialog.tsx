@@ -27,6 +27,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
+import { CatalogAiProposal } from "@/components/catalog/catalog-ai-proposal";
 
 type Line = {
   lineId: number;
@@ -315,7 +316,7 @@ export function CatalogGenerateDialog({
               onClick={() => setWishOpen(true)}
               className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
             >
-              Nenašel jsi činnost? Zapiš si ji k doplnění →
+              Nenašel jsi činnost? Doplň ji přes AI nebo zapiš k doplnění →
             </button>
           ) : (
             <div className="space-y-1.5 border border-dashed border-stone-300 p-3">
@@ -339,6 +340,25 @@ export function CatalogGenerateDialog({
                   Uloženo do Katalog → Chybějící. Tam stáhneš šablonu s promptem pro AI.
                 </p>
               )}
+              <CatalogAiProposal
+                title={wishText}
+                onSaved={async (opId) => {
+                  // znovu načíst katalog a nový úkon rovnou přidat do rozpisu
+                  const fresh = await listOperationsForCalc();
+                  setOps(fresh);
+                  const op = fresh.find((o) => o.id === opId);
+                  if (op) {
+                    const values: Record<string, number> = {};
+                    for (const pm of op.paramsMeta) values[pm.key] = Number(pm.defaultValue ?? 0);
+                    counter.current += 1;
+                    const id = counter.current;
+                    setLines((ls) => [...ls, { lineId: id, operationId: opId, values, multiplier: 1 }]);
+                    if (!phase && !phaseName) setPhaseName(op.name ?? "");
+                  }
+                  setWishText("");
+                  setWishOpen(false);
+                }}
+              />
             </div>
           )}
 

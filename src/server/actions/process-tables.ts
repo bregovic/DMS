@@ -1183,3 +1183,19 @@ export async function fillTaskFromCatalog(input: {
   revalidatePath("/planning");
   return { ok: true };
 }
+
+/** Návrh úkonu do katalogu přes AI podle názvu činnosti (#35). */
+export async function proposeCatalogOperation(title: string, note?: string) {
+  const user = await requireUser();
+  const { proposeOperation } = await import("@/server/catalog-ai");
+  return proposeOperation(title, user.id, note);
+}
+
+/** Uložit potvrzený AI návrh úkonu do katalogu; vrátí id nového úkonu. */
+export async function saveCatalogProposal(proposal: import("@/server/catalog-ai").CatalogProposal) {
+  const user = await requireUser();
+  const { saveProposal } = await import("@/server/catalog-ai");
+  const id = await saveProposal(proposal, user.id);
+  revalidatePath("/katalog");
+  return id;
+}

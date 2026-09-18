@@ -299,7 +299,7 @@ export async function callModel<T>(
   content: unknown[],
   name: string,
   schema: unknown,
-  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number } = {},
+  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number; webSearch?: boolean } = {},
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -313,6 +313,7 @@ export async function callModel<T>(
       ],
       text: { format: { type: "json_schema", name, strict: true, schema } },
       reasoning: { effort: opts.effort ?? "low" },
+      ...(opts.webSearch ? { tools: [{ type: "web_search" }] } : {}),
       max_output_tokens: opts.maxOutput ?? 12_000,
     }),
   });
@@ -321,7 +322,9 @@ export async function callModel<T>(
   const inTok = j.usage?.input_tokens ?? 0;
   const outTok = j.usage?.output_tokens ?? 0;
   const [pin, pout] = PRICES[model] ?? PRICES["gpt-5-mini"];
-  const costUsd = (inTok * pin + outTok * pout) / 1_000_000;
+  // + vyhledávání na webu (0,01 USD za dotaz)
+  const searches = (j.output ?? []).filter((o: { type: string }) => o.type === "web_search_call").length;
+  const costUsd = (inTok * pin + outTok * pout) / 1_000_000 + searches * 0.01;
   // Útrata do trvalého záznamu (limity) – zaplacená je i useknutá odpověď.
   await prisma.aiUsageLog.create({ data: { kind: name, model, costUsd } }).catch(() => {});
   if (j.status === "incomplete")
