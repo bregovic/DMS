@@ -4,7 +4,7 @@ import { RegisterForm } from "@/components/auth/auth-forms";
 
 export default async function RegisterPage() {
   const session = await auth();
-  if (session?.user) redirect("/dashboard");
+  if (session?.user) redirect("/");
 
   return (
     <div>

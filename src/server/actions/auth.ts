@@ -39,7 +39,7 @@ export async function registerAction(
   await prisma.user.create({ data: { name, email, passwordHash } });
 
   // signIn provede přesměrování (vyhodí redirect) – nechytat.
-  await signIn("credentials", { email, password, redirectTo: "/dashboard" });
+  await signIn("credentials", { email, password, redirectTo: "/" });
   return undefined;
 }
 
@@ -51,7 +51,7 @@ export async function loginAction(
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
-      redirectTo: "/dashboard",
+      redirectTo: "/",
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -63,7 +63,7 @@ export async function loginAction(
 }
 
 export async function googleSignInAction() {
-  await signIn("google", { redirectTo: "/dashboard" });
+  await signIn("google", { redirectTo: "/" });
 }
 
 export async function signOutAction() {

@@ -4,6 +4,13 @@ export const PROJECT_TABS = ["vydaje", "ukoly", "zadanky", "prijmy", "dokumenty"
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 export const DEFAULT_PROJECT_TAB: ProjectTab = "vydaje";
 
+/**
+ * Cookie s naposledy otevřeným projektem – zapisuje RememberProject, čte
+ * vstupní stránka `/`. Tady, ne v klientské komponentě: konstanta
+ * exportovaná ze souboru s "use client" by na serveru nebyla řetězec.
+ */
+export const LAST_PROJECT_COOKIE = "dms-last";
+
 export function parseProjectTab(value: unknown): ProjectTab {
   return typeof value === "string" && (PROJECT_TABS as readonly string[]).includes(value)
     ? (value as ProjectTab)

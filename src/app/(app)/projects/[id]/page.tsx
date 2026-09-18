@@ -25,6 +25,7 @@ import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
 import { TaskStatusFilter } from "@/components/tasks/task-status-filter";
+import { RememberProject } from "@/components/projects/remember-project";
 import { UploadForm } from "@/components/documents/upload-form";
 import {
   ProjectTabs,
@@ -571,6 +572,7 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="mx-auto max-w-7xl">
+      <RememberProject projectId={project.id} sub={sub} tab={tab} />
       {currentSub && (
         <EscBack href={projectHref(project.id, currentSub.parentId ?? null, tab)} />
       )}
