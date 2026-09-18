@@ -41,7 +41,7 @@ export function CatalogAiProposal({ title, onSaved }: { title: string; onSaved: 
         />
         <Button type="button" variant="outline" size="sm" disabled={busy || title.trim().length < 3} onClick={propose}>
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-          {busy ? "AI hledá normy a ceny… (do minuty)" : "Navrhnout úkon přes AI"}
+          {busy ? "Dohledávám normy a ceny… (do dvou minut)" : "Navrhnout úkon"}
         </Button>
         {err && <p className="text-xs text-red-600">{err}</p>}
       </div>

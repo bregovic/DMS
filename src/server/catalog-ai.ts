@@ -138,7 +138,7 @@ export function validateProposal(p: CatalogProposal): CatalogProposal {
   check(p.operation.quantityFormula, "množství");
   check(p.operation.laborFormula, "normohodin");
   for (const m of p.materials) check(m.quantityFormula, `materiálu ${m.name}`);
-  p.operation.code = p.operation.code.toUpperCase().replace(/[^A-Z0-9-]/g, "-").slice(0, 40) || "AI-UKON";
+  p.operation.code = p.operation.code.toUpperCase().replace(/[^A-Z0-9-]/g, "-").slice(0, 40) || "UKON";
   p.operation.crew = Math.max(1, Math.round(p.operation.crew || 1));
   p.operation.techPauseDays =
     p.operation.techPauseDays != null && p.operation.techPauseDays > 0 ? Math.round(p.operation.techPauseDays) : null;
@@ -170,7 +170,7 @@ export async function saveProposal(p: CatalogProposal, userId: string) {
         laborRate: p.operation.laborRate,
         crew: p.operation.crew,
         techPauseDays: p.operation.techPauseDays,
-        description: `${p.operation.description}\n(navrženo AI)`.trim(),
+        description: `${p.operation.description}\n(navrženo z katalogu)`.trim(),
         category: "other",
       },
       select: { id: true },

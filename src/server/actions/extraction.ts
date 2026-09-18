@@ -204,7 +204,7 @@ export async function applyExtraction(formData: FormData) {
               : null,
             p.leadTime && `Dodání: ${p.leadTime}`,
             p.note,
-            [head, `(${ex.document.originalName}, vytěženo AI)`].filter(Boolean).join(" "),
+            [head, `(${ex.document.originalName}, zpracováno z přílohy)`].filter(Boolean).join(" "),
           ]
             .filter(Boolean)
             .join("\n"),

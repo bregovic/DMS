@@ -75,7 +75,7 @@ export function PlanAi({
       <div className="flex flex-wrap items-center gap-2">
         {running ? (
           <span className={`${chip} border-stone-200 text-stone-500`}>
-            <Loader2 className="size-3.5 animate-spin" /> AI připravuje plán…
+            <Loader2 className="size-3.5 animate-spin" /> Připravuji plán…
           </span>
         ) : draft?.status === "ready" ? (
           <button
@@ -87,7 +87,7 @@ export function PlanAi({
           </button>
         ) : (
           <button type="button" onClick={() => setAsk(true)} className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}>
-            <Sparkles className="size-3.5" /> Plán z dokumentace (AI)
+            <Sparkles className="size-3.5" /> Plán z dokumentace
           </button>
         )}
         {draft?.status === "error" && (
@@ -142,7 +142,7 @@ export function PlanAi({
         )}
         {costDraft?.status === "running" ? (
           <span className={`${chip} border-stone-200 text-stone-500`}>
-            <Loader2 className="size-3.5 animate-spin" /> AI odhaduje náklady…
+            <Loader2 className="size-3.5 animate-spin" /> Odhaduji náklady…
           </span>
         ) : costDraft?.status === "ready" ? (
           <button
@@ -158,9 +158,9 @@ export function PlanAi({
               type="button"
               onClick={() => setCostAsk(true)}
               className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
-              title="AI doplní odhad nákladů úkolům, které ho nemají – kvůli forecastu"
+              title="Doplní odhad nákladů úkolům, které ho nemají – promítne se do forecastu"
             >
-              <Coins className="size-3.5" /> Odhadnout náklady (AI) · {unestimated}
+              <Coins className="size-3.5" /> Odhadnout náklady · {unestimated}
             </button>
           )
         )}
@@ -173,7 +173,7 @@ export function PlanAi({
       </div>
 
       {costAsk && (
-        <Dialog title="Odhadnout náklady plánu (AI)" size="md" onClose={() => setCostAsk(false)}>
+        <Dialog title="Odhad nákladů plánu" size="md" onClose={() => setCostAsk(false)}>
           <form
             action={async (fd) => {
               setBusy(true);
@@ -190,11 +190,11 @@ export function PlanAi({
           >
             <input type="hidden" name="projectId" value={projectId} />
             <p className="text-sm text-stone-600">
-              AI odhadne náklady {unestimated} úkolům bez odhadu (materiál + práce, s DPH). Odhady pak zkontroluješ
+              Odhadnu náklady {unestimated} úkolům bez odhadu (materiál + práce, s DPH). Odhady pak zkontroluješ
               a upravíš – promítnou se do forecastu, dokud je nenahradí cena žádanky nebo nabídky.
             </p>
             <label className="block text-xs text-stone-500">
-              Pokyn pro AI (volitelné)
+              Upřesnění (volitelné)
               <textarea
                 name="prompt"
                 rows={2}
@@ -216,7 +216,7 @@ export function PlanAi({
       )}
 
       {costs && (
-        <Dialog title="Odhad nákladů (AI)" size="2xl" onClose={() => setCosts(null)}>
+        <Dialog title="Odhad nákladů – ke kontrole" size="2xl" onClose={() => setCosts(null)}>
           <form
             action={async (fd) => {
               setBusy(true);
@@ -284,7 +284,7 @@ export function PlanAi({
       )}
 
       {ask && (
-        <Dialog title="Plán z dokumentace (AI)" size="lg" onClose={() => setAsk(false)}>
+        <Dialog title="Plán z dokumentace" size="lg" onClose={() => setAsk(false)}>
           <form
             action={async (fd) => {
               setBusy(true);
@@ -301,12 +301,12 @@ export function PlanAi({
           >
             <input type="hidden" name="projectId" value={projectId} />
             <p className="text-sm text-stone-600">
-              AI projde dokumentaci, podle katalogu úkonů navrhne fáze a úkoly s odhadem dní a nákladů a co poptat
+              Z dokumentace a katalogu úkonů se navrhnou fáze a úkoly s odhadem dní a nákladů a co poptat
               u dodavatelů. Návrh pak zkontroluješ – nic se nezaloží samo.
             </p>
             {docs.length === 0 ? (
               <p className="border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                V projektu zatím není dokumentace, kterou AI přečte (PDF, fotky, Word, Excel). Nahraj ji v záložce
+                V projektu zatím není dokumentace, kterou lze zpracovat (PDF, fotky, Word, Excel). Nahraj ji v záložce
                 Dokumenty – nebo pokračuj a plán vznikne jen z popisu a pokynu.
               </p>
             ) : (
@@ -328,7 +328,7 @@ export function PlanAi({
               </fieldset>
             )}
             <label className="block text-xs text-stone-500">
-              Pokyn pro AI (volitelné)
+              Upřesnění (volitelné)
               <textarea
                 name="prompt"
                 rows={3}
@@ -350,7 +350,7 @@ export function PlanAi({
       )}
 
       {review?.result && (
-        <Dialog title="Návrh plánu (AI)" size="3xl" onClose={() => setReview(null)}>
+        <Dialog title="Návrh plánu – ke kontrole" size="3xl" onClose={() => setReview(null)}>
           <form
             action={async (fd) => {
               setBusy(true);

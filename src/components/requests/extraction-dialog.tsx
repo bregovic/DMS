@@ -42,7 +42,7 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
   const kindLabel = { offer: "Cenová nabídka", technical: "Technický dokument", other: "Dokument" } as const;
 
   return (
-    <Dialog title="Návrh z nabídky (AI)" size="2xl" onClose={onClose}>
+    <Dialog title="Návrh z přílohy – ke kontrole" size="2xl" onClose={onClose}>
       {!d || !r ? (
         <p className="p-5 text-sm text-stone-500">{err ?? "Načítám…"}</p>
       ) : (

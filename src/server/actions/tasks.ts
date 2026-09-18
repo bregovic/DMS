@@ -576,9 +576,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
         lockedStart != null
           ? lockedStart
           : depFloor != null
-            ? explicitPred.has(uid)
-              ? depFloor // výslovná návaznost: hned za předchůdcem
-              : Math.max(depFloor, curS ?? depFloor) // implicitní pořadí: jen dopředu
+            ? depFloor // neukotvená fáze: hned za předchůdcem (výslovným i podle pořadí)
             : (PROJECT_START ?? curS ?? TODAY); // první fáze od začátku projektu
       const dates: { start: number; end: number }[] = [];
       for (const k of kids) {
@@ -650,7 +648,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     const dur = curS != null && curE != null ? curE - curS : 0;
     let s = curS ?? curE!;
     // hotová fáze drží skutečné datumy – nepřilepuje se
-    if (depFloor != null && (s < depFloor || (explicitPred.has(uid) && !done(u.status)))) s = depFloor;
+    if (depFloor != null && (s < depFloor || !done(u.status))) s = depFloor;
     const e = s + dur;
     uStart.set(uid, s);
     uDue.set(uid, e);

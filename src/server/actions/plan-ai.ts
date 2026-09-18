@@ -109,7 +109,7 @@ export async function applyPlanDraft(formData: FormData) {
         const desc = [
           t.quantity != null ? `Množství: ${t.quantity} ${t.unit ?? ""}`.trim() : null,
           t.note,
-          "Navrženo AI z dokumentace.",
+          "Navrženo z dokumentace.",
         ]
           .filter(Boolean)
           .join("\n");

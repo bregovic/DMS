@@ -201,14 +201,14 @@ async function closeStaleRuns() {
  * počet spuštění za hodinu a souběžné běhy uživatele.
  */
 export async function assertBudget(userId?: string) {
-  if (AI_LIMITS.disabled) throw new Error("AI je vypnutá (AI_DISABLED).");
-  if (!process.env.OPENAI_API_KEY) throw new Error("AI není nastavená (chybí OPENAI_API_KEY).");
+  if (AI_LIMITS.disabled) throw new Error("Automatické zpracování je vypnuté.");
+  if (!process.env.OPENAI_API_KEY) throw new Error("Automatické zpracování není nastavené.");
   await closeStaleRuns();
   const u = await aiUsage();
   if (u.month >= AI_LIMITS.monthlyUsd)
-    throw new Error(`Měsíční limit pro AI (${AI_LIMITS.monthlyUsd} USD) je vyčerpaný.`);
+    throw new Error(`Měsíční limit automatického zpracování (${AI_LIMITS.monthlyUsd} USD) je vyčerpaný.`);
   if (u.today >= AI_LIMITS.dailyUsd)
-    throw new Error(`Denní limit pro AI (${AI_LIMITS.dailyUsd} USD) je vyčerpaný – zkus to zítra.`);
+    throw new Error(`Denní limit automatického zpracování (${AI_LIMITS.dailyUsd} USD) je vyčerpaný – zkus to zítra.`);
   if (userId) {
     const hour = new Date(Date.now() - 3600_000);
     const mine = { createdById: userId };
@@ -221,9 +221,9 @@ export async function assertBudget(userId?: string) {
       prisma.planDraft.count({ where: { ...mine, status: "running" } }),
     ]);
     if (e + c + p >= AI_LIMITS.runsPerHour)
-      throw new Error(`Za poslední hodinu už bylo ${e + c + p} spuštění AI (limit ${AI_LIMITS.runsPerHour}). Zkus to za chvíli.`);
+      throw new Error(`Za poslední hodinu už bylo ${e + c + p} zpracování (limit ${AI_LIMITS.runsPerHour}). Zkus to za chvíli.`);
     if (re + rc + rp >= AI_LIMITS.parallel)
-      throw new Error("Už běží několik zpracování AI – počkej, až doběhnou.");
+      throw new Error("Už běží několik zpracování – počkej, až doběhnou.");
   }
 }
 
@@ -328,7 +328,7 @@ export async function callModel<T>(
   // Útrata do trvalého záznamu (limity) – zaplacená je i useknutá odpověď.
   await prisma.aiUsageLog.create({ data: { kind: name, model, costUsd } }).catch(() => {});
   if (j.status === "incomplete")
-    throw new Error("Odpověď AI byla useknutá (strop délky) – zkus menší dokument nebo užší pokyn.");
+    throw new Error("Výsledek byl useknutý (strop délky) – zkus menší dokument nebo užší upřesnění.");
   const text = j.output
     ?.find((o: { type: string }) => o.type === "message")
     ?.content?.find((c: { type: string }) => c.type === "output_text")?.text;

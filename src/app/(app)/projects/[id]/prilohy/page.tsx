@@ -12,6 +12,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteDocument } from "@/server/actions/documents";
 import { FileText } from "lucide-react";
 import { DocumentNote } from "@/components/documents/document-note";
+import { TextNoteForm } from "@/components/documents/text-note-form";
 import {
   AttachmentsBrowser,
   type BrowserItem,
@@ -99,6 +100,7 @@ export default async function AttachmentsPage({
         <section className="mb-10">
           <h2 className="kicker mb-3">Dokumentace projektu · {projectDocs.length}</h2>
           {canUpload && <UploadForm projectId={id} types={docTypes} />}
+          {canUpload && <TextNoteForm projectId={id} />}
           {projectDocs.length > 0 && (
             <ul className="mt-3">
               {projectDocs.map((d) => (

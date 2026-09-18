@@ -59,12 +59,12 @@ export function OfferComparison({
             className="flex cursor-pointer items-center gap-1.5 border border-stone-300 px-2 py-1 text-[11px] text-stone-700 hover:border-stone-950 disabled:opacity-50"
           >
             <Scale className="size-3.5" />
-            {comparison ? "Porovnat znovu (AI)" : "Porovnat nabídky (AI)"}
+            {comparison ? "Porovnat znovu" : "Porovnat nabídky"}
           </button>
         )}
         {running && (
           <span className="flex items-center gap-1 text-[11px] text-stone-500">
-            <Loader2 className="size-3 animate-spin" /> AI porovnává nabídky…
+            <Loader2 className="size-3 animate-spin" /> Porovnávám nabídky…
           </span>
         )}
         {comparison?.status === "error" && (
@@ -138,14 +138,14 @@ export function OfferComparison({
             </div>
           )}
           <p className="text-[10px] text-stone-400">
-            AI porovnání {new Date(comparison!.createdAt).toLocaleString("cs-CZ")}
+            Porovnání {new Date(comparison!.createdAt).toLocaleString("cs-CZ")}
             {comparison!.prompt ? ` · pokyn: ${comparison!.prompt}` : ""} · orientační, ceny a podmínky ověř v nabídkách
           </p>
         </div>
       )}
 
       {ask && (
-        <Dialog title="Porovnat nabídky (AI)" size="md" onClose={() => setAsk(false)}>
+        <Dialog title="Porovnání nabídek" size="md" onClose={() => setAsk(false)}>
           <form
             action={async (fd) => {
               setBusy(true);
@@ -163,7 +163,7 @@ export function OfferComparison({
           >
             <input type="hidden" name="requestId" value={requestId} />
             <p className="text-sm text-stone-600">
-              AI porovná {offerCount} {offerCount === 1 ? "nabídku" : offerCount < 5 ? "nabídky" : "nabídek"} a připraví
+              Porovnám {offerCount} {offerCount === 1 ? "nabídku" : offerCount < 5 ? "nabídky" : "nabídek"} a připravím
               stručný podklad pro výběr.
             </p>
             <label className="block text-xs text-stone-500">

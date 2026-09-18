@@ -95,7 +95,7 @@ export async function planDocuments(projectId: string) {
 export async function createPlanDraft(projectId: string, userId: string, documentIds: string[], prompt?: string | null) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("AI už na plánu projektu pracuje – počkej, až doběhne.");
+  if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
   const ids = documentIds.filter((id) => allowed.has(id)).slice(0, 10);
   const d = await prisma.planDraft.create({
@@ -363,7 +363,7 @@ export async function costCandidates(projectId: string) {
 export async function createCostDraft(projectId: string, userId: string, prompt?: string | null) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("AI už na plánu projektu pracuje – počkej, až doběhne.");
+  if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const n = (await costCandidates(projectId)).length;
   if (n === 0) throw new Error("Všechny nehotové úkoly už odhad nákladů mají.");
   const d = await prisma.planDraft.create({

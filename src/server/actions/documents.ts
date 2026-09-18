@@ -258,3 +258,38 @@ export async function updateDocumentNote(formData: FormData) {
   revalidatePath(`/projects/${doc.projectId}`);
   revalidatePath(`/projects/${doc.projectId}/prilohy`);
 }
+
+/**
+ * Textová poznámka k dokumentaci projektu (změny oproti projektu, požadavky,
+ * domluvy…). Uloží se jako .txt dokument – plánování ji načte stejně jako
+ * ostatní dokumentaci.
+ */
+export async function createTextNote(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Poznámky přidává správce projektu.");
+  const title = String(formData.get("title") || "").trim().slice(0, 120) || "Poznámka";
+  const text = String(formData.get("text") || "").trim();
+  if (!text) throw new Error("Napiš text poznámky.");
+  if (text.length > 50_000) throw new Error("Poznámka je příliš dlouhá.");
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  if (!project) throw new Error("Projekt nenalezen.");
+  const docType = await resolveDocTypeKey("Poznámka");
+  const buffer = Buffer.from(`${title}\n\n${text}\n`, "utf8");
+  const fileName = `${title.replace(/[\/:*?"<>|]+/g, "-")}.txt`;
+  const key = await storage.save(buffer, fileName, `${project.ownerId}/${projectId}/${docType}`);
+  await prisma.document.create({
+    data: {
+      projectId,
+      fileName: key,
+      originalName: fileName,
+      mimeType: "text/plain",
+      size: buffer.length,
+      type: docType,
+      summary: text.slice(0, 200),
+      uploadedById: user.id,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/prilohy`);
+}

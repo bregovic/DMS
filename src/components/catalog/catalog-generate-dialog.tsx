@@ -316,7 +316,7 @@ export function CatalogGenerateDialog({
               onClick={() => setWishOpen(true)}
               className="text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline cursor-pointer"
             >
-              Nenašel jsi činnost? Doplň ji přes AI nebo zapiš k doplnění →
+              Nenašel jsi činnost? Navrhni ji nebo zapiš k doplnění →
             </button>
           ) : (
             <div className="space-y-1.5 border border-dashed border-stone-300 p-3">

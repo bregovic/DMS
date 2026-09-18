@@ -169,9 +169,9 @@ async function AiUsageSection() {
   );
   return (
     <section className="mt-12">
-      <h2 className="kicker mb-4">AI – útrata a pojistky</h2>
+      <h2 className="kicker mb-4">Automatické zpracování – útrata a limity</h2>
       {!u.configured || u.limits.disabled ? (
-        <p className="text-sm text-stone-500">AI je vypnutá.</p>
+        <p className="text-sm text-stone-500">Automatické zpracování je vypnuté.</p>
       ) : (
         <div className="grid max-w-xl gap-4 sm:grid-cols-2">
           <div>
@@ -189,7 +189,7 @@ async function AiUsageSection() {
           <p className="text-xs text-stone-500 sm:col-span-2">
             Nejvýš {u.limits.runsPerHour} spuštění za hodinu a {u.limits.parallel} najednou na uživatele, soubory do{" "}
             {Math.round(u.limits.maxFileBytes / 1048576)} MB, stejná příloha se nezpracovává dvakrát zároveň. Po dosažení
-            limitu se AI do konce dne / měsíce nespustí – nic se nezaplatí navíc.
+            limitu se zpracování do konce dne / měsíce nespustí – nic se nezaplatí navíc.
           </p>
         </div>
       )}

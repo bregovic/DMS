@@ -46,14 +46,14 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
   const base = "flex shrink-0 items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 text-[11px]";
   const st = d.ai?.status;
   const promptDialog = ask && (
-    <Dialog title="Zpracovat přílohu AI" size="md" onClose={() => setAsk(false)}>
+    <Dialog title="Zpracovat přílohu" size="md" onClose={() => setAsk(false)}>
       <form
         action={async (fd) => run(String(fd.get("instructions") || ""))}
         className="space-y-3 p-5"
       >
         <p className="text-sm text-stone-600">{d.originalName}</p>
         <label className="block text-xs text-stone-500">
-          Pokyn pro AI (volitelné)
+          Upřesnění (volitelné)
           <textarea
             name="instructions"
             rows={3}
@@ -88,7 +88,7 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
   if (busy || st === "running")
     return (
       <span className={`${base} border-stone-200 text-stone-500`}>
-        <Loader2 className="size-3 animate-spin" /> AI čte přílohu…
+        <Loader2 className="size-3 animate-spin" /> Zpracovávám přílohu…
       </span>
     );
   const open = (label: string, cls: string) => (
@@ -112,9 +112,9 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
       {promptDialog}
     </span>
   );
-  if (st === "error") return start("AI chyba · znovu", "border-red-300 text-red-700 hover:border-red-600", d.ai?.error ?? undefined);
+  if (st === "error") return start("Chyba zpracování · znovu", "border-red-300 text-red-700 hover:border-red-600", d.ai?.error ?? undefined);
   if (st === "dismissed") return start("Zamítnuto · znovu", "border-stone-300 text-stone-500 hover:border-stone-950");
-  return start("Zpracovat AI", "border-stone-300 text-stone-600 hover:border-stone-950");
+  return start("Zpracovat přílohu", "border-stone-300 text-stone-600 hover:border-stone-950");
 }
 
 const MAX_BYTES = 14 * 1024 * 1024;
