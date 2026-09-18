@@ -10,6 +10,7 @@ import {
   createComparison,
   createExtraction,
   runComparison,
+  extractable,
   runExtraction,
   type ExtractionResult,
 } from "@/server/extraction";
@@ -268,4 +269,40 @@ export async function startComparison(formData: FormData) {
   const id = await createComparison(req.id, user.id, String(formData.get("prompt") || ""));
   after(() => runComparison(id));
   revalidatePath(`/projects/${req.projectId}`);
+}
+
+/**
+ * Zpracovat všechny dosud nezpracované přílohy žádanky – postupně, jednu
+ * po druhé (kvůli limitu souběžných běhů). Běží na pozadí.
+ */
+export async function startRequestExtractions(formData: FormData) {
+  const user = await requireUser();
+  const req = await prisma.request.findUnique({
+    where: { id: String(formData.get("requestId")) },
+    select: { id: true, projectId: true },
+  });
+  if (!req) throw new Error("Žádanka nenalezena.");
+  if (!isManager(await getProjectRole(req.projectId, user))) throw new Error("Přílohy zpracovává správce projektu.");
+  const docs = await prisma.document.findMany({
+    where: { requestId: req.id, extractions: { none: {} } },
+    select: { id: true, mimeType: true, originalName: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const todo = docs.filter((d) => extractable(d.mimeType, d.originalName));
+  if (todo.length === 0) throw new Error("Všechny přílohy už jsou zpracované.");
+  // První založit hned (ať je vidět průběh), ostatní postupně na pozadí.
+  const first = await createExtraction(todo[0].id, user.id);
+  after(async () => {
+    await runExtraction(first);
+    for (const d of todo.slice(1)) {
+      try {
+        const id = await createExtraction(d.id, user.id);
+        await runExtraction(id);
+      } catch {
+        break; // limit útraty/počtu – zbytek zůstane nezpracovaný
+      }
+    }
+  });
+  revalidatePath(`/projects/${req.projectId}`);
+  return { queued: todo.length };
 }

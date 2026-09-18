@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
 import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
-import { startExtraction } from "@/server/actions/extraction";
+import { startExtraction, startRequestExtractions } from "@/server/actions/extraction";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ExtractionDialog } from "@/components/requests/extraction-dialog";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
@@ -148,6 +148,9 @@ export function RequestAttachments({
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [aiOpen, setAiOpen] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  // Přílohy, které jdou zpracovat a ještě zpracované nebyly.
+  const unprocessed = docs.filter((d) => d.canExtract && !d.ai).length;
   const router = useRouter();
 
   // Dokud AI čte nabídku, obnovovat stránku – výsledek se objeví sám.
@@ -259,6 +262,28 @@ export function RequestAttachments({
             {progress ?? "Přiložit e-mail nebo nabídku"}
           </button>
           <span className="hidden text-[11px] text-stone-400 sm:inline">nebo sem soubory přetáhni</span>
+          {unprocessed > 0 && (
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={async () => {
+                setBatchBusy(true);
+                setError(null);
+                try {
+                  const fd = new FormData();
+                  fd.set("requestId", requestId);
+                  await startRequestExtractions(fd);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Zpracování se nepodařilo spustit.");
+                }
+                setBatchBusy(false);
+              }}
+              className="ml-auto flex cursor-pointer items-center gap-1 border border-stone-300 px-2 py-0.5 text-[11px] text-stone-700 hover:border-stone-950 disabled:opacity-50"
+              title="Zpracuje všechny přílohy této žádanky, které ještě zpracované nejsou – postupně"
+            >
+              <Sparkles className="size-3" /> Zpracovat nové přílohy ({unprocessed})
+            </button>
+          )}
         </div>
       )}
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
