@@ -33,7 +33,7 @@ export default async function ProjectsPage() {
           {items.map(({ project: p, role }) => {
             // Aktivní dodavatel vidí jen součet svých vlastních nákladů
             const visible =
-              role === "active"
+              (role === "active" || role === "task")
                 ? p.expenses.filter((e) => e.createdById === user.id)
                 : p.expenses;
             const total = visible.reduce((s, e) => s + Number(e.amount), 0);
@@ -63,8 +63,8 @@ export default async function ProjectsPage() {
                 )}
                 <div className="mt-6 flex items-baseline justify-between border-t border-stone-200 pt-3">
                   <span className="kicker">
-                    {role === "active" ? visible.length : p._count.expenses}
-                    {role === "active" ? "" : ` · ${p._count.documents} dok.`}
+                    {(role === "active" || role === "task") ? visible.length : p._count.expenses}
+                    {(role === "active" || role === "task") ? "" : ` · ${p._count.documents} dok.`}
                   </span>
                   <span className="font-mono text-sm text-stone-950">
                     {formatCurrency(total)}

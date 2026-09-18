@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectAccess, expandScope } from "@/server/access";
+import { getProjectAccess, getTaskOnlyAccess, expandScope } from "@/server/access";
 import { GanttChart } from "@/components/planning/gantt-chart";
 import { buildProjectGantt } from "@/server/planning";
 import { recomputeSchedule } from "@/server/actions/tasks";
@@ -34,8 +34,10 @@ export default async function ProjectPlanningPage({
   const toD = sp?.to ? new Date(sp.to) : null;
   if (toD) toD.setHours(23, 59, 59, 999);
 
-  const access = await getProjectAccess(id, user);
+  // Dodavatel jen s přidělenými úkoly: Gantt jeho úkolů a jejich fází, jen ke čtení.
+  const access = (await getProjectAccess(id, user)) ?? (await getTaskOnlyAccess(id, user));
   if (!access) notFound();
+  const taskOnly = access.role === "task";
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -133,11 +135,22 @@ export default async function ProjectPlanningPage({
   }
 
   const today = new Date();
-  const items = buildProjectGantt(project.tasks, project.requests, {
+  const myVendorIds = taskOnly || mine
+    ? new Set(
+        (
+          await prisma.vendor.findMany({
+            where: { owner: { projects: { some: { id } } }, email: { equals: email, mode: "insensitive" } },
+            select: { id: true },
+          })
+        ).map((v) => v.id),
+      )
+    : undefined;
+  const items = buildProjectGantt(project.tasks, taskOnly ? [] : project.requests, {
     scope,
     userId: user.id,
     email,
-    mine,
+    mine: mine || taskOnly,
+    vendorIds: myVendorIds,
     withSubprojectName: false, // v rámci projektu název složky neopakujeme
     strictScope: true,
     filter: { status: statusF, onlyRequests: onlyVR, from: fromD, to: toD },
@@ -252,7 +265,7 @@ export default async function ProjectPlanningPage({
             : "Zatím tu není co plánovat. Přidej úkolům začátek nebo termín a objeví se tu časová osa."}
         </p>
       ) : (
-        <GanttChart items={items} today={today} />
+        <GanttChart items={items} today={today} readOnly={taskOnly} />
       )}
     </div>
   );

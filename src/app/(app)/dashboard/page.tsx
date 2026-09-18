@@ -278,7 +278,7 @@ export default async function DashboardPage({
                         {p.name}
                       </p>
                       <p className="kicker mt-0.5">
-                        {p._count.expenses} výdajů · {p._count.documents} dok.
+                        {accessible.find((x) => x.project.id === p.id)?.role === "task" ? "moje úkoly" : `${p._count.expenses} výdajů · ${p._count.documents} dok.`}
                       </p>
                     </div>
                     <ArrowUpRight className="size-4 text-stone-300 transition-colors group-hover:text-stone-950" />

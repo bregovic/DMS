@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type ProjectRole = "owner" | "active" | "reader" | "member";
+export type ProjectRole = "owner" | "active" | "reader" | "member" | "task";
 
 /** Spolusprávce obsahu projektu (vidí i edituje vše) – vlastník nebo člen. */
 export function isManager(role: string | null | undefined): boolean {
@@ -74,6 +74,18 @@ export async function listProjectsForUser(user: SessionUser) {
       if (seen.has(p.id)) continue;
       seen.add(p.id);
       result.push({ project: p, role: roleByProject.get(p.id) ?? "reader" });
+    }
+  }
+
+  // Projekty, kde mám jen přidělené úkoly (dodavatel bez členství) – role "task".
+  if (email) {
+    const assigned = await taskOnlyProjectIds(email, seen);
+    if (assigned.length) {
+      const projs = await prisma.project.findMany({ where: { id: { in: assigned } }, include: projectInclude });
+      for (const p of projs) {
+        seen.add(p.id);
+        result.push({ project: p, role: "task" });
+      }
     }
   }
 
@@ -176,4 +188,43 @@ export async function expandScope(
     (childrenOf.get(x) ?? []).forEach((c) => stack.push(c));
   }
   return out;
+}
+
+/**
+ * Projekty, kde má uživatel přidělený úkol – jako dodavatel (e-mail
+ * dodavatele v evidenci vlastníka projektu) nebo jako řešitel.
+ */
+async function taskOnlyProjectIds(email: string, exclude: Set<string> = new Set()) {
+  const rows = await prisma.task.findMany({
+    where: {
+      OR: [
+        { assigneeEmail: email },
+        { vendor: { email: { equals: email, mode: "insensitive" } } },
+      ],
+    },
+    select: { projectId: true, assigneeEmail: true, vendor: { select: { ownerId: true } }, project: { select: { ownerId: true } } },
+  });
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (exclude.has(r.projectId)) continue;
+    // dodavatel musí být z evidence vlastníka projektu (ne cizí se stejným e-mailem)
+    if (r.assigneeEmail === email || r.vendor?.ownerId === r.project.ownerId) ids.add(r.projectId);
+  }
+  return [...ids];
+}
+
+/**
+ * Přístup „jen moje úkoly“ (role task): dodavatel bez členství v projektu,
+ * který v něm má přidělené úkoly. Vidí projekt v seznamu, své úkoly a fáze,
+ * kam patří – jen ke čtení (stav úkolu a vykázání práce řeší akce úkolů).
+ *
+ * Záměrně mimo getProjectAccess: ten používají všechny akce a role task
+ * nesmí nikde nic navíc (export, přílohy, dokumenty…). Volá se jen tam,
+ * kde je náhled pro dodavatele (stránka projektu, plánování).
+ */
+export async function getTaskOnlyAccess(projectId: string, user: SessionUser): Promise<ProjectAccess | null> {
+  const email = user.email?.toLowerCase();
+  if (!email) return null;
+  const ids = await taskOnlyProjectIds(email);
+  return ids.includes(projectId) ? { role: "task", scopeSubIds: null } : null;
 }

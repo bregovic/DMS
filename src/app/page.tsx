@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getProjectAccess } from "@/server/access";
+import { getProjectAccess, getTaskOnlyAccess } from "@/server/access";
 import {
   LAST_PROJECT_COOKIE,
   parseProjectTab,
@@ -23,7 +23,7 @@ export default async function Home() {
   if (raw) {
     const [projectId, sub, tab] = decodeURIComponent(raw).split("|");
     if (projectId && /^[a-z0-9]+$/i.test(projectId)) {
-      const access = await getProjectAccess(projectId, session.user);
+      const access = ((await getProjectAccess(projectId, session.user)) ?? (await getTaskOnlyAccess(projectId, session.user)));
       if (access) {
         const safeSub = sub && /^[a-z0-9]+$/i.test(sub) ? sub : null;
         redirect(projectHref(projectId, safeSub, parseProjectTab(tab)));

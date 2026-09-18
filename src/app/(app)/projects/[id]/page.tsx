@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Folder, CalendarRange, Paperclip } from "lucide-react";
 import { requireUser } from "@/lib/dal";
-import { getProjectAccess } from "@/server/access";
+import { getProjectAccess, getTaskOnlyAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ProjectIcon } from "@/components/projects/project-icon";
@@ -83,7 +83,9 @@ export default async function ProjectDetailPage({
   const sp = await searchParams;
   const docFilter = typeof sp?.docType === "string" ? sp.docType : null;
 
-  const access = await getProjectAccess(id, user);
+  // Dodavatel bez členství, který tu má přidělené úkoly, vidí projekt
+  // v režimu „jen moje úkoly“ (role task, jen ke čtení).
+  const access = (await getProjectAccess(id, user)) ?? (await getTaskOnlyAccess(id, user));
   if (!access) notFound();
   const role = access.role;
   const scopeSubIds = access.scopeSubIds; // null = celý projekt
@@ -92,7 +94,8 @@ export default async function ProjectDetailPage({
   // nastavení projektu, členy a mazání projektu.
   const isManager = role === "owner" || role === "member";
   // Aktivní dodavatel vidí jen své vlastní záznamy
-  const onlyMine = role === "active";
+  const onlyMine = role === "active" || role === "task";
+  const taskOnly = role === "task";
 
   const [project, typeMap, categories, docTypes] = await Promise.all([
     prisma.project.findUnique({
@@ -269,13 +272,20 @@ export default async function ProjectDetailPage({
       )
     : project.requests;
   const visTasks = onlyMine
-    ? project.tasks.filter(
-        (t) =>
-          t.createdById === user.id ||
-          (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
-          // úkol přidělený dodavateli se stejným e-mailem (#29)
-          (!!t.vendorId && myVendorIds.has(t.vendorId)),
-      )
+    ? (() => {
+        const mine = project.tasks.filter(
+          (t) =>
+            t.createdById === user.id ||
+            (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+            // úkol přidělený dodavateli se stejným e-mailem (#29)
+            (!!t.vendorId && myVendorIds.has(t.vendorId)),
+        );
+        // + fáze, do kterých moje úkoly patří (souvislosti, jen ke čtení) –
+        // bez nich by dílčí úkoly v seznamu vůbec nebyly vidět.
+        const parents = new Set(mine.map((t) => t.parentId).filter(Boolean));
+        const ids = new Set(mine.map((t) => t.id));
+        return [...mine, ...project.tasks.filter((t) => parents.has(t.id) && !ids.has(t.id))];
+      })()
     : project.tasks;
 
   const total = visExpenses.reduce((s, e) => s + Number(e.amount), 0);
@@ -376,6 +386,11 @@ export default async function ProjectDetailPage({
         if (r.subProjectId) {
           set.add(r.subProjectId);
           ancestorsOf(r.subProjectId).forEach((a) => set.add(a));
+        }
+      for (const t of visTasks)
+        if (t.subProjectId) {
+          set.add(t.subProjectId);
+          ancestorsOf(t.subProjectId).forEach((a) => set.add(a));
         }
     }
     visibleSubIds = set;
@@ -704,6 +719,7 @@ export default async function ProjectDetailPage({
             tlačítka pod ním. Dřív se nezalamovala a stránka byla širší než
             displej (568 px na 390px telefonu). */}
         <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
+          {!taskOnly && (
           <Link
             href={`/projects/${project.id}/prilohy${sub ? `?sub=${sub}` : ""}`}
             className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white sm:py-0"
@@ -712,6 +728,7 @@ export default async function ProjectDetailPage({
             <Paperclip className="size-4" />
             Přílohy
           </Link>
+          )}
           <Link
             href={`/projects/${project.id}/planning${sub ? `?sub=${sub}` : ""}`}
             className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white sm:py-0"
@@ -1459,7 +1476,8 @@ export default async function ProjectDetailPage({
               const canEditTask = isManager || t.createdById === user.id;
               const canStatusTask =
                 canEditTask ||
-                (!!t.assigneeEmail && t.assigneeEmail === myEmail);
+                (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+                (!!t.vendorId && myVendorIds.has(t.vendorId));
               const done = isTaskDone(t.status);
               const overdue =
                 !done && !!t.dueDate && new Date(t.dueDate) < todayStart;

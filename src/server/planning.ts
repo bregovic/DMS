@@ -123,6 +123,8 @@ export function buildProjectGantt(
     withSubprojectName?: boolean;
     /** true = striktně dle scope (nezahrne "moje" úkoly mimo scope). */
     strictScope?: boolean;
+    /** Moji dodavatelé (e-mail uživatele v evidenci vlastníka) – "moje" jsou i jejich úkoly. */
+    vendorIds?: Set<string>;
     filter?: {
       status?: "all" | "open" | "done" | "overdue" | "notready";
       onlyRequests?: boolean;
@@ -139,6 +141,7 @@ export function buildProjectGantt(
     withSubprojectName = true,
     strictScope = false,
     filter = {},
+    vendorIds,
   } = opts;
   const visible = (
     subProjectId: string | null,
@@ -150,9 +153,16 @@ export function buildProjectGantt(
       (!strictScope && (createdById === userId || assignee === email))) &&
     (!mine || createdById === userId || assignee === email);
 
-  const vtasks = tasks.filter((t) =>
-    visible(t.subProjectId, t.createdById, t.assigneeEmail),
+  const isMineVendor = (t: PlanTaskRow) => !!vendorIds && !!t.vendorId && vendorIds.has(t.vendorId);
+  const vtasks = tasks.filter(
+    (t) => visible(t.subProjectId, t.createdById, t.assigneeEmail) || (mine && isMineVendor(t)),
   );
+  // „Jen moje“: i fáze, do kterých moje úkoly patří – jinak by se úkoly v Ganttu ztratily.
+  if (mine) {
+    const parents = new Set(vtasks.map((t) => t.parentId).filter(Boolean));
+    const have = new Set(vtasks.map((t) => t.id));
+    for (const t of tasks) if (parents.has(t.id) && !have.has(t.id)) vtasks.push(t);
+  }
 
   const childrenByPhase = new Map<string, PlanTaskRow[]>();
   for (const t of vtasks)

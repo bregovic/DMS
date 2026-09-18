@@ -68,6 +68,8 @@ export const PROJECT_ROLES = [
 ] as const;
 
 export function roleLabel(value: string) {
+  // Dodavatel bez členství, který má v projektu přidělené úkoly.
+  if (value === "task") return "Moje úkoly";
   return PROJECT_ROLES.find((r) => r.value === value)?.label ?? value;
 }
 
