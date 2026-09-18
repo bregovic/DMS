@@ -1,0 +1,194 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Loader2, Scale } from "lucide-react";
+import { startComparison } from "@/server/actions/extraction";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import type { ComparisonResult } from "@/server/extraction";
+
+export type ComparisonView = {
+  id: string;
+  status: string;
+  prompt: string | null;
+  error: string | null;
+  createdAt: string;
+  result: ComparisonResult | null;
+} | null;
+
+/**
+ * AI porovnání nabídek u žádanky (#33): stručný report pro výběr –
+ * srovnávací tabulka, plusy a minusy, doporučení a co si ověřit.
+ * Hlediska volí AI podle poptávky a pokynu („důraz na Uw a záruku“…).
+ */
+export function OfferComparison({
+  requestId,
+  offerCount,
+  comparison,
+  canRun,
+}: {
+  requestId: string;
+  offerCount: number;
+  comparison: ComparisonView;
+  canRun: boolean;
+}) {
+  const router = useRouter();
+  const [ask, setAsk] = useState(false);
+  const [open, setOpen] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const running = comparison?.status === "running";
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(t);
+  }, [running, router]);
+
+  if (offerCount === 0 || (!canRun && !comparison)) return null;
+  const r = comparison?.status === "ready" ? comparison.result : null;
+
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {canRun && (
+          <button
+            type="button"
+            onClick={() => setAsk(true)}
+            disabled={running}
+            className="flex cursor-pointer items-center gap-1.5 border border-stone-300 px-2 py-1 text-[11px] text-stone-700 hover:border-stone-950 disabled:opacity-50"
+          >
+            <Scale className="size-3.5" />
+            {comparison ? "Porovnat znovu (AI)" : "Porovnat nabídky (AI)"}
+          </button>
+        )}
+        {running && (
+          <span className="flex items-center gap-1 text-[11px] text-stone-500">
+            <Loader2 className="size-3 animate-spin" /> AI porovnává nabídky…
+          </span>
+        )}
+        {comparison?.status === "error" && (
+          <span className="text-[11px] text-red-600" title={comparison.error ?? undefined}>
+            Porovnání selhalo
+          </span>
+        )}
+        {r && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex cursor-pointer items-center gap-1 text-[11px] text-stone-500 hover:text-stone-950"
+          >
+            <ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+            {open ? "Skrýt porovnání" : "Zobrazit porovnání"}
+          </button>
+        )}
+      </div>
+
+      {r && open && (
+        <div className="mt-2 space-y-3 border border-stone-200 bg-white p-3 text-sm">
+          <p className="font-medium text-stone-950">{r.headline}</p>
+          <div className="-mx-3 overflow-x-auto px-3">
+            <table className="w-full min-w-[480px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-stone-300 text-left text-stone-500">
+                  <th className="py-1.5 pr-3 font-medium">Nabídka</th>
+                  {r.columns.map((c, i) => (
+                    <th key={i} className="py-1.5 pr-3 font-medium">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {r.rows.map((row, i) => (
+                  <tr key={i} className="border-b border-stone-100 align-top">
+                    <td className="py-1.5 pr-3 font-medium text-stone-950">{row.offer}</td>
+                    {row.cells.map((c, k) => (
+                      <td key={k} className="py-1.5 pr-3 text-stone-700">
+                        {c}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {r.pros.map((p, i) => (
+              <div key={i} className="border border-stone-100 p-2 text-xs">
+                <p className="font-medium text-stone-900">{p.offer}</p>
+                {p.pros.map((x, k) => (
+                  <p key={`p${k}`} className="text-emerald-700">+ {x}</p>
+                ))}
+                {p.cons.map((x, k) => (
+                  <p key={`c${k}`} className="text-red-700">− {x}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+          <p className="border-l-2 border-stone-950 pl-2 text-stone-900">{r.recommendation}</p>
+          {r.questions.length > 0 && (
+            <div className="text-xs text-stone-600">
+              <p className="kicker mb-1">Ověřit u dodavatelů</p>
+              <ul className="list-disc pl-5">
+                {r.questions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-[10px] text-stone-400">
+            AI porovnání {new Date(comparison!.createdAt).toLocaleString("cs-CZ")}
+            {comparison!.prompt ? ` · pokyn: ${comparison!.prompt}` : ""} · orientační, ceny a podmínky ověř v nabídkách
+          </p>
+        </div>
+      )}
+
+      {ask && (
+        <Dialog title="Porovnat nabídky (AI)" size="md" onClose={() => setAsk(false)}>
+          <form
+            action={async (fd) => {
+              setBusy(true);
+              setErr(null);
+              try {
+                await startComparison(fd);
+                setAsk(false);
+                setOpen(true);
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+              }
+              setBusy(false);
+            }}
+            className="space-y-3 p-5"
+          >
+            <input type="hidden" name="requestId" value={requestId} />
+            <p className="text-sm text-stone-600">
+              AI porovná {offerCount} {offerCount === 1 ? "nabídku" : offerCount < 5 ? "nabídky" : "nabídek"} a připraví
+              stručný podklad pro výběr.
+            </p>
+            <label className="block text-xs text-stone-500">
+              Na co se zaměřit (volitelné)
+              <textarea
+                name="prompt"
+                rows={3}
+                autoFocus
+                defaultValue={comparison?.prompt ?? ""}
+                placeholder="Např. důraz na tepelnou izolaci (Uw) a záruku; montáž musí být v ceně; rozpočet do 200 tis."
+                className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+              />
+            </label>
+            {err && <p className="text-xs text-red-600">{err}</p>}
+            <DialogFooter>
+              <button type="button" onClick={() => setAsk(false)} className="h-9 cursor-pointer px-3 text-sm text-stone-600">
+                Zrušit
+              </button>
+              <button type="submit" disabled={busy} className="h-9 cursor-pointer bg-stone-950 px-4 text-sm text-white disabled:opacity-50">
+                {busy ? "Spouštím…" : "Porovnat"}
+              </button>
+            </DialogFooter>
+          </form>
+        </Dialog>
+      )}
+    </div>
+  );
+}

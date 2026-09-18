@@ -7,6 +7,7 @@ import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
 import { startExtraction } from "@/server/actions/extraction";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ExtractionDialog } from "@/components/requests/extraction-dialog";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
 export type RequestDoc = {
   id: string;
@@ -24,14 +25,19 @@ export type RequestDoc = {
 function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [ask, setAsk] = useState(false);
   if (!d.canExtract) return null;
-  const run = async () => {
+
+  // Spuštění s volitelným pokynem („je to technický list“, „jen položky HS portálu“…).
+  const run = async (instructions: string) => {
     setBusy(true);
     setErr(null);
     const fd = new FormData();
     fd.set("documentId", d.id);
+    fd.set("instructions", instructions);
     try {
       await startExtraction(fd);
+      setAsk(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
     }
@@ -39,27 +45,75 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
   };
   const base = "flex shrink-0 items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 text-[11px]";
   const st = d.ai?.status;
+  const promptDialog = ask && (
+    <Dialog title="Zpracovat přílohu AI" size="md" onClose={() => setAsk(false)}>
+      <form
+        action={async (fd) => run(String(fd.get("instructions") || ""))}
+        className="space-y-3 p-5"
+      >
+        <p className="text-sm text-stone-600">{d.originalName}</p>
+        <label className="block text-xs text-stone-500">
+          Pokyn pro AI (volitelné)
+          <textarea
+            name="instructions"
+            rows={3}
+            autoFocus
+            placeholder="Např. je to technický list k HS portálu; nebo: nabídka platí jen pro okna v přízemí"
+            className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+          />
+        </label>
+        {err && <p className="text-xs text-red-600">{err}</p>}
+        <DialogFooter>
+          <button type="button" onClick={() => setAsk(false)} className="h-9 cursor-pointer px-3 text-sm text-stone-600">
+            Zrušit
+          </button>
+          <button type="submit" disabled={busy} className="h-9 cursor-pointer bg-stone-950 px-4 text-sm text-white disabled:opacity-50">
+            {busy ? "Spouštím…" : "Zpracovat"}
+          </button>
+        </DialogFooter>
+      </form>
+    </Dialog>
+  );
+  const rerun = (
+    <button
+      type="button"
+      onClick={() => setAsk(true)}
+      title="Zpracovat znovu (s pokynem)"
+      className="cursor-pointer px-1 text-[11px] text-stone-400 hover:text-stone-950"
+    >
+      ↻
+    </button>
+  );
+
   if (busy || st === "running")
     return (
       <span className={`${base} border-stone-200 text-stone-500`}>
-        <Loader2 className="size-3 animate-spin" /> AI čte nabídku…
+        <Loader2 className="size-3 animate-spin" /> AI čte přílohu…
       </span>
     );
-  if (st === "ready")
-    return (
-      <button type="button" onClick={() => onOpen(d.ai!.id)} className={`${base} cursor-pointer border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100`}>
-        <Sparkles className="size-3" /> Návrh k potvrzení
+  const open = (label: string, cls: string) => (
+    <span className="flex shrink-0 items-center">
+      <button type="button" onClick={() => onOpen(d.ai!.id)} className={`${base} cursor-pointer ${cls}`}>
+        <Sparkles className="size-3" /> {label}
       </button>
-    );
-  const again = (label: string, cls: string, title?: string) => (
-    <button type="button" onClick={run} title={title ?? err ?? undefined} className={`${base} cursor-pointer ${cls}`}>
-      <Sparkles className="size-3" /> {err ? "Nejde spustit" : label}
-    </button>
+      {rerun}
+      {promptDialog}
+    </span>
   );
-  if (st === "applied") return again("Založeno · znovu", "border-emerald-300 text-emerald-700 hover:border-emerald-600");
-  if (st === "error") return again("AI chyba · znovu", "border-red-300 text-red-700 hover:border-red-600", d.ai?.error ?? undefined);
-  if (st === "dismissed") return again("Zamítnuto · znovu", "border-stone-300 text-stone-500 hover:border-stone-950");
-  return again("Vyhodnotit AI", "border-stone-300 text-stone-600 hover:border-stone-950");
+  if (st === "ready") return open("Návrh k potvrzení", "border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100");
+  if (st === "partial") return open("Spárovat zbytek", "border-orange-300 text-orange-800 hover:bg-orange-50");
+  if (st === "applied") return open("Založeno", "border-emerald-300 text-emerald-700 hover:border-emerald-600");
+  const start = (label: string, cls: string, title?: string) => (
+    <span className="flex shrink-0 items-center">
+      <button type="button" onClick={() => setAsk(true)} title={title} className={`${base} cursor-pointer ${cls}`}>
+        <Sparkles className="size-3" /> {label}
+      </button>
+      {promptDialog}
+    </span>
+  );
+  if (st === "error") return start("AI chyba · znovu", "border-red-300 text-red-700 hover:border-red-600", d.ai?.error ?? undefined);
+  if (st === "dismissed") return start("Zamítnuto · znovu", "border-stone-300 text-stone-500 hover:border-stone-950");
+  return start("Zpracovat AI", "border-stone-300 text-stone-600 hover:border-stone-950");
 }
 
 const MAX_BYTES = 8 * 1024 * 1024;

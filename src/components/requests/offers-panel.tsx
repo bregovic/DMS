@@ -33,6 +33,9 @@ export type OfferView = {
   status: string;
   selected: boolean;
   canEdit: boolean;
+  /** Úkoly do plánu navržené AI – založí se po výběru nabídky (#33). */
+  planTaskCount?: number;
+  tasksCreated?: boolean;
   docs: { id: string; originalName: string }[];
 };
 
@@ -280,7 +283,13 @@ export function OffersPanel({
                     <input type="hidden" name="id" value={o.id} />
                     <button
                       type="submit"
-                      title={o.selected ? "Zrušit výběr" : "Vybrat tuto nabídku"}
+                      title={
+                        o.selected
+                          ? "Zrušit výběr"
+                          : o.planTaskCount && !o.tasksCreated
+                            ? `Vybrat tuto nabídku – do plánu se založí ${o.planTaskCount} úkoly`
+                            : "Vybrat tuto nabídku"
+                      }
                       className={`whitespace-nowrap border px-2 py-1 text-[11px] transition-colors cursor-pointer ${
                         o.selected
                           ? "border-stone-950 bg-stone-950 text-white"
@@ -290,6 +299,14 @@ export function OffersPanel({
                       {o.selected ? "Vybráno" : "Vybrat"}
                     </button>
                   </form>
+                )}
+                {!!o.planTaskCount && (
+                  <span
+                    className="whitespace-nowrap text-[10px] text-stone-400"
+                    title={o.tasksCreated ? "Úkoly z nabídky jsou v plánu" : "Po výběru se založí úkoly do plánu"}
+                  >
+                    {o.tasksCreated ? "✓ úkoly v plánu" : `+${o.planTaskCount} úkoly`}
+                  </span>
                 )}
                 {o.canEdit && (
                   <span className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">

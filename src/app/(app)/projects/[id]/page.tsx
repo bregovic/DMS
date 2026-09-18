@@ -17,6 +17,8 @@ import { EditRequestForm, NewRequestForm } from "@/components/requests/new-reque
 import { RequestStatusSelect } from "@/components/requests/request-status-select";
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { RequestAttachments } from "@/components/requests/request-attachments";
+import { OfferComparison } from "@/components/requests/offer-comparison";
+import type { ComparisonResult } from "@/server/extraction";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
@@ -27,6 +29,7 @@ import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
 import { parseStatusFilter } from "@/lib/list-filter";
+import { extractable } from "@/server/extraction";
 import { RememberProject } from "@/components/projects/remember-project";
 import { TodoList } from "@/components/tasks/todo-list";
 import { UploadForm } from "@/components/documents/upload-form";
@@ -145,6 +148,11 @@ export default async function ProjectDetailPage({
                 },
               },
               orderBy: { createdAt: "asc" },
+            },
+            comparisons: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { id: true, status: true, prompt: true, error: true, createdAt: true, result: true },
             },
             offers: {
               orderBy: [
@@ -1264,11 +1272,7 @@ export default async function ProjectDetailPage({
                     ai: d.extractions[0]
                       ? { id: d.extractions[0].id, status: d.extractions[0].status, error: d.extractions[0].error }
                       : null,
-                    canExtract:
-                      isManager &&
-                      (d.mimeType === "application/pdf" ||
-                        d.mimeType.startsWith("image/") ||
-                        d.originalName.toLowerCase().endsWith(".pdf")),
+                    canExtract: isManager && extractable(d.mimeType, d.originalName),
                   }))}
                 />
 
@@ -1293,6 +1297,8 @@ export default async function ProjectDetailPage({
                     score: o.score,
                     status: o.status,
                     selected: o.selected,
+                    planTaskCount: Array.isArray(o.planTasks) ? o.planTasks.length : 0,
+                    tasksCreated: !!o.tasksCreatedAt,
                     canEdit:
                       isManager || (role === "active" && o.createdById === user.id),
                     docs: o.documents.map((d) => ({
@@ -1300,6 +1306,24 @@ export default async function ProjectDetailPage({
                       originalName: d.originalName,
                     })),
                   }))}
+                />
+
+                <OfferComparison
+                  requestId={r.id}
+                  offerCount={r.offers.length}
+                  canRun={isManager}
+                  comparison={
+                    r.comparisons[0]
+                      ? {
+                          id: r.comparisons[0].id,
+                          status: r.comparisons[0].status,
+                          prompt: r.comparisons[0].prompt,
+                          error: r.comparisons[0].error,
+                          createdAt: r.comparisons[0].createdAt.toISOString(),
+                          result: r.comparisons[0].result as unknown as ComparisonResult | null,
+                        }
+                      : null
+                  }
                 />
               </li>
             ))}

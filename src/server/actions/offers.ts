@@ -243,6 +243,79 @@ export async function selectOffer(formData: FormData) {
     }),
   ]);
 
-  void user;
+  const created = await createPlanTasksFromOffer(full.id, user.id);
   revalidatePath(`/projects/${projectId}`);
+  if (created > 0) revalidatePath("/planning");
+}
+
+/**
+ * Úkoly do plánu z vybrané nabídky (#33): AI je navrhla při vytěžení
+ * (objednat → zaměření → výroba/dodání → montáž). Založí se jednou, pod fázi,
+ * ke které patří žádanka, s dodavatelem nabídky a návaznostmi za sebou.
+ * Termíny běží od dneška; přesné zařazení udělá „Přepočítat termíny“.
+ */
+async function createPlanTasksFromOffer(offerId: string, userId: string) {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      id: true,
+      vendorId: true,
+      vendorName: true,
+      planTasks: true,
+      tasksCreatedAt: true,
+      vendor: { select: { name: true } },
+      request: { select: { projectId: true, subProjectId: true, taskId: true, title: true } },
+    },
+  });
+  const drafts = (offer?.planTasks as { title: string; days: number; kind: string }[] | null) ?? [];
+  if (!offer || offer.tasksCreatedAt || drafts.length === 0) return 0;
+
+  // Fáze žádanky: navázaná fáze, nebo fáze navázaného úkolu.
+  let parentId: string | null = null;
+  let subProjectId = offer.request.subProjectId;
+  if (offer.request.taskId) {
+    const t = await prisma.task.findUnique({
+      where: { id: offer.request.taskId },
+      select: { id: true, kind: true, parentId: true, subProjectId: true },
+    });
+    if (t) {
+      parentId = t.kind === "phase" ? t.id : t.parentId;
+      subProjectId = t.subProjectId;
+    }
+  }
+
+  const DAY = 86400000;
+  const now = new Date();
+  let cursor = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const who = offer.vendor?.name ?? offer.vendorName ?? "dodavatel";
+  const ids: string[] = [];
+  await prisma.$transaction(async (tx) => {
+    for (const d of drafts) {
+      const days = Math.max(1, Math.round(Number(d.days) || 1));
+      const start = new Date(cursor);
+      const due = new Date(cursor + (days - 1) * DAY);
+      cursor += days * DAY;
+      const t = await tx.task.create({
+        data: {
+          projectId: offer.request.projectId,
+          subProjectId,
+          parentId,
+          kind: "task",
+          title: d.title.slice(0, 200),
+          description: `Z vybrané nabídky (${who}) k žádance „${offer.request.title}“.`,
+          status: "todo",
+          startDate: start,
+          dueDate: due,
+          estimateDays: days,
+          vendorId: offer.vendorId,
+          createdById: userId,
+        },
+        select: { id: true },
+      });
+      if (ids.length) await tx.taskDependency.create({ data: { taskId: t.id, dependsOnId: ids[ids.length - 1] } });
+      ids.push(t.id);
+    }
+    await tx.offer.update({ where: { id: offer.id }, data: { tasksCreatedAt: new Date() } });
+  });
+  return ids.length;
 }

@@ -153,6 +153,7 @@ model Request {
   documents  Document[] // e-maily a přílohy hlavičky žádanky (#32)
   expenses   Expense[] // realizované výdaje k této žádance
 
+  comparisons OfferComparison[]
   @@index([projectId])
   @@index([vendorId])
   @@index([subProjectId])
@@ -173,6 +174,11 @@ model Offer {
   score        Int? // bodové hodnocení nabídky (pro řazení)
   status       String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
   selected     Boolean   @default(false)
+  // Z vytěžení AI (#33): odkud nabídka je a jaké úkoly navrhnout do plánu po výběru.
+  extractionId   String?
+  extractionPart Int?
+  planTasks      Json? // [{ title, days, kind: "order"|"wait"|"work" }]
+  tasksCreatedAt DateTime? // úkoly už založené (po výběru nabídky)
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -618,7 +624,9 @@ model Extraction {
   projectId    String
   requestId    String // žádanka, u které příloha leží
   documentId   String
-  status       String   @default("running") // running | ready | error | applied | dismissed
+  status       String   @default("running") // running | ready | error | partial | applied | dismissed
+  instructions String? // pokyn uživatele pro AI (volitelný)
+  appliedParts Int[]    @default([]) // indexy částí, ze kterých už je nabídka
   result       Json?
   error        String?
   model        String
@@ -633,5 +641,25 @@ model Extraction {
 
   @@index([projectId])
   @@index([documentId])
+  @@index([createdAt])
+}
+
+// AI porovnání nabídek u žádanky – stručný report pro výběr podle pokynu.
+model OfferComparison {
+  id          String   @id @default(cuid())
+  requestId   String
+  prompt      String?
+  status      String   @default("running") // running | ready | error
+  result      Json?
+  error       String?
+  model       String
+  costUsd     Float?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
   @@index([createdAt])
 }

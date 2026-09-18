@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
-import { createExtraction, runExtraction, type ExtractionResult } from "@/server/extraction";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+  createComparison,
+  createExtraction,
+  runComparison,
+  runExtraction,
+  type ExtractionResult,
+} from "@/server/extraction";
 
 async function docCtx(documentId: string) {
   const user = await requireUser();
@@ -23,7 +30,7 @@ async function docCtx(documentId: string) {
 /** Ručně spustit (nebo zopakovat) vytěžení přílohy. Běží na pozadí. */
 export async function startExtraction(formData: FormData) {
   const { user, doc } = await docCtx(String(formData.get("documentId")));
-  const id = await createExtraction(doc.id, user.id);
+  const id = await createExtraction(doc.id, user.id, String(formData.get("instructions") || ""));
   after(() => runExtraction(id));
   revalidatePath(`/projects/${doc.projectId}`);
 }
@@ -39,6 +46,8 @@ export async function getExtraction(extractionId: string) {
       status: true,
       result: true,
       costUsd: true,
+      requestId: true,
+      appliedParts: true,
       document: { select: { originalName: true } },
     },
   });
@@ -70,9 +79,19 @@ export async function getExtraction(extractionId: string) {
     (v?.name && vendors.find((x) => x.name.trim().toLowerCase() === v.name!.trim().toLowerCase())) ||
     null;
 
+  // Už založené nabídky z tohoto návrhu (po částech).
+  const made = await prisma.offer.findMany({
+    where: { extractionId: ex.id },
+    select: { extractionPart: true, request: { select: { title: true } } },
+  });
+  const madeParts: Record<number, string> = {};
+  for (const m of made) if (m.extractionPart != null) madeParts[m.extractionPart] = m.request.title;
+
   return {
     id: ex.id,
     status: ex.status,
+    requestId: ex.requestId,
+    madeParts,
     fileName: ex.document.originalName,
     result,
     requests,
@@ -90,10 +109,10 @@ export async function applyExtraction(formData: FormData) {
   const id = String(formData.get("id"));
   const ex = await prisma.extraction.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, result: true, document: { select: { originalName: true } } },
+    select: { id: true, projectId: true, status: true, result: true, appliedParts: true, document: { select: { originalName: true } } },
   });
   if (!ex || !ex.result) throw new Error("Návrh nenalezen.");
-  if (ex.status === "applied") throw new Error("Návrh už byl použit.");
+  if (ex.status === "applied") throw new Error("Všechny části návrhu už jsou založené.");
   const role = await getProjectRole(ex.projectId, user);
   if (!isManager(role)) throw new Error("Návrh potvrzuje správce projektu.");
   const project = await prisma.project.findUnique({ where: { id: ex.projectId }, select: { ownerId: true } });
@@ -153,21 +172,26 @@ export async function applyExtraction(formData: FormData) {
     .join(" ");
   const offers = result.parts
     .map((p, i) => ({ p, i }))
-    .filter(({ i }) => formData.get(`use_${i}`) === "1")
+    .filter(({ i }) => formData.get(`use_${i}`) === "1" && !ex.appliedParts.includes(i))
     .map(({ p, i }) => {
       const requestId = String(formData.get(`req_${i}`) || "");
       const priceRaw = String(formData.get(`price_${i}`) || "").replace(/\s/g, "").replace(",", ".");
       const price = priceRaw ? Number(priceRaw) : null;
-      return { p, requestId, price: price != null && !isNaN(price) ? price : null };
+      return { p, i, requestId, price: price != null && !isNaN(price) ? price : null };
     })
     .filter((o) => validReq.has(o.requestId));
-  if (offers.length === 0 && vendorMode !== "new") throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
+  if (offers.length === 0) throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
+  const applied = [...new Set([...ex.appliedParts, ...offers.map((o) => o.i)])];
+  const allDone = result.parts.every((_, i) => applied.includes(i));
 
   await prisma.$transaction([
-    ...offers.map(({ p, requestId, price }) =>
+    ...offers.map(({ p, i, requestId, price }) =>
       prisma.offer.create({
         data: {
           requestId,
+          extractionId: ex.id,
+          extractionPart: i,
+          planTasks: (p.tasks ?? []) as unknown as Prisma.InputJsonValue,
           vendorId,
           vendorName: vendorId ? null : result.vendor.name,
           price,
@@ -187,7 +211,10 @@ export async function applyExtraction(formData: FormData) {
         },
       }),
     ),
-    prisma.extraction.update({ where: { id: ex.id }, data: { status: "applied" } }),
+    prisma.extraction.update({
+      where: { id: ex.id },
+      data: { status: allDone ? "applied" : "partial", appliedParts: applied },
+    }),
   ]);
   revalidatePath(`/projects/${ex.projectId}`);
   return { offers: offers.length };
@@ -203,4 +230,42 @@ export async function dismissExtraction(formData: FormData) {
   if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Nemáš oprávnění.");
   await prisma.extraction.update({ where: { id: ex.id }, data: { status: "dismissed" } });
   revalidatePath(`/projects/${ex.projectId}`);
+}
+
+/** Technické údaje z dokumentu doplnit do specifikace žádanky. */
+export async function appendSpecsToRequest(formData: FormData) {
+  const user = await requireUser();
+  const ex = await prisma.extraction.findUnique({
+    where: { id: String(formData.get("id")) },
+    select: { projectId: true, result: true, document: { select: { originalName: true } } },
+  });
+  if (!ex?.result) throw new Error("Návrh nenalezen.");
+  if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Nemáš oprávnění.");
+  const req = await prisma.request.findFirst({
+    where: { id: String(formData.get("requestId") || ""), projectId: ex.projectId },
+    select: { id: true, description: true },
+  });
+  if (!req) throw new Error("Vyber žádanku.");
+  const specs = (ex.result as unknown as ExtractionResult).technicalSpecs ?? [];
+  if (!specs.length) throw new Error("Dokument nemá technické údaje.");
+  const block = [`Z dokumentu ${ex.document.originalName}:`, ...specs.map((x) => `• ${x}`)].join("\n");
+  await prisma.request.update({
+    where: { id: req.id },
+    data: { description: req.description ? `${req.description}\n\n${block}` : block },
+  });
+  revalidatePath(`/projects/${ex.projectId}`);
+}
+
+/** AI porovnání nabídek u žádanky podle pokynu. Běží na pozadí. */
+export async function startComparison(formData: FormData) {
+  const user = await requireUser();
+  const req = await prisma.request.findUnique({
+    where: { id: String(formData.get("requestId")) },
+    select: { id: true, projectId: true },
+  });
+  if (!req) throw new Error("Žádanka nenalezena.");
+  if (!isManager(await getProjectRole(req.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
+  const id = await createComparison(req.id, user.id, String(formData.get("prompt") || ""));
+  after(() => runComparison(id));
+  revalidatePath(`/projects/${req.projectId}`);
 }

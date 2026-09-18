@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { applyExtraction, dismissExtraction, getExtraction } from "@/server/actions/extraction";
+import { appendSpecsToRequest, applyExtraction, dismissExtraction, getExtraction } from "@/server/actions/extraction";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
@@ -35,6 +35,11 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
 
   const r = d?.result;
   const open = (d?.requests ?? []).filter((q) => q.status !== "zruseno");
+  const made = d?.madeParts ?? {};
+  const pending = (r?.parts ?? []).filter((_, i) => !(i in made)).length;
+  const [specReq, setSpecReq] = useState<string>("");
+  const [specMsg, setSpecMsg] = useState<string | null>(null);
+  const kindLabel = { offer: "Cenová nabídka", technical: "Technický dokument", other: "Dokument" } as const;
 
   return (
     <Dialog title="Návrh z nabídky (AI)" size="2xl" onClose={onClose}>
@@ -57,6 +62,9 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
         >
           <input type="hidden" name="id" value={d.id} />
           <p className="text-xs text-stone-500">
+            <span className="mr-1 border border-stone-300 px-1 py-px text-[10px] uppercase tracking-wide">
+              {kindLabel[r.documentKind ?? "offer"]}
+            </span>
             {d.fileName}
             {r.offerNumber ? ` · ${r.offerNumber}` : ""}
             {r.validUntil ? ` · platnost do ${r.validUntil.split("-").reverse().join(".")}` : ""}
@@ -74,6 +82,52 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
             </ul>
           )}
 
+          {(r.technicalSpecs ?? []).length > 0 && (
+            <div className="space-y-2 border border-stone-200 p-3">
+              <p className="kicker">Technické údaje</p>
+              <ul className="list-disc pl-5 text-xs text-stone-700">
+                {r.technicalSpecs.map((x, i) => (
+                  <li key={i}>{x}</li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={specReq || d.requestId}
+                  onChange={(e) => setSpecReq(e.target.value)}
+                  className={`${field} h-9 max-w-xs`}
+                  aria-label="Žádanka pro specifikaci"
+                >
+                  {open.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.title}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const fd = new FormData();
+                    fd.set("id", d.id);
+                    fd.set("requestId", specReq || d.requestId);
+                    try {
+                      await appendSpecsToRequest(fd);
+                      setSpecMsg("Doplněno do specifikace žádanky.");
+                    } catch (e) {
+                      setSpecMsg(e instanceof Error ? e.message : "Nepodařilo se.");
+                    }
+                  }}
+                >
+                  Doplnit do specifikace
+                </Button>
+                {specMsg && <span className="text-xs text-stone-600">{specMsg}</span>}
+              </div>
+            </div>
+          )}
+
+          {pending > 0 && (
+          <>
           {/* Dodavatel */}
           <fieldset className="space-y-2">
             <legend className="kicker mb-1">Dodavatel</legend>
@@ -124,10 +178,21 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
             )}
           </fieldset>
 
+          </>
+          )}
+
           {/* Části nabídky */}
           <fieldset className="space-y-3">
-            <legend className="kicker mb-1">Nabídky k žádankám · {r.parts.length}</legend>
-            {r.parts.map((p, i) => (
+            <legend className="kicker mb-1">
+              Nabídky k žádankám · {r.parts.length}
+              {r.parts.length === 0 ? " – dokument neobsahuje ceny" : ""}
+            </legend>
+            {r.parts.map((p, i) =>
+              i in made ? (
+                <div key={i} className="border border-emerald-200 bg-emerald-50/50 p-3 text-sm text-stone-700">
+                  ✓ {p.label} – nabídka založena u žádanky <b>{made[i]}</b>
+                </div>
+              ) : (
               <div key={i} className="space-y-2 border border-stone-200 p-3">
                 <label className="flex items-start gap-2 text-sm font-medium text-stone-950">
                   <input
@@ -173,8 +238,14 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {(p.tasks ?? []).length > 0 && (
+                  <p className="ml-6 text-[11px] text-stone-500">
+                    Po výběru nabídky do plánu: {p.tasks.map((t) => `${t.title} (${t.days} d)`).join(" → ")}
+                  </p>
+                )}
               </div>
-            ))}
+              ),
+            )}
           </fieldset>
 
           {err && <p className="text-sm text-red-600">{err}</p>}
@@ -192,9 +263,11 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
             >
               Zamítnout
             </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Zakládám…" : "Založit nabídky"}
-            </Button>
+            {pending > 0 && (
+              <Button type="submit" disabled={busy}>
+                {busy ? "Zakládám…" : "Založit nabídky"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       )}
