@@ -292,6 +292,8 @@ model Task {
   status        String    @default("todo") // editovatelný číselník scope "task"
   percentDone   Int       @default(0) // 0–100 % dokončení
   ready         Boolean   @default(true) // připraveno k práci (false = čeká na materiál, jiný úkol…)
+  blockNote     String? // proč je blokováno (ruční blokace v plánování: povolení, počasí…)
+  selfPerformed Boolean   @default(false) // svépomocí – dodavatel se nehledá
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech

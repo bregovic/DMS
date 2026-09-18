@@ -47,6 +47,7 @@ export function TaskDetailDialog({
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [expPickerOpen, setExpPickerOpen] = useState(false);
   const [expSel, setExpSel] = useState<Set<string>>(new Set());
   const [expSearch, setExpSearch] = useState("");
@@ -79,6 +80,7 @@ export function TaskDetailDialog({
     const x = await getTaskDetail(id);
     setD(x);
     setLocked(!!x.dateLocked);
+        setBlocked(!x.ready);
     onSaved?.();
   }
   async function act(fn: (fd: FormData) => Promise<unknown>, entries: Record<string, string>) {
@@ -101,6 +103,7 @@ export function TaskDetailDialog({
         if (!live) return;
         setD(x);
         setLocked(!!x.dateLocked);
+        setBlocked(!x.ready);
       })
       .catch((e) => live && setErr(e instanceof Error ? e.message : "Načtení selhalo."));
     return () => {
@@ -118,6 +121,7 @@ export function TaskDetailDialog({
       const x = await getTaskDetail(d.id);
       setD(x);
       setLocked(!!x.dateLocked);
+        setBlocked(!x.ready);
       onSaved?.();
       if (!r.enough)
         window.alert(
@@ -447,10 +451,41 @@ export function TaskDetailDialog({
               );
             })()}
 
+            {d.canEdit && <input type="hidden" name="readinessForm" value="1" />}
+            <div className="space-y-1.5 border border-stone-200 p-3">
+              <label className="flex items-start gap-2 text-sm text-stone-800">
+                <input
+                  type="checkbox"
+                  name="blocked"
+                  value="1"
+                  checked={blocked}
+                  disabled={!d.canEdit}
+                  onChange={(e) => setBlocked(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-stone-900"
+                />
+                <span>
+                  Blokováno
+                  <span className="block text-[11px] text-stone-400">
+                    Něco mimo plán brání začít (povolení, počasí, projekt…). V plánu se zobrazí ✋.
+                  </span>
+                </span>
+              </label>
+              {blocked && (
+                <Input
+                  key={`bn-${d.id}`}
+                  name="blockNote"
+                  defaultValue={d.blockNote ?? ""}
+                  placeholder="Na co se čeká?"
+                  disabled={!d.canEdit}
+                />
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="dd-vendor">Dodavatel</Label>
-              <select id="dd-vendor" name="vendorId" defaultValue={d.vendorId ?? ""} className={fieldClass} disabled={!d.canEdit}>
-                <option value="">— bez dodavatele —</option>
+              <select key={`v-${d.id}`} id="dd-vendor" name="vendorId" defaultValue={d.selfPerformed ? "__self" : d.vendorId ?? ""} className={fieldClass} disabled={!d.canEdit}>
+                <option value="">— dodavatel zatím neurčen —</option>
+                <option value="__self">Svépomocí (bez dodavatele)</option>
                 {d.vendors.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name}

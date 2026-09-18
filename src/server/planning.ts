@@ -4,7 +4,7 @@ import {
   REQUEST_HANDLED_STATUSES,
   requestStatusLabel,
 } from "@/lib/constants";
-import type { GanttItem } from "@/components/planning/gantt-chart";
+import type { GanttItem, Readiness, ReadinessKind } from "@/components/planning/gantt-chart";
 
 export type PlanTaskRow = {
   id: string;
@@ -20,8 +20,82 @@ export type PlanTaskRow = {
   percentDone: number;
   subProject: { name: string } | null;
   dependsOn: { dependsOn: { id: string; title: string; status: string } }[];
-  requests?: { status: string; leadDays: number | null; requiredDate: Date | null }[];
+  requests?: {
+    id?: string;
+    title?: string;
+    status: string;
+    leadDays: number | null;
+    requiredDate: Date | null;
+    vendorId?: string | null;
+    offers?: { id: string }[]; // jen vybrané nabídky
+  }[];
+  // stav připravenosti (volitelné – starší dotazy je nenačítají)
+  vendorId?: string | null;
+  selfPerformed?: boolean;
+  ready?: boolean;
+  blockNote?: string | null;
 };
+
+const READINESS_ORDER: ReadinessKind[] = ["blocked", "waiting", "vendor", "material", "ready"];
+
+/**
+ * Stav připravenosti fáze/úkolu – co brání začít.
+ *
+ * Ve stavebním plánování se tomu říká odstraňování překážek (make-ready):
+ * před začátkem práce musí být hotové předchozí práce, určený dodavatel
+ * a objednaný materiál. Stav je ten nejhorší z důvodů; důvody jdou všechny
+ * do tooltipu a do přehledu „Co brání“.
+ */
+export function readinessOf(
+  own: PlanTaskRow,
+  kids: PlanTaskRow[],
+  blockerTitles: string[],
+  isDone: (status: string) => boolean,
+  isLate: (t: PlanTaskRow) => boolean,
+): Readiness {
+  const reasons: Readiness["reasons"] = [];
+  const add = (kind: ReadinessKind, text: string) => {
+    if (!reasons.some((x) => x.kind === kind && x.text === text)) reasons.push({ kind, text });
+  };
+  const open = kids.filter((k) => !isDone(k.status));
+
+  // ✋ ruční blokace
+  if (own.ready === false) add("blocked", own.blockNote || "ručně blokováno");
+  for (const k of open)
+    if (k.ready === false) add("blocked", `${k.title}${k.blockNote ? `: ${k.blockNote}` : ""}`);
+
+  // 🔒 čeká na předchozí fázi / úkol
+  for (const t of blockerTitles) add("waiting", t);
+  const sibling = new Set(kids.map((k) => k.id));
+  for (const t of [own, ...open])
+    for (const d of t.dependsOn ?? [])
+      if (!isDone(d.dependsOn.status) && !sibling.has(d.dependsOn.id) && d.dependsOn.id !== own.id)
+        add("waiting", d.dependsOn.title);
+
+  // 👷 dodavatel – u fáze stačí dodavatel fáze, jinak každý otevřený úkol
+  const covered = (t: PlanTaskRow) => !!t.vendorId || !!t.selfPerformed || !!t.assigneeEmail;
+  if (!covered(own)) {
+    if (kids.length === 0) add("vendor", "není určen dodavatel");
+    else {
+      const missing = open.filter((k) => !covered(k));
+      if (missing.length === open.length && open.length > 0) add("vendor", "není určen dodavatel");
+      else for (const k of missing) add("vendor", `${k.title} bez dodavatele`);
+    }
+  }
+
+  // 📦 materiál / objednávka – navázané žádanky, které nejsou objednané
+  for (const t of [own, ...open])
+    for (const r of t.requests ?? []) {
+      if (REQUEST_HANDLED_STATUSES.includes(r.status)) continue;
+      const title = r.title ?? "žádanka";
+      if (!r.vendorId && !(r.offers && r.offers.length > 0)) add("vendor", `${title}: bez dodavatele`);
+      add("material", `${title}: ${requestStatusLabel(r.status).toLowerCase()}`);
+    }
+  if (isLate(own) || open.some(isLate)) add("material", "objednávka po termínu");
+
+  reasons.sort((a, b) => READINESS_ORDER.indexOf(a.kind) - READINESS_ORDER.indexOf(b.kind));
+  return { state: reasons[0]?.kind ?? "ready", reasons };
+}
 
 export type PlanRequestRow = {
   id: string;
@@ -49,7 +123,7 @@ export function buildProjectGantt(
     /** true = striktně dle scope (nezahrne "moje" úkoly mimo scope). */
     strictScope?: boolean;
     filter?: {
-      status?: "all" | "open" | "done" | "overdue";
+      status?: "all" | "open" | "done" | "overdue" | "notready";
       onlyRequests?: boolean;
       from?: Date | null;
       to?: Date | null;
@@ -165,6 +239,9 @@ export function buildProjectGantt(
           prereqMet: kids.length === 0 ? true : allDone,
           blocked: blockers.length > 0,
           blockedBy: blockers.map((p) => p.title),
+          readiness: done(t.status)
+            ? undefined
+            : readinessOf(t, kids, blockers.map((p) => p.title), done, procLate),
           children: [
             ...kids.map((k) => ({
               id: k.id,
@@ -176,6 +253,7 @@ export function buildProjectGantt(
               procurementLate: procLate(k),
               statusLabel: taskStatusLabel(k.status),
               assigneeEmail: k.assigneeEmail,
+              readiness: done(k.status) ? undefined : readinessOf(k, [], [], done, procLate),
             })),
             ...(reqByPhase.get(t.id) ?? []).map(reqChild),
           ],
@@ -190,6 +268,7 @@ export function buildProjectGantt(
         kind: "task",
         percentDone: effPct(t),
         procurementLate: procLate(t),
+        readiness: done(t.status) ? undefined : readinessOf(t, [], [], done, procLate),
       };
     })
     .sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
@@ -219,6 +298,7 @@ export function buildProjectGantt(
       const overdue = !it.done && !!it.end && it.end.getTime() < t0.getTime();
       if (st === "open") return !it.done;
       if (st === "done") return !!it.done;
+      if (st === "notready") return !it.done && !!it.readiness && it.readiness.state !== "ready";
       return overdue; // "overdue"
     });
   }

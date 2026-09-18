@@ -1,12 +1,52 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Check, Lock } from "lucide-react";
+import { ChevronRight, Check, Lock, Hand, HardHat, Package, CircleCheck } from "lucide-react";
 import { setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { TaskDetailDialog } from "@/components/planning/task-detail-dialog";
 import { RequestDetailDialog } from "@/components/planning/request-detail-dialog";
+
+/** Co brání fázi začít (stav připravenosti). Pořadí = závažnost. */
+export type ReadinessKind = "blocked" | "waiting" | "vendor" | "material" | "ready";
+export type Readiness = {
+  state: ReadinessKind;
+  reasons: { kind: ReadinessKind; text: string }[];
+};
+
+const READINESS: Record<ReadinessKind, { label: string; Icon: typeof Lock; cls: string }> = {
+  blocked: { label: "Blokováno", Icon: Hand, cls: "text-red-600" },
+  waiting: { label: "Čeká na", Icon: Lock, cls: "text-red-500" },
+  vendor: { label: "Chybí dodavatel", Icon: HardHat, cls: "text-orange-500" },
+  material: { label: "Neobjednáno", Icon: Package, cls: "text-orange-500" },
+  ready: { label: "Připraveno", Icon: CircleCheck, cls: "text-emerald-600" },
+};
+
+function readinessTitle(r: Readiness) {
+  if (r.state === "ready") return "Připraveno – nic nebrání začít";
+  return r.reasons.map((x) => `${READINESS[x.kind].label}: ${x.text}`).join("\n");
+}
+
+function ReadinessIcon({ r, small }: { r?: Readiness; small?: boolean }) {
+  if (!r) return null;
+  const { Icon, cls } = READINESS[r.state];
+  return (
+    <span className="ml-1 shrink-0" title={readinessTitle(r)} aria-label={READINESS[r.state].label}>
+      <Icon className={`${small ? "size-2.5" : "size-3"} ${cls}`} />
+    </span>
+  );
+}
+
+/** Měřítko osy: „Vše“ = celý plán na šířku obrazovky, jinak pevně px na den a posun do stran. */
+const ZOOMS = [
+  { key: "fit", label: "Vše", ppd: 0 },
+  { key: "month", label: "Měsíce", ppd: 4 },
+  { key: "week", label: "Týdny", ppd: 12 },
+  { key: "day", label: "Dny", ppd: 34 },
+] as const;
+type ZoomKey = (typeof ZOOMS)[number]["key"];
+const ZOOM_STORE = "dms-gantt-zoom";
 
 export type GanttChild = {
   id: string;
@@ -19,6 +59,7 @@ export type GanttChild = {
   requestId?: string; // dílčí řádek je výběrové řízení (žádanka)
   statusLabel: string;
   assigneeEmail: string | null;
+  readiness?: Readiness;
 };
 
 export type GanttItem = {
@@ -34,6 +75,7 @@ export type GanttItem = {
   prereqMet?: boolean; // fáze: všechny dílčí úkoly hotové (prerekvizity)
   blocked?: boolean; // fáze: některá fáze, na kterou navazuje, není hotová
   blockedBy?: string[]; // názvy fází, na které čeká
+  readiness?: Readiness; // co brání začít (nehotové fáze/úkoly)
   children?: GanttChild[];
 };
 
@@ -81,6 +123,16 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const [detailId, setDetailId] = useState<string | null>(null);
   const [reqId, setReqId] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [zoom, setZoom] = useState<ZoomKey>("fit");
+  const [showAllBlockers, setShowAllBlockers] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      const z = localStorage.getItem(ZOOM_STORE);
+      if (z && ZOOMS.some((x) => x.key === z)) setZoom(z as ZoomKey);
+    } catch {}
+  }, []);
+  const ppd = ZOOMS.find((z) => z.key === zoom)!.ppd;
   const toggle = (id: string) =>
     setOpen((p) => {
       const n = new Set(p);
@@ -109,7 +161,30 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     return `${d.getDate()}. ${d.getMonth() + 1}.`;
   };
   const ticks: { left: number; label: string; strong?: boolean }[] = [];
-  if (dayCount <= 95) {
+  const monthTicks = () => {
+    const cur = new Date(min);
+    cur.setDate(1);
+    cur.setHours(0, 0, 0, 0);
+    if (cur.getTime() < min) cur.setMonth(cur.getMonth() + 1);
+    while (cur.getTime() <= max) {
+      ticks.push({ left: pct(cur.getTime()), label: cur.toLocaleDateString("cs-CZ", { month: "short", year: "2-digit" }), strong: true });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+  };
+  if (zoom === "day") {
+    const cur = startOfDay(new Date(min));
+    while (cur.getTime() <= max) {
+      const first = cur.getDate() === 1;
+      ticks.push({
+        left: pct(cur.getTime()),
+        label: first ? cur.toLocaleDateString("cs-CZ", { month: "short" }) : String(cur.getDate()),
+        strong: first || cur.getDay() === 1,
+      });
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else if (zoom === "month") {
+    monthTicks();
+  } else if (zoom === "week" || dayCount <= 95) {
     const cur = startOfDay(new Date(min));
     const dow = (cur.getDay() + 6) % 7;
     cur.setDate(cur.getDate() - dow + (dow === 0 ? 0 : 7));
@@ -118,14 +193,37 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
       cur.setDate(cur.getDate() + 7);
     }
   } else {
-    const cur = new Date(min);
-    cur.setDate(1);
-    cur.setHours(0, 0, 0, 0);
+    monthTicks();
+  }
+  // Víkendy podbarvit, jen když je den dost široký, aby to bylo vidět.
+  const weekends: { left: number; width: number }[] = [];
+  if (zoom === "day" || zoom === "week") {
+    const cur = startOfDay(new Date(min));
+    cur.setDate(cur.getDate() + ((6 - cur.getDay() + 7) % 7)); // nejbližší sobota
     while (cur.getTime() <= max) {
-      ticks.push({ left: pct(cur.getTime()), label: cur.toLocaleDateString("cs-CZ", { month: "short", year: "2-digit" }), strong: true });
-      cur.setMonth(cur.getMonth() + 1);
+      weekends.push({ left: pct(cur.getTime()), width: (2 * DAY * 100) / span });
+      cur.setDate(cur.getDate() + 7);
     }
   }
+  const timelinePx = ppd > 0 ? Math.round(dayCount * ppd) : 0;
+
+  // Po změně měřítka posunout osu tak, aby „dnes“ bylo v první třetině.
+  const todayPx = ppd > 0 ? ((t0 - min) / DAY) * ppd : 0;
+  const scrollToToday = () => {
+    const el = scrollRef.current;
+    if (!el || ppd === 0) return;
+    el.scrollLeft = Math.max(0, todayPx - el.clientWidth / 3);
+  };
+  useEffect(scrollToToday, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // „Co brání“: nehotové, nepřipravené a začínají do 4 týdnů (nebo už běží)
+  const horizon = t0 + 28 * DAY;
+  const blockers = items
+    .filter((it) => it.readiness && it.readiness.state !== "ready" && !it.done)
+    .filter((it) => {
+      const st = (it.start ?? it.end)?.getTime();
+      return st != null && st <= horizon;
+    });
   const todayLeft = pct(t0);
   const todayInRange = todayLeft >= 0 && todayLeft <= 100;
 
@@ -190,11 +288,90 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
   const LABEL = "var(--gantt-label)";
 
   return (
-    <div className="overflow-x-auto [--gantt-label:8.5rem] sm:[--gantt-label:13rem]">
-      <div className="min-w-[600px] sm:min-w-[720px]">
+    <div className="[--gantt-label:8.5rem] sm:[--gantt-label:13rem]">
+      {/* Co brání v příštích 4 týdnech */}
+      {blockers.length > 0 && (
+        <div className="mb-5 border border-orange-200 bg-orange-50/60 p-3">
+          <p className="kicker !text-orange-700">Co brání v příštích 4 týdnech · {blockers.length}</p>
+          <ul className="mt-2 space-y-1.5">
+            {(showAllBlockers ? blockers : blockers.slice(0, 6)).map((it) => (
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={() => (it.kind === "request" ? it.requestId && setReqId(it.requestId) : setDetailId(it.id))}
+                  className="flex w-full cursor-pointer flex-wrap items-baseline gap-x-2 text-left text-sm hover:underline"
+                >
+                  <span className="flex items-center font-medium text-stone-900">
+                    {it.name}
+                    <ReadinessIcon r={it.readiness} />
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    {it.start ? `od ${formatDate(it.start)}` : it.end ? `do ${formatDate(it.end)}` : ""}
+                  </span>
+                  <span className="basis-full text-xs text-stone-600">
+                    {it.readiness!.reasons
+                      .slice(0, 4)
+                      .map((x) => `${READINESS[x.kind].label}: ${x.text}`)
+                      .join(" · ")}
+                    {it.readiness!.reasons.length > 4 ? ` · +${it.readiness!.reasons.length - 4}` : ""}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {blockers.length > 6 && (
+            <button
+              type="button"
+              onClick={() => setShowAllBlockers((v) => !v)}
+              className="mt-2 cursor-pointer text-xs text-orange-700 underline-offset-2 hover:underline"
+            >
+              {showAllBlockers ? "Méně" : `Zobrazit všech ${blockers.length}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Měřítko */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="flex border border-stone-300" role="group" aria-label="Měřítko časové osy">
+          {ZOOMS.map((z) => (
+            <button
+              key={z.key}
+              type="button"
+              aria-pressed={zoom === z.key}
+              onClick={() => {
+                setZoom(z.key);
+                try {
+                  localStorage.setItem(ZOOM_STORE, z.key);
+                } catch {}
+              }}
+              className={`h-8 cursor-pointer px-3 text-xs transition-colors ${
+                zoom === z.key ? "bg-stone-950 text-white" : "text-stone-600 hover:bg-stone-100"
+              }`}
+            >
+              {z.label}
+            </button>
+          ))}
+        </div>
+        {ppd > 0 && (
+          <button
+            type="button"
+            onClick={scrollToToday}
+            className="h-8 cursor-pointer border border-stone-300 px-3 text-xs text-stone-600 hover:border-stone-950"
+          >
+            Dnes
+          </button>
+        )}
+      </div>
+
+      <div ref={scrollRef} className="overflow-x-auto">
+      <div
+        className={ppd > 0 ? "" : "min-w-[600px] sm:min-w-[720px]"}
+        style={ppd > 0 ? { width: `calc(${LABEL} + ${timelinePx}px)` } : undefined}
+      >
         {/* osa */}
         <div className="flex">
-          <div className="shrink-0" style={{ width: LABEL }} />
+          <div className="sticky left-0 z-20 shrink-0 bg-white" style={{ width: LABEL }} />
           <div className="relative h-6 flex-1">
             {ticks.map((tk, i) => (
               <span
@@ -220,6 +397,13 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
         <div className="relative border-t border-stone-200">
           <div className="pointer-events-none absolute inset-y-0" style={{ left: LABEL, right: 0 }}>
             <div className="relative h-full">
+              {weekends.map((w, i) => (
+                <div
+                  key={`we${i}`}
+                  className="absolute inset-y-0 bg-stone-100/70"
+                  style={{ left: `${w.left}%`, width: `${w.width}%` }}
+                />
+              ))}
               {ticks.map((tk, i) => (
                 <div
                   key={i}
@@ -263,7 +447,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                   }
                 >
                   <div
-                    className="flex shrink-0 items-center gap-1 truncate py-2.5 pr-3 text-sm"
+                    className="sticky left-0 z-10 flex shrink-0 items-center gap-1 truncate bg-white py-2.5 pr-3 text-sm group-hover:bg-stone-50"
                     style={{ width: LABEL }}
                     title={it.name}
                   >
@@ -291,13 +475,14 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                     {isPhase && kids.length > 0 && (
                       <span className="ml-1 shrink-0 text-[11px] text-stone-400">{doneKids}/{kids.length}</span>
                     )}
-                    {it.blocked && (
-                      <span
-                        className="ml-1 shrink-0"
-                        title={`Čeká na: ${(it.blockedBy ?? []).join(", ")}`}
-                      >
-                        <Lock className="size-3 text-red-500" />
-                      </span>
+                    {it.readiness ? (
+                      <ReadinessIcon r={it.readiness} />
+                    ) : (
+                      it.blocked && (
+                        <span className="ml-1 shrink-0" title={`Čeká na: ${(it.blockedBy ?? []).join(", ")}`}>
+                          <Lock className="size-3 text-red-500" />
+                        </span>
+                      )
                     )}
                   </div>
                   <div className="relative h-10 flex-1">
@@ -358,7 +543,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                             className="flex cursor-pointer items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
                           >
                             <div
-                              className="flex shrink-0 items-center gap-1.5 py-1.5 pl-8 pr-3 text-xs"
+                              className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 bg-stone-50 py-1.5 pl-8 pr-3 text-xs"
                               style={{ width: LABEL }}
                             >
                               {k.requestId ? (
@@ -372,6 +557,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                               >
                                 {k.title}
                               </span>
+                              {k.readiness && k.readiness.state !== "ready" && <ReadinessIcon r={k.readiness} small />}
                             </div>
                             <div className="relative h-7 flex-1">
                               {kbar && ks != null && ke != null && (
@@ -405,16 +591,23 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
           })}
         </div>
 
+      </div>
+      </div>
+
         {/* legenda */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / pozadu</span>
-          <span className="flex items-center gap-1.5"><Lock className="size-3 text-red-500" /> čeká na jinou fázi</span>
+          {(Object.keys(READINESS) as ReadinessKind[]).map((k) => {
+            const { Icon, cls, label } = READINESS[k];
+            return (
+              <span key={k} className="flex items-center gap-1.5"><Icon className={`size-3 ${cls}`} /> {label.toLowerCase()}</span>
+            );
+          })}
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-orange-500" /> podle plánu, ale neobjednaná žádanka</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-emerald-700" /> hotovo</span>
         </div>
-      </div>
 
       {detailId && (
         <TaskDetailDialog

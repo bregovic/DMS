@@ -19,7 +19,7 @@ export default async function PlanningPage({
   const email = user.email?.toLowerCase() ?? "";
   const sp = await searchParams;
   const mine = sp?.mine === "1";
-  const statusF = (["open", "done", "overdue"] as const).find((x) => x === sp?.f) ?? "all";
+  const statusF = (["open", "done", "overdue", "notready"] as const).find((x) => x === sp?.f) ?? "all";
   const onlyVR = sp?.vr === "1";
   const fromD = sp?.from ? new Date(sp.from) : null;
   const toD = sp?.to ? new Date(sp.to) : null;
@@ -80,7 +80,16 @@ export default async function PlanningPage({
                   dependsOn: { select: { id: true, title: true, status: true } },
                 },
               },
-              requests: { select: { status: true, leadDays: true, requiredDate: true } },
+              requests: {
+            select: {
+              id: true, title: true, status: true, leadDays: true, requiredDate: true, vendorId: true,
+              offers: { where: { selected: true }, select: { id: true } },
+            },
+          },
+          vendorId: true,
+          selfPerformed: true,
+          ready: true,
+          blockNote: true,
             },
           },
           requests: {
@@ -160,6 +169,7 @@ export default async function PlanningPage({
             <option value="open">Otevřené</option>
             <option value="done">Hotové</option>
             <option value="overdue">Po termínu</option>
+            <option value="notready">Nepřipravené (něco brání)</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">

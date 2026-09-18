@@ -629,6 +629,7 @@ export async function getTaskDetail(id: string) {
     select: {
       id: true, title: true, kind: true, description: true, status: true,
       startDate: true, dueDate: true, dateLocked: true, assigneeEmail: true, vendorId: true,
+      ready: true, blockNote: true, selfPerformed: true,
       operationId: true, operationParams: true,
       priority: true, profession: true, estimateDays: true, percentDone: true,
       actualStart: true, actualEnd: true,
@@ -824,6 +825,9 @@ export async function getTaskDetail(id: string) {
     childCount: childIds.length,
     assigneeEmail: task.assigneeEmail,
     vendorId: task.vendorId,
+    ready: task.ready,
+    blockNote: task.blockNote,
+    selfPerformed: task.selfPerformed,
     priority: task.priority,
     profession: task.profession,
     estimateDays: task.estimateDays,
@@ -863,6 +867,9 @@ export async function updateTaskPlan(formData: FormData) {
   if (!(await canPlan(task, user))) throw new Error("Tento prvek nemůžeš upravit.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
+  // „svépomocí" = bez dodavatele, ale vědomě (stav připravenosti ho nehlásí jako chybějícího)
+  const selfPerformed = vendorId === "__self";
+  if (selfPerformed) vendorId = null;
   if (vendorId) {
     const v = await prisma.vendor.findFirst({
       where: { id: vendorId, ownerId: task.project.ownerId },
@@ -870,6 +877,15 @@ export async function updateTaskPlan(formData: FormData) {
     });
     if (!v) vendorId = null;
   }
+  // Ruční blokace (povolení, počasí…) – jen když ji formulář posílá.
+  const readiness =
+    formData.get("readinessForm") === "1"
+      ? {
+          ready: formData.get("blocked") !== "1",
+          blockNote:
+            formData.get("blocked") === "1" ? toText(formData.get("blockNote")) : null,
+        }
+      : {};
 
   // dateLocked = ruční zámek termínu (zaškrtnuto v dialogu). Když je zaškrtnut,
   // automatický přepočet termín nepřepíše; jinak se blok plánuje automaticky.
@@ -945,6 +961,8 @@ export async function updateTaskPlan(formData: FormData) {
       dateLocked,
       percentDone: Math.max(0, Math.min(100, toInt(formData.get("percentDone")) ?? 0)),
       vendorId,
+      selfPerformed,
+      ...readiness,
       description: toText(formData.get("description")),
       status: newStatus,
       ...actualPatch(task, newStatus),
