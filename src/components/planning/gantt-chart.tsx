@@ -164,10 +164,25 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
     if (e - t0 <= 14 * DAY) return "bg-amber-500";
     return "bg-stone-800";
   }
+  /**
+   * Neobjednaná žádanka je varování, ne skluz.
+   *
+   * Dřív barvila pruh červeně vždy – i když postup podle procent seděl
+   * s plánem. Červená teď patří jen tomu, co je opravdu pozadu (po termínu
+   * nebo méně % než odpovídá uplynulému času); neobjednaná žádanka u úkolu,
+   * který jinak jde podle plánu, je oranžová.
+   */
+  function withProcurement(base: string, late?: boolean) {
+    if (!late) return base;
+    if (base === "bg-red-500" || base === "bg-emerald-700") return base;
+    return "bg-orange-500";
+  }
   function color(it: GanttItem) {
     if (it.kind === "request") return reqColor(it.end ?? null, !!it.done);
-    if (it.procurementLate) return "bg-red-500"; // žádanka neobjednaná včas
-    return colorFor(it.start ?? null, it.end ?? null, !!it.done, it.percentDone);
+    return withProcurement(
+      colorFor(it.start ?? null, it.end ?? null, !!it.done, it.percentDone),
+      it.procurementLate,
+    );
   }
   const effPct = (done?: boolean, pct?: number) => (done ? 100 : pct ?? 0);
 
@@ -323,9 +338,10 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         const kpoint = !kbar ? ke ?? ks : null;
                         const kc = k.requestId
                           ? reqColor(k.end ?? null, k.done)
-                          : k.procurementLate
-                            ? "bg-red-500"
-                            : colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone);
+                          : withProcurement(
+                              colorFor(k.start ?? null, k.end ?? null, k.done, k.percentDone),
+                              k.procurementLate,
+                            );
                         const kpct = effPct(k.done, k.percentDone);
                         const krange = kbar
                           ? `${formatDate(k.start!)} – ${formatDate(k.end!)}`
@@ -393,6 +409,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-stone-500">
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-red-500" /> po termínu / pozadu</span>
           <span className="flex items-center gap-1.5"><Lock className="size-3 text-red-500" /> čeká na jinou fázi</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-orange-500" /> podle plánu, ale neobjednaná žádanka</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500" /> do 14 dnů</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-stone-800" /> v plánu</span>
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-emerald-700" /> hotovo</span>
