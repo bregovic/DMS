@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
+import { deleteWithFiles } from "@/server/document-files";
 import { storage } from "@/lib/storage";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -194,7 +195,9 @@ export async function deleteOffer(formData: FormData) {
   const id = String(formData.get("id"));
   const { offer, projectId, canEdit } = await offerCtx(id);
   if (!canEdit) throw new Error("Tuto nabídku nemůžeš smazat.");
-  await prisma.offer.delete({ where: { id: offer.id } });
+  await deleteWithFiles({ offerId: offer.id }, () =>
+    prisma.offer.delete({ where: { id: offer.id } }),
+  );
   revalidatePath(`/projects/${projectId}`);
 }
 

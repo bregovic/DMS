@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { slugifyType } from "@/server/project-types";
+import { deleteWithFiles } from "@/server/document-files";
 
 const projectSchema = z.object({
   name: z.string().min(1, "Zadej název projektu."),
@@ -96,8 +97,11 @@ export async function deleteProject(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));
 
-  // deleteMany s ownerId = autorizace (cizí projekt se nesmaže)
-  await prisma.project.deleteMany({ where: { id, ownerId: user.id } });
+  // deleteMany s ownerId = autorizace (cizí projekt se nesmaže). Soubory
+  // projektu jdou pryč i z úložiště - dřív na R2 zůstávaly navždy.
+  await deleteWithFiles({ projectId: id, project: { ownerId: user.id } }, () =>
+    prisma.project.deleteMany({ where: { id, ownerId: user.id } }),
+  );
 
   revalidatePath("/projects");
   redirect("/projects");

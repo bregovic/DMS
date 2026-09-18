@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
+import { deleteWithFiles } from "@/server/document-files";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -139,6 +140,10 @@ export async function deleteRequest(formData: FormData) {
   if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Mazat může jen vlastník projektu.");
   }
-  await prisma.request.deleteMany({ where: { id, projectId } });
+  // Přílohy žádanky i jejích nabídek pryč i z úložiště.
+  await deleteWithFiles(
+    { projectId, OR: [{ requestId: id }, { offer: { requestId: id } }] },
+    () => prisma.request.deleteMany({ where: { id, projectId } }),
+  );
   revalidatePath(`/projects/${projectId}`);
 }
