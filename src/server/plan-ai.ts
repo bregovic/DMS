@@ -81,11 +81,13 @@ const PLAN_INSTRUCTIONS = `Jsi zkušený stavbyvedoucí a rozpočtář v Česku.
 - ÚROVEŇ DETAILU jako skutečný harmonogram stavbyvedoucího: každá fáze 4–10 konkrétních úkolů. Každé podlaží zvlášť (hrubá stavba 1. NP, strop/věnec, hrubá stavba 2. NP…), střecha rozepsaná po vrstvách (nosná konstrukce, záklop/laťování, pojistná hydroizolace, krytina, oplechování, žlaby a svody, izolace).
   Kontrolní seznam – zahrň, co se stavby týká: vytyčení stavby geodetem, zařízení staveniště (oplocení, voda, elektro, WC, kontejner), přípojky, sejmutí ornice, výkopy, převzetí základové spáry, základy, hydroizolace a protiradonové lepenky, podkladní desky, zdění po podlažích, překlady, věnce, stropy (bednění, výztuž, betonáž, zrání, odbednění), komíny/prostupy, střecha, klempířské prvky, okna/dveře/vrata (objednávka s dodací lhůtou předem), hrubé rozvody TZB po profesích, omítky, potěry + vysychání, zateplení a fasáda, lešení (montáž/demontáž), podlahy, obklady, kompletace TZB, revize a zkoušky, venkovní úpravy, úklid, geodetické zaměření, kolaudace.
 - tasks: konkrétní úkoly ve fázi v pořadí provádění. Kde odpovídá úkon z katalogu, dej jeho operationCode a množství (quantity, unit) z výkresů/výkazů. estimateDays = pracovní dny party; technologické přestávky (zrání betonu, vysychání) jako samostatný úkol.
-- costEstimate: odhad nákladů úkolu v Kč s DPH (materiál + práce, ceny ČR 2026). Když nejde odhadnout, null.
+- costEstimate: odhad nákladů úkolu v Kč s DPH (materiál + práce, ceny ČR 2026) – vyplň u KAŽDÉHO úkolu (i při úpravě návrhu); null jen u úkolů bez nákladů.
+- estimateDays = KALENDÁŘNÍ dny, jak to na stavbě reálně trvá: včetně víkendů, počasí, koordinace řemesel a menší party (u svépomoci počítej s pomalejším tempem, typicky 1,5–2× déle). Nikdy nepiš jen čistou pracnost.
+- Dodací lhůty a čekání jako samostatné úkoly (např. „Výroba oken a dveří – dodací lhůta“ 56 d, „Výroba krovu“, „Čekání na betonárku/jeřáb“), stejně tak zrání betonu a vysychání potěrů (cca 1 týden na 1 cm potěru).
 - procurement: když se na úkol typicky poptává dodavatel nebo materiál (okna, střecha, elektro, beton, lešení…), krátký text co poptat vč. hlavních parametrů (rozměry, množství); jinak null.
 - profession: řemeslo (Zedník, Tesař, Elektrikář…).
 - summary 2–4 věty česky; assumptions: z čeho vycházíš; missingInfo: co v dokumentaci chybí a zpřesnilo by plán.
-- totalCost a durationDays: součet a celková délka v pracovních dnech.
+- totalCost a durationDays: součet nákladů a celková délka v kalendářních dnech.
 Nevymýšlej rozměry, které v dokumentaci nejsou – pak dej quantity null a zmiň to v missingInfo. Pokyn uživatele má přednost.`;
 
 /** Dokumenty projektu, které AI umí přečíst (pro výběr v dialogu). */
