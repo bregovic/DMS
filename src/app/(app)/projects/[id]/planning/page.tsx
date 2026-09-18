@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DateInput } from "@/components/ui/date-input";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, expandScope } from "@/server/access";
@@ -183,8 +183,15 @@ export default async function ProjectPlanningPage({
         </div>
       </header>
 
-      {/* Filtry */}
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-x-3 gap-y-2">
+      {/* Filtry – výchozí sbalené (standard filtrů, viz src/lib/list-filter.ts) */}
+      <details className="group/filtr mb-6">
+        <summary className="flex h-8 w-fit cursor-pointer list-none items-center gap-1.5 border border-stone-300 px-2.5 text-xs text-stone-700 hover:border-stone-950 [&::-webkit-details-marker]:hidden">
+          <SlidersHorizontal className="size-3.5" />
+          Filtr
+          {anyFilter && <span className="bg-stone-950 px-1 text-[10px] leading-4 text-white">aktivní</span>}
+          <ChevronDown className="size-3.5 transition-transform group-open/filtr:rotate-180" />
+        </summary>
+      <form method="get" className="mt-2 border border-stone-200 bg-white/60 p-3 flex flex-wrap items-end gap-x-3 gap-y-2">
         {subId && <input type="hidden" name="sub" value={subId} />}
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-stone-400">
           Stav
@@ -227,6 +234,7 @@ export default async function ProjectPlanningPage({
           </Link>
         )}
       </form>
+      </details>
 
       {items.length === 0 ? (
         <p className="py-16 text-center text-sm text-stone-500">

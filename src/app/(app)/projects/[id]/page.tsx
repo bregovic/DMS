@@ -26,7 +26,7 @@ import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-di
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
-import { TaskStatusFilter } from "@/components/tasks/task-status-filter";
+import { parseStatusFilter } from "@/lib/list-filter";
 import { RememberProject } from "@/components/projects/remember-project";
 import { TodoList } from "@/components/tasks/todo-list";
 import { UploadForm } from "@/components/documents/upload-form";
@@ -66,6 +66,9 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** Uzavřené žádanky – převedené na výdaj nebo zrušené; výchozí filtr je schová. */
+const REQUEST_CLOSED_STATUSES = ["schvaleno", "zruseno"];
 
 export default async function ProjectDetailPage({
   params,
@@ -410,21 +413,41 @@ export default async function ProjectDetailPage({
    * Fáze zůstane vidět, když odpovídá sama, nebo když odpovídá některý
    * její dílčí úkol – jinak by dílčí úkoly visely bez souvislosti.
    */
-  const tstSet = new Set(
-    (typeof sp?.tst === "string" ? sp.tst : "").split(",").filter(Boolean),
-  );
+  // Standard filtrů (src/lib/list-filter.ts), prefix "t". Bez parametru
+  // stavu jsou vidět jen nezavřené úkoly.
+  const tstRaw = sp?.tst;
+  const tstSel = parseStatusFilter(tstRaw, []);
+  const tq = (typeof sp?.tq === "string" ? sp.tq : "").trim().toLowerCase();
+  const tfrom = typeof sp?.tfrom === "string" && sp.tfrom ? new Date(sp.tfrom) : null;
+  const ttoRaw = typeof sp?.tto === "string" && sp.tto ? new Date(sp.tto) : null;
+  if (ttoRaw) ttoRaw.setHours(23, 59, 59, 999);
+  const tsort = sp?.tsort === "due" || sp?.tsort === "title" ? sp.tsort : "plan";
+  const tdir = sp?.tdir === "desc" ? -1 : 1;
   const taskStatusCounts: Record<string, number> = {};
   for (const t of planTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
-  const statusMatch = (t: (typeof levelTasks)[number]) => tstSet.size === 0 || tstSet.has(t.status);
+  const statusMatch = (t: (typeof levelTasks)[number]) =>
+    (typeof tstRaw === "string" ? !tstSel || tstSel.has(t.status) : !TASK_DONE_STATUSES.includes(t.status)) &&
+    (!tq || t.title.toLowerCase().includes(tq)) &&
+    (!tfrom || (!!t.dueDate && t.dueDate >= tfrom)) &&
+    (!ttoRaw || (!!t.startDate ? t.startDate <= ttoRaw : !!t.dueDate && t.dueDate <= ttoRaw));
+  const taskFilterActive = typeof tstRaw === "string" || !!tq || !!tfrom || !!ttoRaw;
+  const taskSort = <T extends { title: string; dueDate: Date | null }>(xs: T[]) =>
+    tsort === "plan"
+      ? xs
+      : [...xs].sort((a, b) =>
+          tsort === "title"
+            ? a.title.localeCompare(b.title, "cs") * tdir
+            : ((a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)) * tdir,
+        );
 
   const orderedTasks: { t: (typeof levelTasks)[number]; level: number }[] = [];
-  for (const ph of taskPhases) {
-    const kids = (taskChildren.get(ph.id) ?? []).filter(statusMatch);
+  for (const ph of taskSort(taskPhases)) {
+    const kids = taskSort((taskChildren.get(ph.id) ?? []).filter(statusMatch));
     if (!statusMatch(ph) && kids.length === 0) continue;
     orderedTasks.push({ t: ph, level: 0 });
     for (const ch of kids) orderedTasks.push({ t: ch, level: 1 });
   }
-  for (const t of planTasks)
+  for (const t of taskSort(planTasks))
     if (t.kind !== "phase" && !t.parentId && statusMatch(t)) orderedTasks.push({ t, level: 0 });
   const phaseOptions = taskPhases.map((p) => ({ id: p.id, title: p.title }));
   const isTaskDone = (st: string) => TASK_DONE_STATUSES.includes(st);
@@ -524,7 +547,13 @@ export default async function ProjectDetailPage({
   const rsort = sp?.rsort === "price" ? "price" : "date";
   const rdir = sp?.rdir === "asc" ? "asc" : "desc";
 
-  let shownRequests = levelRequests;
+  // Stav (standard filtrů, prefix "r"): bez parametru jen nezavřené –
+  // schválené (převedené na výdaj) a zrušené se schovají.
+  const rstRaw = sp?.rst;
+  const rstSel = parseStatusFilter(rstRaw, []);
+  let shownRequests = levelRequests.filter((r) =>
+    typeof rstRaw === "string" ? !rstSel || rstSel.has(r.status) : !REQUEST_CLOSED_STATUSES.includes(r.status),
+  );
   if (rq) shownRequests = shownRequests.filter((r) => r.title.toLowerCase().includes(rq));
   if (rfrom && !isNaN(rfrom.getTime()))
     shownRequests = shownRequests.filter((r) => r.createdAt >= rfrom);
@@ -536,7 +565,7 @@ export default async function ProjectDetailPage({
       ? (Number(a.price ?? 0) - Number(b.price ?? 0)) * rsign
       : (a.createdAt.getTime() - b.createdAt.getTime()) * rsign,
   );
-  const requestFilterActive = Boolean(rq || rfrom || rtoRaw);
+  const requestFilterActive = Boolean(rq || rfrom || rtoRaw || typeof rstRaw === "string" || shownRequests.length !== levelRequests.length);
 
   const docTypeMap = new Map(docTypes.map((t) => [t.value, t.label]));
   const docTypesPresent = docTypes.filter((t) =>
@@ -1097,6 +1126,12 @@ export default async function ProjectDetailPage({
           <>
           <ListFilters
             prefix="r"
+            statuses={reqStatuses.map((st) => ({
+              key: st.key,
+              label: st.label,
+              count: levelRequests.filter((x) => x.status === st.key).length,
+            }))}
+            defaultStatuses={reqStatuses.map((st) => st.key).filter((k) => !REQUEST_CLOSED_STATUSES.includes(k))}
             sortOptions={[
               { value: "date", label: "Datum" },
               { value: "price", label: "Cena" },
@@ -1281,7 +1316,7 @@ export default async function ProjectDetailPage({
       <TabSection
         title={
           <h2 className="kicker">
-            Plán · {tstSet.size > 0 ? `${orderedTasks.length} z ${planTasks.length}` : planTasks.length}
+            Plán · {taskFilterActive || orderedTasks.length !== planTasks.length ? `${orderedTasks.length} z ${planTasks.length}` : planTasks.length}
             {onlyMine ? " · jen tvoje" : ""}
           </h2>
         }
@@ -1307,16 +1342,24 @@ export default async function ProjectDetailPage({
         }
       >
         {planTasks.length > 0 && (
-          <TaskStatusFilter
-            projectId={project.id}
-            statuses={taskStatuses.filter((s) => (taskStatusCounts[s.key] ?? 0) > 0 || tstSet.has(s.key))}
-            counts={taskStatusCounts}
+          <ListFilters
+            prefix="t"
+            placeholder="Hledat úkol…"
+            sortOptions={[
+              { value: "plan", label: "Pořadí plánu" },
+              { value: "due", label: "Termín" },
+              { value: "title", label: "Název" },
+            ]}
+            statuses={taskStatuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: taskStatusCounts[st.key] ?? 0 }))}
+            defaultStatuses={taskStatuses.map((st) => st.key).filter((k) => !TASK_DONE_STATUSES.includes(k))}
           />
         )}
         {planTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné naplánované úkoly.</p>
         ) : orderedTasks.length === 0 ? (
-          <p className="py-6 text-sm text-stone-500">Žádný úkol v tomhle stavu.</p>
+          <p className="py-6 text-sm text-stone-500">
+            {taskFilterActive ? "Filtru nic neodpovídá." : "Všechny úkoly jsou hotové – zobrazíš je ve Filtru, stav Vše."}
+          </p>
         ) : (
           <ul id="task-list" className="group/tasks data-[bulk]:pb-32">
             {orderedTasks.map(({ t, level }) => {
