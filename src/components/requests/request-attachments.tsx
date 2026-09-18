@@ -117,8 +117,8 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
   return start("Zpracovat AI", "border-stone-300 text-stone-600 hover:border-stone-950");
 }
 
-const MAX_BYTES = 8 * 1024 * 1024;
-const ACCEPT = ".eml,.msg,.pdf,image/*,.doc,.docx,.xls,.xlsx";
+const MAX_BYTES = 14 * 1024 * 1024;
+const ACCEPT = ".eml,.msg,.pdf,image/*,.doc,.docx,.xls,.xlsx,.txt,.csv,.dwg,.dxf,.zip";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} kB`;
@@ -164,7 +164,7 @@ export function RequestAttachments({
     setError(null);
     const tooBig = files.find((f) => f.size > MAX_BYTES);
     if (tooBig) {
-      setError(`Soubor „${tooBig.name}" je větší než 8 MB.`);
+      setError(`Soubor „${tooBig.name}" je větší než 14 MB.`);
       return;
     }
     for (let i = 0; i < files.length; i++) {

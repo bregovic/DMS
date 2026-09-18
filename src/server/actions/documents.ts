@@ -11,7 +11,8 @@ import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { resolveDocTypeKey } from "@/server/document-types";
 import { emlSummary, parseEmlHeader } from "@/lib/eml";
 
-const MAX_UPLOAD = 8 * 1024 * 1024; // 8 MB
+// Server actions mají strop 15 MB na odeslání (next.config) – soubor do 14 MB se vejde.
+const MAX_UPLOAD = 14 * 1024 * 1024;
 
 /** Připojí sken k existující položce (výdaji). Owner ke všem, aktivní dodavatel jen ke svým. */
 export async function attachExpenseScan(formData: FormData) {
@@ -23,7 +24,7 @@ export async function attachExpenseScan(formData: FormData) {
     throw new Error("Vyber soubor.");
   }
   if (file.size > MAX_UPLOAD) {
-    throw new Error("Soubor je větší než 8 MB.");
+    throw new Error("Soubor je větší než 14 MB.");
   }
 
   const role = await getProjectRole(projectId, user);
@@ -82,7 +83,7 @@ export async function uploadDocument(formData: FormData) {
   }
 
   if (file.size > MAX_UPLOAD) {
-    throw new Error("Soubor je větší než 8 MB.");
+    throw new Error("Soubor je větší než 14 MB.");
   }
 
   const project = await prisma.project.findFirst({
@@ -157,7 +158,7 @@ export async function attachRequestFiles(formData: FormData) {
     throw new Error(`Najednou jde přiložit nejvýš ${MAX_REQUEST_FILES} souborů.`);
   }
   const tooBig = files.find((f) => f.size > MAX_UPLOAD);
-  if (tooBig) throw new Error(`Soubor „${tooBig.name}" je větší než 8 MB.`);
+  if (tooBig) throw new Error(`Soubor „${tooBig.name}" je větší než 14 MB.`);
 
   const [emailType, offerType] = await Promise.all([
     resolveDocTypeKey("E-mail"),

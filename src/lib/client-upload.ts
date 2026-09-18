@@ -1,4 +1,4 @@
-export const MAX_UPLOAD = 8 * 1024 * 1024; // 8 MB
+export const MAX_UPLOAD = 14 * 1024 * 1024; // 14 MB (strop server actions je 15 MB)
 
 /** Zmenší a zkomprimuje obrázek (JPEG), ať je menší ale čitelný. PDF/jiné nechá být. */
 export async function compressImage(file: File): Promise<File> {
@@ -31,7 +31,7 @@ export async function compressImage(file: File): Promise<File> {
 export async function prepareUpload(file: File): Promise<File> {
   const out = await compressImage(file);
   if (out.size > MAX_UPLOAD) {
-    throw new Error("Soubor je větší než 8 MB (i po kompresi).");
+    throw new Error("Soubor je větší než 14 MB (i po kompresi).");
   }
   return out;
 }

@@ -1,12 +1,20 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { uploadDocument } from "@/server/actions/documents";
 import { prepareUpload } from "@/lib/client-upload";
 
 type DocType = { value: string; label: string };
 
+/** Dokumentace stavby: skeny, PDF, plánky (DWG/DXF), Word, Excel, ZIP. */
+const ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf,.zip,.txt,.csv,.eml,.msg";
+
+/**
+ * Nahrání dokumentů projektu. Víc souborů najednou (i přetažením) –
+ * technická dokumentace bývá desítka plánků. Každý soubor jde na server
+ * zvlášť kvůli stropu 15 MB na jedno odeslání.
+ */
 export function UploadForm({
   projectId,
   types,
@@ -15,35 +23,39 @@ export function UploadForm({
   types: DocType[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isPending, startTransition] = useTransition();
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState("other");
   const [newType, setNewType] = useState("");
+  const [dragOver, setDragOver] = useState(false);
 
-  function onChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function upload(list: FileList | File[]) {
+    const files = [...list];
+    if (!files.length) return;
     if (type === "__new__" && !newType.trim()) {
       setError("Zadej název nového typu.");
-      if (inputRef.current) inputRef.current.value = "";
       return;
     }
     setError(null);
-    startTransition(async () => {
+    const failed: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      setProgress(files.length > 1 ? `Nahrávám ${i + 1}/${files.length}…` : "Nahrávám…");
       try {
-        const prepared = await prepareUpload(file);
+        const prepared = await prepareUpload(files[i]);
         const fd = new FormData();
         fd.set("projectId", projectId);
         fd.set("type", type);
         if (type === "__new__") fd.set("newType", newType.trim());
         fd.set("file", prepared);
         await uploadDocument(fd);
-        if (inputRef.current) inputRef.current.value = "";
-        setNewType("");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Nahrání selhalo.");
+        failed.push(`${files[i].name}: ${err instanceof Error ? err.message : "nahrání selhalo"}`);
       }
-    });
+    }
+    setProgress(null);
+    if (failed.length) setError(failed.join(" · "));
+    if (inputRef.current) inputRef.current.value = "";
+    setNewType("");
   }
 
   return (
@@ -73,20 +85,42 @@ export function UploadForm({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={isPending}
-        className="flex w-full items-center justify-center gap-2 border border-dashed border-stone-400 bg-transparent px-4 py-6 text-sm text-stone-600 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white disabled:opacity-60 cursor-pointer"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          upload(e.dataTransfer.files);
+        }}
+        disabled={!!progress}
+        className={`flex w-full flex-col items-center justify-center gap-1 border border-dashed px-4 py-6 text-sm transition-colors disabled:opacity-60 cursor-pointer ${
+          dragOver
+            ? "border-stone-950 bg-stone-950 text-white"
+            : "border-stone-400 bg-transparent text-stone-600 hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+        }`}
       >
-        <Upload className="size-4" />
-        {isPending ? "Nahrávám…" : "Nahrát dokument / sken"}
+        <span className="flex items-center gap-2">
+          <Upload className="size-4" />
+          {progress ?? "Nahrát dokumenty (i víc najednou)"}
+        </span>
+        {!progress && (
+          <span className="text-[11px] opacity-70">
+            nebo sem soubory přetáhni · PDF, fotky, plánky DWG/DXF, Word, Excel, ZIP · do 14 MB
+          </span>
+        )}
       </button>
       <input
         ref={inputRef}
         type="file"
+        multiple
         className="hidden"
-        accept="image/*,application/pdf,capture=camera"
-        onChange={onChange}
+        accept={ACCEPT}
+        onChange={(e) => e.target.files && upload(e.target.files)}
       />
-      {error && <p className="mt-2 text-sm text-stone-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
     </div>
   );
 }
