@@ -40,7 +40,7 @@ export const AI_LIMITS = {
   disabled: process.env.AI_DISABLED === "1",
 };
 // Běh, který nedoběhl (restart serveru), se po 15 minutách uzavře jako chyba.
-const STALE_MS = 15 * 60 * 1000;
+const STALE_MS = 25 * 60 * 1000;
 // USD za 1M tokenů (vstup, výstup) – pro odhad útraty.
 const PRICES: Record<string, [number, number]> = {
   "gpt-5-mini": [0.25, 2],
@@ -301,11 +301,16 @@ export async function callModel<T>(
   schema: unknown,
   opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number; webSearch?: boolean } = {},
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
+  // Úloha na pozadí u OpenAI + průběžná kontrola: dlouhé volání (plán z mnoha
+  // PDF trvá i přes 5 min) jinak spadne na výchozím limitu Node fetch
+  // („fetch failed“ po 300 s čekání na hlavičky odpovědi).
+  const headers = { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" };
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(600_000), // plán z mnoha PDF silnějším modelem trvá i minuty
+    headers,
+    signal: AbortSignal.timeout(120_000),
     body: JSON.stringify({
+      background: true,
       model,
       input: [
         { role: "system", content: system },
@@ -317,8 +322,22 @@ export async function callModel<T>(
       max_output_tokens: opts.maxOutput ?? 12_000,
     }),
   });
-  const j = await res.json();
+  let j = await res.json();
   if (!res.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${res.status}`);
+  const deadline = Date.now() + 20 * 60_000;
+  while (j.status === "queued" || j.status === "in_progress") {
+    if (Date.now() > deadline) {
+      await fetch(`https://api.openai.com/v1/responses/${j.id}/cancel`, { method: "POST", headers }).catch(() => {});
+      throw new Error("Zpracování trvalo příliš dlouho – zkus méně dokumentů.");
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+    const poll = await fetch(`https://api.openai.com/v1/responses/${j.id}`, { headers, signal: AbortSignal.timeout(60_000) }).catch(() => null);
+    if (!poll) continue; // krátký výpadek sítě – zkusit znovu
+    const pj = await poll.json().catch(() => null);
+    if (poll.ok && pj) j = pj;
+  }
+  if (j.status === "failed") throw new Error(j.error?.message || "Zpracování selhalo.");
+  if (j.status === "cancelled") throw new Error("Zpracování bylo zrušeno.");
   const inTok = j.usage?.input_tokens ?? 0;
   const outTok = j.usage?.output_tokens ?? 0;
   const [pin, pout] = PRICES[model] ?? PRICES["gpt-5-mini"];
