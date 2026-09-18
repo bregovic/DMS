@@ -624,7 +624,7 @@ model Extraction {
   projectId    String
   requestId    String // žádanka, u které příloha leží
   documentId   String
-  status       String   @default("running") // running | ready | error | partial | applied | dismissed
+  status       String   @default("running") // running | ready | info | error | partial | applied | dismissed
   instructions String? // pokyn uživatele pro AI (volitelný)
   appliedParts Int[]    @default([]) // indexy částí, ze kterých už je nabídka
   result       Json?

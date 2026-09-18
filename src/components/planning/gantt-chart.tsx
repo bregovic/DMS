@@ -118,7 +118,16 @@ function ChildCheck({ id, done }: { id: string; done: boolean }) {
   );
 }
 
-export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }) {
+export function GanttChart({
+  items,
+  today,
+  readOnly = false,
+}: {
+  items: GanttItem[];
+  today: Date;
+  /** Jen k nahlédnutí (dodavatel bez přístupu do projektu): bez detailu a odškrtávání. */
+  readOnly?: boolean;
+}) {
   const router = useRouter();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [reqId, setReqId] = useState<string | null>(null);
@@ -298,7 +307,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
               <li key={it.id}>
                 <button
                   type="button"
-                  onClick={() => (it.kind === "request" ? it.requestId && setReqId(it.requestId) : setDetailId(it.id))}
+                  onClick={() => (readOnly ? undefined : it.kind === "request" ? it.requestId && setReqId(it.requestId) : setDetailId(it.id))}
                   className="flex w-full cursor-pointer flex-wrap items-baseline gap-x-2 text-left text-sm hover:underline"
                 >
                   <span className="flex items-center font-medium text-stone-900">
@@ -441,9 +450,11 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                 <div
                   className="group relative flex cursor-pointer items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80"
                   onClick={() =>
-                    it.kind === "request"
-                      ? it.requestId && setReqId(it.requestId)
-                      : setDetailId(it.id)
+                    readOnly
+                      ? isPhase && (it.children ?? []).length > 0 && toggle(it.id)
+                      : it.kind === "request"
+                        ? it.requestId && setReqId(it.requestId)
+                        : setDetailId(it.id)
                   }
                 >
                   <div
@@ -539,7 +550,7 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                         return (
                           <div
                             key={k.id}
-                            onClick={() => (k.requestId ? setReqId(k.requestId) : setDetailId(k.id))}
+                            onClick={() => (readOnly ? undefined : k.requestId ? setReqId(k.requestId) : setDetailId(k.id))}
                             className="flex cursor-pointer items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
                           >
                             <div
@@ -548,6 +559,8 @@ export function GanttChart({ items, today }: { items: GanttItem[]; today: Date }
                             >
                               {k.requestId ? (
                                 <span className="kicker shrink-0 !text-red-500">VŘ</span>
+                              ) : readOnly ? (
+                                <span className={`size-2 shrink-0 rounded-full ${k.done ? "bg-emerald-600" : "bg-stone-300"}`} />
                               ) : (
                                 <ChildCheck id={k.id} done={k.done} />
                               )}

@@ -27,7 +27,6 @@ import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dia
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
-import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
 import { parseStatusFilter } from "@/lib/list-filter";
 import { extractable } from "@/server/extraction";
 import { RememberProject } from "@/components/projects/remember-project";
@@ -1451,10 +1450,10 @@ export default async function ProjectDetailPage({
                         value={t.id}
                         form={BULK_FORM_ID}
                         aria-label={`Vybrat: ${t.title}`}
-                        className="mt-0.5 hidden size-5 shrink-0 cursor-pointer accent-stone-900 group-data-[bulk]/tasks:block"
+                        title="Vybrat pro hromadnou úpravu"
+                        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-stone-900"
                       />
                     )}
-                    {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
                     <div className="min-w-0">
                       <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
                         <span

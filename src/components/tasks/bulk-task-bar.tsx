@@ -9,8 +9,9 @@ export const BULK_FORM_ID = "bulk-tasks";
 const LIST_ID = "task-list";
 
 /**
- * Hromadná úprava úkolů: tlačítko „Vybrat“ zapne zaškrtávátka v řádcích
- * a dole se objeví lišta se stavem a dodavatelem.
+ * Hromadná úprava úkolů: zaškrtávátko v řádku úkol vybere (nesplní ho –
+ * hotovo se nastavuje stavem) a jakmile je něco vybrané, dole se objeví
+ * lišta se stavem a dodavatelem.
  *
  * Řádky seznamu se vykreslují na serveru; zaškrtávátka jsou obyčejné
  * inputy s atributem form=BULK_FORM_ID, takže patří do formuláře v liště
@@ -26,8 +27,8 @@ export function BulkTaskBar({
   statuses: { key: string; label: string }[];
   vendors: { id: string; name: string }[];
 }) {
-  const [on, setOn] = useState(false);
   const [count, setCount] = useState(0);
+  const on = count > 0;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
@@ -40,18 +41,26 @@ export function BulkTaskBar({
 
   useEffect(() => {
     document.getElementById(LIST_ID)?.toggleAttribute("data-bulk", on);
-    if (!on) {
-      boxes().forEach((b) => (b.checked = false));
-      setCount(0);
-      setMsg(null);
-    }
+  }, [on]);
+  useEffect(() => {
     const onChange = (e: Event) => {
       const t = e.target as HTMLInputElement;
       if (t.getAttribute?.("form") === BULK_FORM_ID) recount();
     };
     document.addEventListener("change", onChange);
     return () => document.removeEventListener("change", onChange);
-  }, [on]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Hláška po uložení zůstane chvíli vidět i po zmizení lišty.
+  useEffect(() => {
+    if (!msg || on) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg, on]);
+  const clear = () => {
+    boxes().forEach((b) => (b.checked = false));
+    setCount(0);
+  };
 
   const all = () => {
     const bs = boxes();
@@ -65,17 +74,6 @@ export function BulkTaskBar({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOn((v) => !v)}
-        aria-pressed={on}
-        className={`inline-flex h-8 cursor-pointer items-center gap-1.5 border px-2.5 text-xs transition-colors ${
-          on ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-700 hover:border-stone-950"
-        }`}
-      >
-        <ListChecks className="size-4" />
-        Vybrat
-      </button>
 
       {/* formulář existuje vždy, ať na něj zaškrtávátka mohou odkazovat */}
       <form
@@ -86,8 +84,7 @@ export function BulkTaskBar({
           setMsg(null);
           try {
             const r = await bulkUpdateTasks(fd);
-            boxes().forEach((b) => (b.checked = false));
-            setCount(0);
+            clear();
             setFormKey((k) => k + 1);
             setMsg(
               `Upraveno ${r.updated} ${r.updated === 1 ? "úkol" : r.updated < 5 ? "úkoly" : "úkolů"}` +
@@ -99,6 +96,7 @@ export function BulkTaskBar({
           setBusy(false);
         }}
         className={on ? "" : "hidden"}
+        onReset={() => setMsg(null)}
       >
         <input type="hidden" name="projectId" value={projectId} />
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-stone-300 bg-white/95 px-4 py-3 shadow-lift backdrop-blur md:bottom-0">
@@ -146,8 +144,8 @@ export function BulkTaskBar({
             </button>
             <button
               type="button"
-              onClick={() => setOn(false)}
-              aria-label="Zavřít hromadnou úpravu"
+              onClick={clear}
+              aria-label="Zrušit výběr"
               className="h-10 cursor-pointer px-2 text-stone-400 hover:text-stone-950"
             >
               <X className="size-4" />
@@ -156,6 +154,11 @@ export function BulkTaskBar({
           </div>
         </div>
       </form>
+      {!on && msg && (
+        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-40 -translate-x-1/2 bg-stone-950 px-3 py-2 text-xs text-white shadow-lift md:bottom-4">
+          {msg}
+        </div>
+      )}
     </>
   );
 }

@@ -334,7 +334,8 @@ export async function runExtraction(extractionId: string) {
     await prisma.extraction.update({
       where: { id: ex.id },
       data: {
-        status: "ready",
+        // Bez cen (technický list…) není co potvrzovat – jen údaje k nahlédnutí.
+        status: result.parts.length ? "ready" : "info",
         result: result as unknown as Prisma.InputJsonValue,
         inputTokens: inTok,
         outputTokens: outTok,

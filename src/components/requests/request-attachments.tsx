@@ -101,6 +101,7 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
     </span>
   );
   if (st === "ready") return open("Návrh k potvrzení", "border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100");
+  if (st === "info") return open("Údaje z dokumentu", "border-stone-300 text-stone-700 hover:border-stone-950");
   if (st === "partial") return open("Spárovat zbytek", "border-orange-300 text-orange-800 hover:bg-orange-50");
   if (st === "applied") return open("Založeno", "border-emerald-300 text-emerald-700 hover:border-emerald-600");
   const start = (label: string, cls: string, title?: string) => (

@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { TASK_DONE_STATUSES, priorityColor, priorityLabel } from "@/lib/constants";
 import { colorClasses } from "@/lib/status-colors";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
+import { taskStatusLabel } from "@/lib/constants";
 
 /**
  * Moje úkoly (#29) – úkoly přidělené mně napříč projekty.
@@ -43,6 +45,11 @@ export default async function MyTasksPage() {
             priority: true,
             ready: true,
             dueDate: true,
+            startDate: true,
+            percentDone: true,
+            parent: {
+              select: { id: true, title: true, startDate: true, dueDate: true, status: true, percentDone: true },
+            },
             description: true,
             project: { select: { id: true, name: true } },
             subProject: { select: { name: true } },
@@ -75,6 +82,66 @@ export default async function MyTasksPage() {
     g.rows.push(t);
     byProject.set(t.project.id, g);
   }
+
+  /**
+   * Harmonogram pro dodavatele: fáze, ve kterých má úkoly, a uvnitř jen
+   * jeho úkoly. Do projektu přístup mít nemusí – graf je jen k nahlédnutí.
+   */
+  const ganttByProject = new Map<string, { name: string; items: GanttItem[] }>();
+  {
+    const phases = new Map<string, { projectId: string; item: GanttItem }>();
+    for (const t of tasks) {
+      if (t.kind === "todo" || !(t.startDate || t.dueDate)) continue;
+      const child = {
+        id: t.id,
+        title: t.title,
+        start: t.startDate,
+        end: t.dueDate,
+        done: isDone(t.status),
+        percentDone: t.percentDone,
+        statusLabel: statusLabel.get(t.status) ?? taskStatusLabel(t.status),
+        assigneeEmail: null,
+      };
+      const g = ganttByProject.get(t.project.id) ?? { name: t.project.name, items: [] };
+      ganttByProject.set(t.project.id, g);
+      if (t.parent) {
+        let ph = phases.get(t.parent.id);
+        if (!ph) {
+          ph = {
+            projectId: t.project.id,
+            item: {
+              id: t.parent.id,
+              name: t.parent.title,
+              start: t.parent.startDate,
+              end: t.parent.dueDate,
+              done: isDone(t.parent.status),
+              percentDone: t.parent.percentDone,
+              kind: "phase",
+              children: [],
+            },
+          };
+          phases.set(t.parent.id, ph);
+          g.items.push(ph.item);
+        }
+        ph.item.children!.push(child);
+      } else {
+        g.items.push({ ...child, name: t.title, kind: "task" });
+      }
+    }
+    for (const g of ganttByProject.values()) {
+      for (const it of g.items)
+        if (it.kind === "phase" && !it.start && !it.end) {
+          // fáze bez vlastního termínu → rozsah z mých úkolů
+          const ks = it.children!.map((c) => c.start ?? c.end).filter(Boolean) as Date[];
+          const ke = it.children!.map((c) => c.end ?? c.start).filter(Boolean) as Date[];
+          it.start = new Date(Math.min(...ks.map((d) => d.getTime())));
+          it.end = new Date(Math.max(...ke.map((d) => d.getTime())));
+        }
+      g.items = g.items.filter((it) => it.start || it.end);
+      g.items.sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
+    }
+  }
+  const gantts = [...ganttByProject.entries()].filter(([, g]) => g.items.length > 0);
 
   const loggedTotal = tasks.reduce(
     (s, t) => s + t.expenses.reduce((a, e) => a + Number(e.amount), 0),
@@ -172,6 +239,18 @@ export default async function MyTasksPage() {
               </ul>
             </section>
           ))}
+
+          {gantts.length > 0 && (
+            <section className="mb-8 mt-10">
+              <h2 className="kicker mb-3">Harmonogram · fáze, kde mám úkoly</h2>
+              {gantts.map(([pid, g]) => (
+                <div key={pid} className="mb-6">
+                  {gantts.length > 1 && <p className="mb-2 text-sm font-medium text-stone-900">{g.name}</p>}
+                  <GanttChart items={g.items} today={todayStart} readOnly />
+                </div>
+              ))}
+            </section>
+          )}
 
           {done.length > 0 && (
             <details className="mt-4">
