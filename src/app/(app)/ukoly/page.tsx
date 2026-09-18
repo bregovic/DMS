@@ -1,0 +1,190 @@
+import Link from "next/link";
+import { requireUser } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
+import { listProjectsForUser } from "@/server/access";
+import { getStatuses } from "@/server/statuses";
+import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
+import { LogTaskExpense } from "@/components/tasks/log-task-expense";
+import { EmptyState } from "@/components/ui/empty-state";
+import { TASK_DONE_STATUSES, priorityColor, priorityLabel } from "@/lib/constants";
+import { colorClasses } from "@/lib/status-colors";
+import { formatCurrency, formatDate } from "@/lib/utils";
+
+/**
+ * Moje úkoly (#29) – úkoly přidělené mně napříč projekty.
+ *
+ * Hlavně pro dodavatele: vlastník mu přidělí úkol (dodavatel s jeho
+ * e-mailem), a on ho tu vidí a vykazuje na něj práci, aniž by musel mít
+ * přístup k celému projektu. Kdo přístup do projektu má, dostane u
+ * projektu odkaz; kdo ne, vidí jen tenhle seznam.
+ *
+ * Patří sem i úkoly s řešitelem = můj e-mail, takže to funguje i pro
+ * členy rodiny, kterým je úkol přidělený jménem.
+ */
+export default async function MyTasksPage() {
+  const user = await requireUser();
+  const email = user.email?.toLowerCase() ?? "";
+
+  const [tasks, statuses, accessible] = await Promise.all([
+    email
+      ? prisma.task.findMany({
+          where: {
+            OR: [
+              { vendor: { email: { equals: email, mode: "insensitive" } } },
+              { assigneeEmail: email },
+            ],
+          },
+          orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            title: true,
+            kind: true,
+            status: true,
+            priority: true,
+            ready: true,
+            dueDate: true,
+            description: true,
+            project: { select: { id: true, name: true } },
+            subProject: { select: { name: true } },
+            vendor: { select: { hourlyRate: true, email: true } },
+            expenses: {
+              where: { createdById: user.id },
+              select: { amount: true, hours: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    getStatuses("task"),
+    listProjectsForUser(user),
+  ]);
+
+  const statusLabel = new Map(statuses.map((s) => [s.key, s.label]));
+  const statusColor = new Map(statuses.map((s) => [s.key, s.color]));
+  const canOpen = new Set(accessible.map((a) => a.project.id));
+  const isDone = (st: string) => TASK_DONE_STATUSES.includes(st);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const open = tasks.filter((t) => !isDone(t.status));
+  const done = tasks.filter((t) => isDone(t.status));
+
+  // Seskupit podle projektu - dodavatel dělá často pro víc zakázek.
+  const byProject = new Map<string, { name: string; id: string; rows: typeof open }>();
+  for (const t of open) {
+    const g = byProject.get(t.project.id) ?? { name: t.project.name, id: t.project.id, rows: [] };
+    g.rows.push(t);
+    byProject.set(t.project.id, g);
+  }
+
+  const loggedTotal = tasks.reduce(
+    (s, t) => s + t.expenses.reduce((a, e) => a + Number(e.amount), 0),
+    0,
+  );
+
+  function Row({ t }: { t: (typeof tasks)[number] }) {
+    const finished = isDone(t.status);
+    const overdue = !finished && !!t.dueDate && t.dueDate < todayStart;
+    const logged = t.expenses.reduce((a, e) => a + Number(e.amount), 0);
+    const hours = t.expenses.reduce((a, e) => a + Number(e.hours ?? 0), 0);
+    const col = colorClasses(statusColor.get(t.status) ?? "stone");
+    return (
+      <li className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-stone-200 py-3.5">
+        <TaskDoneCheckbox id={t.id} done={finished} />
+        <div className="min-w-0 flex-1 basis-52">
+          <p className={`text-sm font-medium ${finished ? "text-stone-400 line-through" : "text-stone-950"}`}>
+            {t.title}
+          </p>
+          <p className="kicker mt-0.5 flex flex-wrap items-center gap-x-2">
+            {t.subProject && <span>{t.subProject.name}</span>}
+            <span className={`border px-1.5 py-px text-[10px] ${col.chip}`}>
+              {statusLabel.get(t.status) ?? t.status}
+            </span>
+            {t.priority && (
+              <span className={`border px-1.5 py-px text-[10px] font-medium ${colorClasses(priorityColor(t.priority)).chip}`}>
+                {priorityLabel(t.priority)}
+              </span>
+            )}
+            {!finished && !t.ready && <span className="text-amber-700">čeká</span>}
+            {t.dueDate && (
+              <span className={overdue ? "text-red-600" : undefined}>do {formatDate(t.dueDate)}</span>
+            )}
+          </p>
+          {t.description && <p className="mt-1 max-w-xl text-sm text-stone-500">{t.description}</p>}
+          {logged > 0 && (
+            <p className="mt-1 text-xs text-stone-500">
+              Vykázáno <span className="font-mono text-stone-800">{formatCurrency(logged)}</span>
+              {hours > 0 ? ` · ${hours.toLocaleString("cs-CZ")} h` : ""}
+            </p>
+          )}
+        </div>
+        {!finished && (
+          <div className="pl-8 sm:pl-0">
+            <LogTaskExpense
+              taskId={t.id}
+              taskTitle={t.title}
+              defaultRate={t.vendor?.hourlyRate != null ? Number(t.vendor.hourlyRate) : null}
+            />
+          </div>
+        )}
+      </li>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <header className="mb-6 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
+        <div>
+          <h1 className="display text-4xl text-stone-950">Moje úkoly</h1>
+          <p className="kicker mt-1">
+            {open.length} otevřených{done.length ? ` · ${done.length} hotových` : ""}
+          </p>
+        </div>
+        {loggedTotal > 0 && (
+          <div className="text-right">
+            <p className="kicker">Vykázáno celkem</p>
+            <p className="display mt-1 text-2xl text-stone-950">{formatCurrency(loggedTotal)}</p>
+          </div>
+        )}
+      </header>
+
+      {tasks.length === 0 ? (
+        <EmptyState
+          title="Žádné přidělené úkoly"
+          description="Až ti někdo přidělí úkol (jako dodavateli nebo řešiteli), objeví se tady a půjde na něj vykázat práci."
+        />
+      ) : (
+        <>
+          {[...byProject.values()].map((g) => (
+            <section key={g.id} className="mb-8">
+              <h2 className="kicker mb-1">
+                {canOpen.has(g.id) ? (
+                  <Link href={`/projects/${g.id}?tab=ukoly`} className="underline-offset-4 hover:underline">
+                    {g.name}
+                  </Link>
+                ) : (
+                  g.name
+                )}
+              </h2>
+              <ul>
+                {g.rows.map((t) => (
+                  <Row key={t.id} t={t} />
+                ))}
+              </ul>
+            </section>
+          ))}
+
+          {done.length > 0 && (
+            <details className="mt-4">
+              <summary className="kicker cursor-pointer select-none py-2">Hotové · {done.length}</summary>
+              <ul>
+                {done.map((t) => (
+                  <Row key={t.id} t={t} />
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

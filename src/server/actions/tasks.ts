@@ -159,6 +159,7 @@ async function taskCtx(id: string) {
       actualStart: true,
       actualEnd: true,
       project: { select: { ownerId: true } },
+      vendor: { select: { email: true } },
     },
   });
   if (!task) throw new Error("Úkol nenalezen.");
@@ -166,8 +167,12 @@ async function taskCtx(id: string) {
   // spolusprávce (owner|member) smí editovat/mazat veškeré úkoly
   const isOwner = isManager(access?.role);
   const isCreator = task.createdById === user.id;
+  const myEmail = user.email?.toLowerCase();
+  // Řešitel je i dodavatel, kterému je úkol přidělený (#29) - smí měnit stav.
   const isAssignee =
-    !!task.assigneeEmail && task.assigneeEmail === user.email?.toLowerCase();
+    !!myEmail &&
+    ((!!task.assigneeEmail && task.assigneeEmail === myEmail) ||
+      task.vendor?.email?.toLowerCase() === myEmail);
   return { user, task, access, isOwner, isCreator, isAssignee };
 }
 
@@ -1019,6 +1024,7 @@ export async function setTaskStatus(formData: FormData) {
   });
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
+  revalidatePath("/ukoly");
 }
 
 /**

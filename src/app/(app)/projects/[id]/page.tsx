@@ -242,7 +242,9 @@ export default async function ProjectDetailPage({
     ? project.tasks.filter(
         (t) =>
           t.createdById === user.id ||
-          (!!t.assigneeEmail && t.assigneeEmail === myEmail),
+          (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+          // úkol přidělený dodavateli se stejným e-mailem (#29)
+          (!!t.vendorId && myVendorIds.has(t.vendorId)),
       )
     : project.tasks;
 
