@@ -2,19 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Folder, Wallet } from "lucide-react";
+import { Home, Folder, ListChecks, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/dashboard", label: "Přehled", Icon: Home },
   { href: "/projects", label: "Projekty", Icon: Folder },
+  // Pro dodavatele je to na telefonu hlavní vstup (#29, #31).
+  { href: "/ukoly", label: "Úkoly", Icon: ListChecks },
   { href: "/payments", label: "Platby", Icon: Wallet },
 ];
 
 export function MobileTabBar() {
   const pathname = usePathname();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-stone-200 bg-white/95 backdrop-blur md:hidden">
+    // pb safe-area: na iPhonu jako nainstalovaná aplikace by lišta ležela
+    // pod pruhem pro návrat domů a spodní půlka tlačítek by nešla trefit.
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {tabs.map(({ href, label, Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (

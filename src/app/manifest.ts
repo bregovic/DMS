@@ -11,6 +11,12 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f4f3f0",
     theme_color: "#0a0a0a",
     lang: "cs",
+    // Zkratky po podržení ikony (Android) – nejčastější cesty bez proklikávání.
+    shortcuts: [
+      { name: "Moje úkoly", short_name: "Úkoly", url: "/ukoly" },
+      { name: "Platby k úhradě", short_name: "Platby", url: "/payments" },
+      { name: "Přehled", short_name: "Přehled", url: "/dashboard" },
+    ],
     icons: [
       {
         src: "/api/pwa-icon?size=192",

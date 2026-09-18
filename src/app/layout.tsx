@@ -29,6 +29,9 @@ export const viewport: Viewport = {
   themeColor: "#0a0a0a",
   width: "device-width",
   initialScale: 1,
+  // Obsah až k okrajům displeje (výřez, pruh pro návrat domů); spodní lišta
+  // si místo pod pruhem odsadí sama přes env(safe-area-inset-bottom).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
