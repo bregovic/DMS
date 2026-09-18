@@ -93,7 +93,9 @@ export async function planDocuments(projectId: string) {
 }
 
 export async function createPlanDraft(projectId: string, userId: string, documentIds: string[], prompt?: string | null) {
-  await assertBudget();
+  await assertBudget(userId);
+  const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
+  if (busy) throw new Error("Plán se už připravuje.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
   const ids = documentIds.filter((id) => allowed.has(id)).slice(0, 10);
   const d = await prisma.planDraft.create({
@@ -185,6 +187,7 @@ export async function runPlanDraft(draftId: string) {
       ],
       "plan",
       PLAN_SCHEMA,
+      { effort: "medium", maxOutput: 40_000 },
     );
     await prisma.planDraft.update({
       where: { id: d.id },

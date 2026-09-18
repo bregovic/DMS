@@ -4,6 +4,7 @@ import { ChangePasswordForm } from "@/components/account/change-password-form";
 import { InstallButton } from "@/components/app/install-button";
 import { CodelistManager } from "@/components/account/codelist-manager";
 import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
+import { aiUsage } from "@/server/extraction";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -90,6 +91,8 @@ export default async function SettingsPage() {
         <ChangePasswordForm hasPassword={hasPassword} />
       </section>
 
+      <AiUsageSection />
+
       <section className="mt-12">
         <h2 className="kicker mb-4">Mobilní aplikace</h2>
         <InstallButton />
@@ -152,5 +155,44 @@ export default async function SettingsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+/** Útrata za AI a pojistky (limity se mění proměnnými prostředí na Railway). */
+async function AiUsageSection() {
+  const u = await aiUsage();
+  const usd = (v: number) => `${v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+  const bar = (v: number, max: number) => (
+    <div className="mt-1 h-1.5 w-full bg-stone-100">
+      <div className={`h-full ${v / max > 0.8 ? "bg-red-500" : "bg-stone-800"}`} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} />
+    </div>
+  );
+  return (
+    <section className="mt-12">
+      <h2 className="kicker mb-4">AI – útrata a pojistky</h2>
+      {!u.configured || u.limits.disabled ? (
+        <p className="text-sm text-stone-500">AI je vypnutá.</p>
+      ) : (
+        <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-sm text-stone-700">
+              Tento měsíc <span className="font-mono">{usd(u.month)}</span> z {usd(u.limits.monthlyUsd)}
+            </p>
+            {bar(u.month, u.limits.monthlyUsd)}
+          </div>
+          <div>
+            <p className="text-sm text-stone-700">
+              Dnes <span className="font-mono">{usd(u.today)}</span> z {usd(u.limits.dailyUsd)}
+            </p>
+            {bar(u.today, u.limits.dailyUsd)}
+          </div>
+          <p className="text-xs text-stone-500 sm:col-span-2">
+            Nejvýš {u.limits.runsPerHour} spuštění za hodinu a {u.limits.parallel} najednou na uživatele, soubory do{" "}
+            {Math.round(u.limits.maxFileBytes / 1048576)} MB, stejná příloha se nezpracovává dvakrát zároveň. Po dosažení
+            limitu se AI do konce dne / měsíce nespustí – nic se nezaplatí navíc.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }

@@ -404,6 +404,26 @@ export function TaskDetailDialog({
                     </div>
                   </div>
 
+                  {!(d.kind === "phase" && d.childCount > 0) && (
+                    <div className="space-y-1.5">
+                      {d.canEdit && <input type="hidden" name="actualForm" value="1" />}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="dd-astart">Skutečný začátek</Label>
+                          <DateInput key={`as-${d.actualStart}`} id="dd-astart" name="actualStart" defaultValue={d.actualStart ?? ""} disabled={lock} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="dd-aend">Skutečný konec</Label>
+                          <DateInput key={`ae-${d.actualEnd}`} id="dd-aend" name="actualEnd" defaultValue={d.actualEnd ?? ""} disabled={lock} />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-stone-400">
+                        Podle skutečnosti se přepočítá celý plán: skutečný konec u hotového úkolu, rozpracovaný
+                        nejdřív dnes – navazující práce se posunou.
+                      </p>
+                    </div>
+                  )}
+
                   {d.canEdit && d.kind === "phase" && d.childCount > 0 && (
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-phasemode">Při změně data fáze</Label>

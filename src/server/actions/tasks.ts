@@ -1013,6 +1013,13 @@ export async function updateTaskPlan(formData: FormData) {
       description: toText(formData.get("description")),
       status: newStatus,
       ...actualPatch(task, newStatus),
+      // Skutečné datumy zadané ručně (podle skutečnosti) mají přednost.
+      ...(formData.get("actualForm") === "1"
+        ? {
+            ...(toDate(formData.get("actualStart")) ? { actualStart: toDate(formData.get("actualStart")) } : {}),
+            ...(toDate(formData.get("actualEnd")) ? { actualEnd: toDate(formData.get("actualEnd")) } : {}),
+          }
+        : {}),
     },
   });
   await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), task.kind === "phase");
@@ -1214,4 +1221,45 @@ export async function bulkUpdateTasks(formData: FormData) {
   revalidatePath("/planning");
   revalidatePath("/ukoly");
   return { updated: allowed.length, skipped: ids.length - allowed.length };
+}
+
+/**
+ * Tažení pruhu v Ganttu: posun (move) nebo změna délky (resize) o celé dny.
+ *
+ * Posun termín zafixuje (dateLocked) – u fáze to připne její začátek a dílčí
+ * úkoly se naplánují od něj. Změna délky přepíše odhad dní. Pak se přepočítá
+ * celý plán, takže se navazující práce posunou samy.
+ */
+export async function moveTaskDates(formData: FormData) {
+  const id = String(formData.get("id"));
+  const days = Math.round(Number(formData.get("days")) || 0);
+  const mode = formData.get("mode") === "resize" ? "resize" : "move";
+  if (!days) return;
+  const { user, task } = await taskCtx(id);
+  if (!(await canPlan(task, user))) throw new Error("Tento prvek nemůžeš přeplánovat.");
+  const t = await prisma.task.findUnique({
+    where: { id: task.id },
+    select: { startDate: true, dueDate: true, kind: true, _count: { select: { children: true } } },
+  });
+  if (!t?.startDate && !t?.dueDate) throw new Error("Prvek nemá termín.");
+  const DAY = 86400000;
+  const s0 = (t.startDate ?? t.dueDate)!.getTime();
+  const e0 = (t.dueDate ?? t.startDate)!.getTime();
+
+  if (mode === "move") {
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { startDate: new Date(s0 + days * DAY), dueDate: new Date(e0 + days * DAY), dateLocked: true },
+    });
+  } else {
+    if (t.kind === "phase" && t._count.children > 0) throw new Error("Délka fáze se řídí jejími úkoly.");
+    const e = Math.max(s0, e0 + days * DAY);
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { dueDate: new Date(e), estimateDays: Math.round((e - s0) / DAY) + 1 },
+    });
+  }
+  await scheduleProject(task.projectId, task.subProjectId);
+  revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/planning");
 }

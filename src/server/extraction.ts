@@ -19,7 +19,28 @@ import type { Prisma } from "@/generated/prisma/client";
  */
 
 export const AI_MODEL = process.env.AI_MODEL || "gpt-5-mini";
-const MONTHLY_LIMIT_USD = Number(process.env.AI_MONTHLY_LIMIT_USD || 5);
+
+/**
+ * Pojistky proti zbytečnému čerpání API (vše jde přepsat proměnnou prostředí):
+ *  - AI_DISABLED=1            vypne všechna volání
+ *  - AI_MONTHLY_LIMIT_USD     strop za kalendářní měsíc (5 USD)
+ *  - AI_DAILY_LIMIT_USD       strop za den (1 USD)
+ *  - AI_MAX_RUNS_PER_HOUR     max spuštění na uživatele za hodinu (20)
+ *  - AI_MAX_PARALLEL          max souběžných běhů na uživatele (3)
+ *  - AI_MAX_FILE_MB           větší soubor se modelu neposílá (12 MB)
+ * Model navíc dostává strop délky odpovědi a nízkou úroveň přemýšlení
+ * (u plánu střední) – přemýšlení tvořilo ~70 % výstupních tokenů.
+ */
+export const AI_LIMITS = {
+  monthlyUsd: Number(process.env.AI_MONTHLY_LIMIT_USD || 5),
+  dailyUsd: Number(process.env.AI_DAILY_LIMIT_USD || 1),
+  runsPerHour: Number(process.env.AI_MAX_RUNS_PER_HOUR || 20),
+  parallel: Number(process.env.AI_MAX_PARALLEL || 3),
+  maxFileBytes: Number(process.env.AI_MAX_FILE_MB || 12) * 1024 * 1024,
+  disabled: process.env.AI_DISABLED === "1",
+};
+// Běh, který nedoběhl (restart serveru), se po 15 minutách uzavře jako chyba.
+const STALE_MS = 15 * 60 * 1000;
 // USD za 1M tokenů (vstup, výstup) – pro odhad útraty.
 const PRICES: Record<string, [number, number]> = {
   "gpt-5-mini": [0.25, 2],
@@ -141,23 +162,73 @@ recommendation: 2–3 věty, kterou vybrat a proč; když se nedá rozhodnout, c
 questions: co si ověřit u dodavatelů před objednáním (max 5).
 headline: jedna věta shrnutí. Pokyn uživatele má přednost (co je pro něj důležité).`;
 
+/** Útrata za AI od daného okamžiku (USD) – vytěžení, porovnání i plány. */
+async function aiSpendSince(since: Date) {
+  const [a, b, c] = await Promise.all([
+    prisma.extraction.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
+    prisma.offerComparison.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
+    prisma.planDraft.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
+  ]);
+  return (a._sum.costUsd ?? 0) + (b._sum.costUsd ?? 0) + (c._sum.costUsd ?? 0);
+}
+
 /** Útrata za AI v aktuálním měsíci (USD). */
 export async function monthlyAiSpend() {
   const start = new Date();
   start.setUTCDate(1);
   start.setUTCHours(0, 0, 0, 0);
-  const [a, b, c] = await Promise.all([
-    prisma.extraction.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
-    prisma.offerComparison.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
-    prisma.planDraft.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
-  ]);
-  return (a._sum.costUsd ?? 0) + (b._sum.costUsd ?? 0) + (c._sum.costUsd ?? 0);
+  return aiSpendSince(start);
 }
 
-export async function assertBudget() {
+/** Přehled útraty a limitů (pro Nastavení a dialogy AI). */
+export async function aiUsage() {
+  const day = new Date();
+  day.setUTCHours(0, 0, 0, 0);
+  const [month, today] = await Promise.all([monthlyAiSpend(), aiSpendSince(day)]);
+  return { month, today, limits: AI_LIMITS, configured: !!process.env.OPENAI_API_KEY };
+}
+
+/** Zaseknuté běhy (restart serveru uprostřed volání) uzavřít jako chybu. */
+async function closeStaleRuns() {
+  const before = new Date(Date.now() - STALE_MS);
+  const data = { status: "error", error: "Běh nedoběhl (přerušeno) – spusť znovu." };
+  const where = { status: "running", createdAt: { lt: before } };
+  await Promise.all([
+    prisma.extraction.updateMany({ where, data }),
+    prisma.offerComparison.updateMany({ where, data }),
+    prisma.planDraft.updateMany({ where, data }),
+  ]);
+}
+
+/**
+ * Pojistky před každým voláním AI: vypínač, měsíční a denní strop,
+ * počet spuštění za hodinu a souběžné běhy uživatele.
+ */
+export async function assertBudget(userId?: string) {
+  if (AI_LIMITS.disabled) throw new Error("AI je vypnutá (AI_DISABLED).");
   if (!process.env.OPENAI_API_KEY) throw new Error("AI není nastavená (chybí OPENAI_API_KEY).");
-  if ((await monthlyAiSpend()) >= MONTHLY_LIMIT_USD)
-    throw new Error(`Měsíční limit pro AI (${MONTHLY_LIMIT_USD} USD) je vyčerpaný.`);
+  await closeStaleRuns();
+  const u = await aiUsage();
+  if (u.month >= AI_LIMITS.monthlyUsd)
+    throw new Error(`Měsíční limit pro AI (${AI_LIMITS.monthlyUsd} USD) je vyčerpaný.`);
+  if (u.today >= AI_LIMITS.dailyUsd)
+    throw new Error(`Denní limit pro AI (${AI_LIMITS.dailyUsd} USD) je vyčerpaný – zkus to zítra.`);
+  if (userId) {
+    const hour = new Date(Date.now() - 3600_000);
+    const mine = { createdById: userId };
+    const [e, c, p, re, rc, rp] = await Promise.all([
+      prisma.extraction.count({ where: { ...mine, createdAt: { gte: hour } } }),
+      prisma.offerComparison.count({ where: { ...mine, createdAt: { gte: hour } } }),
+      prisma.planDraft.count({ where: { ...mine, createdAt: { gte: hour } } }),
+      prisma.extraction.count({ where: { ...mine, status: "running" } }),
+      prisma.offerComparison.count({ where: { ...mine, status: "running" } }),
+      prisma.planDraft.count({ where: { ...mine, status: "running" } }),
+    ]);
+    if (e + c + p >= AI_LIMITS.runsPerHour)
+      throw new Error(`Za poslední hodinu už bylo ${e + c + p} spuštění AI (limit ${AI_LIMITS.runsPerHour}). Zkus to za chvíli.`);
+    if (re + rc + rp >= AI_LIMITS.parallel)
+      throw new Error("Už běží několik zpracování AI – počkej, až doběhnou.");
+  }
 }
 
 const ext = (name: string) => name.toLowerCase().split(".").pop() ?? "";
@@ -177,6 +248,8 @@ export function extractable(mimeType: string, name: string) {
 /** Obsah souboru pro model: PDF / obrázek přímo, ostatní jako text. */
 export async function filePart(buf: Buffer, name: string, mimeType: string) {
   const e = ext(name);
+  if (buf.length > AI_LIMITS.maxFileBytes)
+    throw new Error(`Soubor „${name}“ je pro AI moc velký (limit ${Math.round(AI_LIMITS.maxFileBytes / 1048576)} MB).`);
   if (mimeType === "application/pdf" || e === "pdf")
     return { type: "input_file", filename: name, file_data: `data:application/pdf;base64,${buf.toString("base64")}` };
   if (mimeType.startsWith("image/"))
@@ -230,6 +303,7 @@ export async function callModel<T>(
   content: unknown[],
   name: string,
   schema: unknown,
+  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number } = {},
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -242,10 +316,14 @@ export async function callModel<T>(
         { role: "user", content },
       ],
       text: { format: { type: "json_schema", name, strict: true, schema } },
+      reasoning: { effort: opts.effort ?? "low" },
+      max_output_tokens: opts.maxOutput ?? 12_000,
     }),
   });
   const j = await res.json();
   if (!res.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${res.status}`);
+  if (j.status === "incomplete")
+    throw new Error("Odpověď AI byla useknutá (strop délky) – zkus menší dokument nebo užší pokyn.");
   const text = j.output
     ?.find((o: { type: string }) => o.type === "message")
     ?.content?.find((c: { type: string }) => c.type === "output_text")?.text;
@@ -267,7 +345,9 @@ export async function createExtraction(documentId: string, userId: string, instr
     select: { id: true, projectId: true, requestId: true },
   });
   if (!doc?.requestId) throw new Error("Příloha nepatří k žádance.");
-  await assertBudget();
+  await assertBudget(userId);
+  const busy = await prisma.extraction.findFirst({ where: { documentId: doc.id, status: "running" }, select: { id: true } });
+  if (busy) throw new Error("Tahle příloha se už zpracovává.");
   const ex = await prisma.extraction.create({
     data: {
       projectId: doc.projectId,
@@ -327,6 +407,7 @@ export async function runExtraction(extractionId: string) {
       ],
       "document",
       EXTRACT_SCHEMA,
+      { effort: "low", maxOutput: 14_000 },
     );
     // requestId, který model vymyslel, zahodit
     const known = new Set(requests.map((r) => r.id));
@@ -360,7 +441,9 @@ export async function runExtraction(extractionId: string) {
 export async function createComparison(requestId: string, userId: string, prompt?: string | null) {
   const offers = await prisma.offer.count({ where: { requestId } });
   if (offers === 0) throw new Error("Žádanka zatím nemá žádnou nabídku.");
-  await assertBudget();
+  await assertBudget(userId);
+  const busy = await prisma.offerComparison.findFirst({ where: { requestId, status: "running" }, select: { id: true } });
+  if (busy) throw new Error("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
     data: { requestId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
     select: { id: true },
@@ -453,6 +536,7 @@ export async function runComparison(comparisonId: string) {
       ],
       "comparison",
       COMPARE_SCHEMA,
+      { effort: "low", maxOutput: 8_000 },
     );
     await prisma.offerComparison.update({
       where: { id: c.id },

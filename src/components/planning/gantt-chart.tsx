@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Check, Lock, Hand, HardHat, Package, CircleCheck } from "lucide-react";
-import { setTaskStatus } from "@/server/actions/tasks";
+import { moveTaskDates, setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { TaskDetailDialog } from "@/components/planning/task-detail-dialog";
 import { RequestDetailDialog } from "@/components/planning/request-detail-dialog";
@@ -142,6 +142,85 @@ export function GanttChart({
     } catch {}
   }, []);
   const ppd = ZOOMS.find((z) => z.key === zoom)!.ppd;
+
+  /* Tažení pruhu: posun (celý pruh) nebo délka (pravý okraj). Náhled se
+     kreslí hned, po puštění se uloží a plán se přepočítá na serveru. */
+  const [drag, setDrag] = useState<{ id: string; mode: "move" | "resize"; days: number } | null>(null);
+  const [dragBusy, setDragBusy] = useState(false);
+  const dragRef = useRef<{ id: string; mode: "move" | "resize"; x0: number; pxPerDay: number; days: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const startDrag = (ev: React.PointerEvent<HTMLElement>, id: string, mode: "move" | "resize", track: HTMLElement | null) => {
+    if (readOnly || dragBusy || !track || ev.button !== 0) return;
+    ev.stopPropagation();
+    const pxPerDay = track.getBoundingClientRect().width / dayCount;
+    dragRef.current = { id, mode, x0: ev.clientX, pxPerDay, days: 0, moved: false };
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+  };
+  const moveDrag = (ev: React.PointerEvent<HTMLElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = ev.clientX - d.x0;
+    if (Math.abs(dx) > 4) d.moved = true;
+    const days = Math.round(dx / d.pxPerDay);
+    if (d.moved && days !== d.days) {
+      d.days = days;
+      setDrag({ id: d.id, mode: d.mode, days });
+    }
+  };
+  const endDrag = async () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    if (d.moved) {
+      suppressClick.current = true;
+      setTimeout(() => (suppressClick.current = false), 0);
+    }
+    if (!d.moved || d.days === 0) {
+      setDrag(null);
+      return;
+    }
+    setDragBusy(true);
+    try {
+      const fd = new FormData();
+      fd.set("id", d.id);
+      fd.set("days", String(d.days));
+      fd.set("mode", d.mode);
+      await moveTaskDates(fd);
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Přeplánování se nepodařilo.");
+    }
+    setDrag(null);
+    setDragBusy(false);
+  };
+  /** Náhled během tažení: posunuté / natažené datumy pruhu. */
+  const preview = (id: string, s: number | null, e: number | null) => {
+    if (!drag || drag.id !== id || s == null || e == null) return { s, e };
+    const dd = drag.days * DAY;
+    return drag.mode === "move" ? { s: s + dd, e: e + dd } : { s, e: Math.max(s, e + dd) };
+  };
+  const dragHandlers = (id: string, canResize: boolean) =>
+    readOnly
+      ? {}
+      : {
+          onPointerDown: (ev: React.PointerEvent<HTMLElement>) => startDrag(ev, id, "move", ev.currentTarget.parentElement),
+          onPointerMove: moveDrag,
+          onPointerUp: endDrag,
+          onPointerCancel: endDrag,
+          "data-resizable": canResize ? "1" : undefined,
+        };
+  const resizeHandle = (id: string) =>
+    readOnly ? null : (
+      <span
+        onPointerDown={(ev) => startDrag(ev, id, "resize", ev.currentTarget.parentElement?.parentElement ?? null)}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClick={(ev) => ev.stopPropagation()}
+        title="Táhni pro změnu délky"
+        className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-white/0 hover:bg-white/40"
+      />
+    );
   const toggle = (id: string) =>
     setOpen((p) => {
       const n = new Set(p);
@@ -427,8 +506,13 @@ export function GanttChart({
           </div>
 
           {items.map((it) => {
-            const s = it.start ? startOfDay(it.start).getTime() : null;
-            const e = it.end ? startOfDay(it.end).getTime() : null;
+            const pv = preview(
+              it.id,
+              it.start ? startOfDay(it.start).getTime() : null,
+              it.end ? startOfDay(it.end).getTime() : null,
+            );
+            const s = pv.s;
+            const e = pv.e;
             const bar = s != null && e != null && e > s;
             const point = !bar ? e ?? s : null;
             const c = color(it);
@@ -450,7 +534,9 @@ export function GanttChart({
                 <div
                   className="group relative flex cursor-pointer items-center border-b border-stone-100 transition-colors hover:bg-stone-50/80"
                   onClick={() =>
-                    readOnly
+                    suppressClick.current
+                      ? undefined
+                      : readOnly
                       ? isPhase && (it.children ?? []).length > 0 && toggle(it.id)
                       : it.kind === "request"
                         ? it.requestId && setReqId(it.requestId)
@@ -499,10 +585,14 @@ export function GanttChart({
                   <div className="relative h-10 flex-1">
                     {bar && s != null && e != null && (
                       <div
-                        className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-sm ${c} shadow-sm`}
+                        {...(it.kind !== "request" ? dragHandlers(it.id, !(isPhase && kids.length > 0)) : {})}
+                        className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-sm ${c} shadow-sm ${
+                          !readOnly && it.kind !== "request" ? "cursor-grab touch-none active:cursor-grabbing" : ""
+                        } ${drag?.id === it.id ? "ring-2 ring-stone-950/40" : ""}`}
                         style={{ left: `${pct(s)}%`, width: `${Math.max(pct(e) - pct(s), 1.2)}%` }}
-                        title={`${it.name}: ${range} · ${itpct} %`}
+                        title={`${it.name}: ${range} · ${itpct} %${readOnly || it.kind === "request" ? "" : " · táhni pro posun"}`}
                       >
+                        {it.kind !== "request" && !(isPhase && kids.length > 0) && resizeHandle(it.id)}
                         {itpct > 0 && (
                           <span className="absolute inset-y-0 left-0 bg-black/25" style={{ width: `${itpct}%` }} />
                         )}
@@ -528,8 +618,13 @@ export function GanttChart({
                           ((b.start ?? b.end)?.getTime() ?? 0),
                       )
                       .map((k) => {
-                        const ks = k.start ? startOfDay(k.start).getTime() : null;
-                        const ke = k.end ? startOfDay(k.end).getTime() : null;
+                        const kpv = preview(
+                          k.id,
+                          k.start ? startOfDay(k.start).getTime() : null,
+                          k.end ? startOfDay(k.end).getTime() : null,
+                        );
+                        const ks = kpv.s;
+                        const ke = kpv.e;
                         const kbar = ks != null && ke != null && ke > ks;
                         const kpoint = !kbar ? ke ?? ks : null;
                         const kc = k.requestId
@@ -550,7 +645,7 @@ export function GanttChart({
                         return (
                           <div
                             key={k.id}
-                            onClick={() => (readOnly ? undefined : k.requestId ? setReqId(k.requestId) : setDetailId(k.id))}
+                            onClick={() => (readOnly || suppressClick.current ? undefined : k.requestId ? setReqId(k.requestId) : setDetailId(k.id))}
                             className="flex cursor-pointer items-center border-t border-stone-100/80 first:border-t-0 hover:bg-white/70"
                           >
                             <div
@@ -575,10 +670,14 @@ export function GanttChart({
                             <div className="relative h-7 flex-1">
                               {kbar && ks != null && ke != null && (
                                 <div
-                                  className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-sm ${kc} shadow-sm`}
+                                  {...(!k.requestId ? dragHandlers(k.id, true) : {})}
+                                  className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-hidden rounded-sm ${kc} shadow-sm ${
+                                    !readOnly && !k.requestId ? "cursor-grab touch-none active:cursor-grabbing" : ""
+                                  } ${drag?.id === k.id ? "ring-2 ring-stone-950/40" : ""}`}
                                   style={{ left: `${pct(ks)}%`, width: `${Math.max(pct(ke) - pct(ks), 0.8)}%` }}
                                   title={tip}
                                 >
+                                  {!k.requestId && resizeHandle(k.id)}
                                   {kpct > 0 && (
                                     <span className="absolute inset-y-0 left-0 bg-black/25" style={{ width: `${kpct}%` }} />
                                   )}
