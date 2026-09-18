@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { DateInput } from "@/components/ui/date-input";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -71,6 +72,16 @@ export function NewProjectForm({ types }: { types: ProjectTypeOption[] }) {
               rows={2}
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="np-start">Začátek (volitelné)</Label>
+              <DateInput id="np-start" name="startDate" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="np-planned">Očekávané dokončení</Label>
+              <DateInput id="np-planned" name="plannedEnd" />
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

@@ -322,14 +322,33 @@ export default async function ProjectDetailPage({
     if (subId) for (const sid of [subId, ...ancestorsOf(subId)]) forecastBySub.set(sid, (forecastBySub.get(sid) ?? 0) + amount);
   };
   if (!onlyMine) {
+    // Cena žádanky, jinak vybraná / nejlevnější nabídka (bez cen byl forecast prázdný).
+    const reqPrice = (r: (typeof project.requests)[number]) => {
+      if (r.price != null) return Number(r.price);
+      const priced = r.offers.filter((o) => o.price != null);
+      const chosen = priced.find((o) => o.selected) ?? [...priced].sort((x, y) => Number(x.price) - Number(y.price))[0];
+      return chosen ? Number(chosen.price) : null;
+    };
     const fcReqs = project.requests
-      .filter((r) => REQUEST_FORECAST_STATUSES.includes(r.status) && r.price != null)
+      .filter((r) => REQUEST_FORECAST_STATUSES.includes(r.status) && reqPrice(r) != null)
       .map((r) => ({
-        price: Number(r.price),
+        price: reqPrice(r)!,
         taskId: r.taskId,
         subId: r.subProjectId,
         realOnRequest: realByReq.get(r.id) ?? 0,
       }));
+    // Odhady nákladů v plánu – dokud úkol nemá žádanku a není hotový;
+    // u fáze jen, když odhad nemá žádný její úkol (viz server/finance.ts).
+    const tasksWithReq = new Set(project.requests.map((r) => r.taskId).filter(Boolean));
+    const kidHasEstimate = new Set(project.tasks.filter((t) => t.parentId && t.costEstimate != null).map((t) => t.parentId));
+    for (const t of project.tasks)
+      if (
+        t.costEstimate != null &&
+        !tasksWithReq.has(t.id) &&
+        !TASK_DONE_STATUSES.includes(t.status) &&
+        !kidHasEstimate.has(t.id)
+      )
+        fcReqs.push({ price: Number(t.costEstimate), taskId: t.id, subId: t.subProjectId, realOnRequest: 0 });
     const fcTasks = project.tasks.map((t) => ({ id: t.id, parentId: t.parentId }));
     for (const c of computeForecastContribs(fcReqs, fcTasks, realByTask)) addForecast(c.amount, c.subId);
   }
@@ -661,6 +680,17 @@ export default async function ProjectDetailPage({
             <h1 className="display mt-1 text-4xl text-stone-950">
               {currentSub ? currentSub.name : project.name}
             </h1>
+            {!currentSub && (project.startDate || project.plannedEnd || project.actualEnd) && (
+              <p className="kicker mt-2 flex flex-wrap gap-x-3">
+                {project.startDate && <span>začátek {formatDate(project.startDate)}</span>}
+                {project.plannedEnd && (
+                  <span className={!project.actualEnd && project.plannedEnd < todayStart ? "text-red-600" : undefined}>
+                    očekávané dokončení {formatDate(project.plannedEnd)}
+                  </span>
+                )}
+                {project.actualEnd && <span className="text-emerald-700">dokončeno {formatDate(project.actualEnd)}</span>}
+              </p>
+            )}
             {(currentSub ? currentSub.description : project.description) && (
               <p className="mt-2 max-w-md text-sm text-stone-500">
                 {currentSub ? currentSub.description : project.description}
@@ -763,6 +793,9 @@ export default async function ProjectDetailPage({
                     name: project.name,
                     type: project.type,
                     description: project.description,
+                    startDate: project.startDate?.toISOString().slice(0, 10) ?? null,
+                    plannedEnd: project.plannedEnd?.toISOString().slice(0, 10) ?? null,
+                    actualEnd: project.actualEnd?.toISOString().slice(0, 10) ?? null,
                     defaultKind: project.defaultKind,
                     defaultCategory: project.defaultCategory,
                     defaultCurrency: project.defaultCurrency,

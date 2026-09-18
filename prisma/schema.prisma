@@ -240,6 +240,10 @@ model Project {
   defaultKind     String? // výchozí druh nového výdaje (expense | work)
   defaultCategory String? // výchozí kategorie
   defaultCurrency String? // výchozí měna
+  // Termíny projektu: začátek, očekávané dokončení (plán) a skutečné dokončení.
+  startDate   DateTime?
+  plannedEnd  DateTime?
+  actualEnd   DateTime?
   ownerId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -254,6 +258,7 @@ model Project {
   subProjects SubProject[]
   tasks       Task[]
 
+  planDrafts  PlanDraft[]
   @@index([ownerId])
 }
 
@@ -303,6 +308,8 @@ model Task {
   priority      String? // high | medium | low (volitelné)
   profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
   estimateDays  Int? // odhad doby trvání ve dnech
+  costEstimate  Decimal?  @db.Decimal(12, 2) // odhad nákladů (AI plán / ručně) – do forecastu, dokud ho nepokryje žádanka
+  procurement   String? // co poptat u dodavatele (AI plán) – tlačítkem z toho vznikne žádanka
   actualStart   DateTime? // skutečný začátek (první rozdělání) – realita vs. odhad
   actualEnd     DateTime? // skutečný konec (dokončení)
   dateLocked    Boolean   @default(false) // termín zadán ručně → automatický přepočet ho nepřepíše
@@ -661,5 +668,26 @@ model OfferComparison {
   request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId])
+  @@index([createdAt])
+}
+
+// AI plán projektu z dokumentace (#34): návrh fází a úkolů s odhady podle katalogu.
+model PlanDraft {
+  id          String   @id @default(cuid())
+  projectId   String
+  status      String   @default("running") // running | ready | error | applied | dismissed
+  prompt      String?
+  documentIds String[]
+  result      Json?
+  error       String?
+  model       String
+  costUsd     Float?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
   @@index([createdAt])
 }

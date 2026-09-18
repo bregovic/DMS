@@ -6,6 +6,7 @@ import { updateProject } from "@/server/actions/projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateInput } from "@/components/ui/date-input";
 import { ProjectAccess } from "@/components/projects/project-access";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 
@@ -20,6 +21,9 @@ type ProjectData = {
   defaultKind: string | null;
   defaultCategory: string | null;
   defaultCurrency: string | null;
+  startDate: string | null; // YYYY-MM-DD
+  plannedEnd: string | null;
+  actualEnd: string | null;
 };
 
 export function ProjectSettings({
@@ -96,6 +100,21 @@ export function ProjectSettings({
                 defaultValue={project.description ?? ""}
                 placeholder="Volitelné"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ps-start">Začátek</Label>
+              <DateInput id="ps-start" name="startDate" defaultValue={project.startDate ?? ""} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ps-planned">Očekávané dokončení</Label>
+              <DateInput id="ps-planned" name="plannedEnd" defaultValue={project.plannedEnd ?? ""} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ps-end">Dokončeno</Label>
+              <DateInput id="ps-end" name="actualEnd" defaultValue={project.actualEnd ?? ""} />
             </div>
           </div>
 

@@ -13,6 +13,14 @@ const projectSchema = z.object({
   description: z.string().optional(),
 });
 
+/** Datum z formuláře (YYYY-MM-DD) nebo null. */
+function dateOrNull(v: FormDataEntryValue | null): Date | null {
+  const s = String(v || "").trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function createProject(formData: FormData) {
   const user = await requireUser();
 
@@ -43,6 +51,8 @@ export async function createProject(formData: FormData) {
       name: parsed.data.name,
       description: parsed.data.description,
       type,
+      startDate: dateOrNull(formData.get("startDate")),
+      plannedEnd: dateOrNull(formData.get("plannedEnd")),
       ownerId: user.id,
     },
   });
@@ -86,6 +96,9 @@ export async function updateProject(formData: FormData) {
       defaultKind: String(formData.get("defaultKind") || "").trim() || null,
       defaultCategory: String(formData.get("defaultCategory") || "").trim() || null,
       defaultCurrency: String(formData.get("defaultCurrency") || "").trim() || null,
+      startDate: dateOrNull(formData.get("startDate")),
+      plannedEnd: dateOrNull(formData.get("plannedEnd")),
+      actualEnd: dateOrNull(formData.get("actualEnd")),
     },
   });
 

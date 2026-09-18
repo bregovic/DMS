@@ -6,8 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { ProjectIcon } from "@/components/projects/project-icon";
 import { QuickAdd } from "@/components/app/quick-add";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { REQUEST_FORECAST_STATUSES } from "@/lib/constants";
-import { computeForecastContribs } from "@/lib/forecast";
+import { projectFinance } from "@/server/finance";
 import { getExpenseCategoryMap, getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
 import { getStatuses } from "@/server/statuses";
@@ -48,10 +47,10 @@ export default async function DashboardPage({
   const writableIds = writable.map((a) => a.project.id);
   const projectsList = accessible.slice(0, 5).map((a) => a.project);
 
+  // Finance po projektech: vlastní a spravované (člen) – dodavatel rozpočet nevidí.
+  const financeProjects = accessible.filter((a) => a.role === "owner" || a.role === "member");
   const [
-    expenseAgg,
-    incomeAgg,
-    forecastReqs,
+    finance,
     recentExpenses,
     catMap,
     vendorRows,
@@ -59,26 +58,13 @@ export default async function DashboardPage({
     docTypes,
     expenseStatuses,
     taskStatuses,
-    fcTaskRows,
-    fcTaskExpenses,
   ] = await Promise.all([
-    prisma.expense.aggregate({
-      where: { project: { ownerId: user.id }, ...dateWhere },
-      _sum: { amount: true },
-      _count: true,
-    }),
-    prisma.income.aggregate({
-      where: { project: { ownerId: user.id }, ...dateWhere },
-      _sum: { amount: true },
-    }),
-    prisma.request.findMany({
-      where: {
-        project: { ownerId: user.id },
-        status: { in: REQUEST_FORECAST_STATUSES },
-        price: { not: null },
-      },
-      select: { price: true, taskId: true, subProjectId: true, expenses: { select: { amount: true } } },
-    }),
+    projectFinance(
+      financeProjects.map((a) => a.project.id),
+      periodActive
+        ? { ...(periodOk(from) ? { gte: from as Date } : {}), ...(periodOk(to) ? { lte: to as Date } : {}) }
+        : undefined,
+    ),
     prisma.expense.findMany({
       where: { project: { ownerId: user.id } },
       orderBy: { date: "desc" },
@@ -95,8 +81,6 @@ export default async function DashboardPage({
     getDocumentTypes(),
     getStatuses("expense"),
     getStatuses("task"),
-    prisma.task.findMany({ where: { project: { ownerId: user.id } }, select: { id: true, parentId: true } }),
-    prisma.expense.findMany({ where: { project: { ownerId: user.id }, taskId: { not: null } }, select: { taskId: true, amount: true } }),
   ]);
   const quickVendors = vendorRows.map((v) => ({
     id: v.id,
@@ -156,58 +140,16 @@ export default async function DashboardPage({
     (titlesByProject[t.projectId] ??= []).push(t.title);
   }
 
-  const totalSpent = Number(expenseAgg._sum.amount ?? 0);
-  const totalIncome = Number(incomeAgg._sum.amount ?? 0);
-  const saldo = totalIncome - totalSpent;
-  // Forecast: zbývající výdaje potvrzených žádanek (cena − navázané reálné výdaje),
-  // s roll-up offsetem výdajů navázaných na úkol/fázi přes celý podstrom.
-  const realByTask = new Map<string, number>();
-  for (const e of fcTaskExpenses) {
-    if (!e.taskId) continue;
-    realByTask.set(e.taskId, (realByTask.get(e.taskId) ?? 0) + Number(e.amount));
-  }
-  const totalForecast = computeForecastContribs(
-    forecastReqs.map((r) => ({
-      price: Number(r.price ?? 0),
-      taskId: r.taskId,
-      subId: r.subProjectId,
-      realOnRequest: r.expenses.reduce((a, e) => a + Number(e.amount), 0),
-    })),
-    fcTaskRows.map((t) => ({ id: t.id, parentId: t.parentId })),
-    realByTask,
-  ).reduce((s, c) => s + c.amount, 0);
-  const expectedSaldo = totalIncome - totalSpent - totalForecast;
-
-  const stats = [
-    { label: "Projekty", value: String(accessible.length), className: "text-stone-950" },
-    // s filtrem už to nejsou „celkové" částky, ať to nemate
-    {
-      label: periodActive ? "Příjmy za období" : "Celkové příjmy",
-      value: formatCurrency(totalIncome),
-      className: "text-stone-950",
-    },
-    {
-      label: periodActive ? "Výdaje za období" : "Celkové výdaje",
-      value: formatCurrency(totalSpent),
-      className: "text-stone-950",
-    },
-    {
-      // forecast = co teprve přijde, obdobím se neomezuje
-      label: "Forecast výdajů",
-      value: formatCurrency(totalForecast),
-      className: "text-amber-600",
-    },
-    {
-      label: "Saldo",
-      value: formatCurrency(saldo),
-      className: saldo < 0 ? "text-red-600" : "text-emerald-700",
-    },
-    {
-      label: "Oček. saldo",
-      value: formatCurrency(expectedSaldo),
-      className: expectedSaldo < 0 ? "text-red-600" : "text-emerald-700",
-    },
-  ];
+  const rows = financeProjects.map((a) => {
+    const f = finance.get(a.project.id)!;
+    return { project: a.project, ...f, saldo: f.income - f.spent, expected: f.income - f.spent - f.forecast };
+  });
+  const sum = (k: "income" | "spent" | "forecast" | "saldo" | "expected") => rows.reduce((x, r) => x + r[k], 0);
+  const money = (v: number, tone?: "saldo") => (
+    <span className={tone === "saldo" ? (v < 0 ? "text-red-600" : v > 0 ? "text-emerald-700" : "text-stone-400") : v ? "text-stone-950" : "text-stone-300"}>
+      {formatCurrency(v)}
+    </span>
+  );
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -247,18 +189,57 @@ export default async function DashboardPage({
         )}
       </form>
 
-      {/* Statistiky – karty s jemným stínem */}
-      <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="border border-stone-200 bg-white px-6 py-6 shadow-soft"
-          >
-            <p className="kicker">{s.label}</p>
-            <p className={`display mt-2 text-3xl ${s.className}`}>{s.value}</p>
+      {/* Finance po projektech – příjmy, výdaje, forecast (co ještě zaplatíme)
+          a saldo. Dřív tu byly jen součty za všechno dohromady. */}
+      {rows.length > 0 && (
+        <section className="mb-12 border border-stone-200 bg-white shadow-soft">
+          <div className="-mx-px overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 text-left">
+                  <th className="kicker px-4 py-3 font-normal">{periodActive ? "Projekt · za období" : "Projekt"}</th>
+                  <th className="kicker px-4 py-3 text-right font-normal">Příjmy</th>
+                  <th className="kicker px-4 py-3 text-right font-normal">Výdaje</th>
+                  <th className="kicker px-4 py-3 text-right font-normal" title="Co ještě zaplatíme: žádanky (cena nebo nabídka) a odhady v plánu, minus už zaplacené">
+                    Forecast
+                  </th>
+                  <th className="kicker px-4 py-3 text-right font-normal">Saldo</th>
+                  <th className="kicker px-4 py-3 text-right font-normal">Oček. saldo</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono tabular-nums">
+                {rows.map((r) => (
+                  <tr key={r.project.id} className="border-b border-stone-100 hover:bg-stone-50">
+                    <td className="px-4 py-3 font-sans">
+                      <Link href={`/projects/${r.project.id}`} className="flex items-center gap-2.5 text-stone-950 underline-offset-4 hover:underline">
+                        <ProjectIcon type={r.project.type} className="size-4 shrink-0 text-stone-600" />
+                        {r.project.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right">{money(r.income)}</td>
+                    <td className="px-4 py-3 text-right">{money(r.spent)}</td>
+                    <td className="px-4 py-3 text-right text-amber-600">{r.forecast ? formatCurrency(r.forecast) : money(0)}</td>
+                    <td className="px-4 py-3 text-right">{money(r.saldo, "saldo")}</td>
+                    <td className="px-4 py-3 text-right">{money(r.expected, "saldo")}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {rows.length > 1 && (
+                <tfoot className="font-mono tabular-nums">
+                  <tr className="border-t border-stone-300 font-medium">
+                    <td className="kicker px-4 py-3 font-sans">Celkem</td>
+                    <td className="px-4 py-3 text-right">{money(sum("income"))}</td>
+                    <td className="px-4 py-3 text-right">{money(sum("spent"))}</td>
+                    <td className="px-4 py-3 text-right text-amber-600">{formatCurrency(sum("forecast"))}</td>
+                    <td className="px-4 py-3 text-right">{money(sum("saldo"), "saldo")}</td>
+                    <td className="px-4 py-3 text-right">{money(sum("expected"), "saldo")}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
-        ))}
-      </div>
+        </section>
+      )}
 
       <div className="grid gap-12 lg:grid-cols-2">
         {/* Projekty */}
