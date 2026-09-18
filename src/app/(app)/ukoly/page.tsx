@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { listProjectsForUser } from "@/server/access";
 import { getStatuses } from "@/server/statuses";
-import { TaskDoneCheckbox } from "@/components/tasks/task-done-checkbox";
+import { BulkLogBar, PICK_ATTR } from "@/components/tasks/bulk-log-bar";
 import { LogTaskExpense } from "@/components/tasks/log-task-expense";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TASK_DONE_STATUSES, priorityColor, priorityLabel } from "@/lib/constants";
@@ -156,7 +156,18 @@ export default async function MyTasksPage() {
     const col = colorClasses(statusColor.get(t.status) ?? "stone");
     return (
       <li className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-stone-200 py-3.5">
-        <TaskDoneCheckbox id={t.id} done={finished} />
+        {!finished ? (
+          <input
+            type="checkbox"
+            value={t.id}
+            {...{ [PICK_ATTR]: "" }}
+            aria-label={`Vybrat: ${t.title}`}
+            title="Vybrat pro vykázání na víc úkolů najednou"
+            className="mt-0.5 size-5 shrink-0 cursor-pointer accent-stone-900"
+          />
+        ) : (
+          <span className="mt-0.5 size-5 shrink-0" />
+        )}
         <div className="min-w-0 flex-1 basis-52">
           <p className={`text-sm font-medium ${finished ? "text-stone-400 line-through" : "text-stone-950"}`}>
             {t.title}
@@ -190,6 +201,8 @@ export default async function MyTasksPage() {
               taskId={t.id}
               taskTitle={t.title}
               defaultRate={t.vendor?.hourlyRate != null ? Number(t.vendor.hourlyRate) : null}
+              percentDone={t.percentDone}
+              dueDate={t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null}
             />
           </div>
         )}
@@ -251,6 +264,19 @@ export default async function MyTasksPage() {
               ))}
             </section>
           )}
+
+          <BulkLogBar
+            tasks={open.map((t) => ({
+              id: t.id,
+              title: t.title,
+              percent: t.percentDone,
+              due: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+            }))}
+            defaultRate={(() => {
+              const v = open.find((t) => t.vendor?.hourlyRate != null)?.vendor?.hourlyRate;
+              return v != null ? Number(v) : null;
+            })()}
+          />
 
           {done.length > 0 && (
             <details className="mt-4">
