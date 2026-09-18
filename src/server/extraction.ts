@@ -146,14 +146,15 @@ export async function monthlyAiSpend() {
   const start = new Date();
   start.setUTCDate(1);
   start.setUTCHours(0, 0, 0, 0);
-  const [a, b] = await Promise.all([
+  const [a, b, c] = await Promise.all([
     prisma.extraction.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
     prisma.offerComparison.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
+    prisma.planDraft.aggregate({ where: { createdAt: { gte: start } }, _sum: { costUsd: true } }),
   ]);
-  return (a._sum.costUsd ?? 0) + (b._sum.costUsd ?? 0);
+  return (a._sum.costUsd ?? 0) + (b._sum.costUsd ?? 0) + (c._sum.costUsd ?? 0);
 }
 
-async function assertBudget() {
+export async function assertBudget() {
   if (!process.env.OPENAI_API_KEY) throw new Error("AI není nastavená (chybí OPENAI_API_KEY).");
   if ((await monthlyAiSpend()) >= MONTHLY_LIMIT_USD)
     throw new Error(`Měsíční limit pro AI (${MONTHLY_LIMIT_USD} USD) je vyčerpaný.`);
@@ -174,7 +175,7 @@ export function extractable(mimeType: string, name: string) {
 }
 
 /** Obsah souboru pro model: PDF / obrázek přímo, ostatní jako text. */
-async function filePart(buf: Buffer, name: string, mimeType: string) {
+export async function filePart(buf: Buffer, name: string, mimeType: string) {
   const e = ext(name);
   if (mimeType === "application/pdf" || e === "pdf")
     return { type: "input_file", filename: name, file_data: `data:application/pdf;base64,${buf.toString("base64")}` };
@@ -223,7 +224,7 @@ async function filePart(buf: Buffer, name: string, mimeType: string) {
 }
 
 /** Jedno volání OpenAI se strukturovaným výstupem. */
-async function callModel<T>(
+export async function callModel<T>(
   model: string,
   system: string,
   content: unknown[],
@@ -233,7 +234,7 @@ async function callModel<T>(
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(240_000),
+    signal: AbortSignal.timeout(420_000), // plán z několika PDF trvá i minuty
     body: JSON.stringify({
       model,
       input: [

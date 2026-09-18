@@ -10,8 +10,8 @@ export type ProjectFinance = { income: number; spent: number; forecast: number }
  * Forecast = co ještě zaplatíme:
  *  - žádanky: cena žádanky, jinak vybraná nabídka, jinak nejlevnější nabídka
  *    (dřív jen žádanky s vyplněnou cenou – bez cen byl forecast prázdný),
- *  - odhady nákladů u úkolů (AI plán / ručně), dokud úkol nemá žádanku
- *    a není hotový; u fáze jen, když odhad nemá žádný její úkol,
+ *  - odhady nákladů u úkolů (AI plán / ručně), dokud žádanka k úkolu nemá
+ *    cenu ani nabídku a úkol není hotový; u fáze jen, když odhad nemá žádný její úkol,
  *  - minus reálné výdaje navázané na žádanku / úkol (viz computeForecastContribs).
  */
 export async function projectFinance(
@@ -53,7 +53,6 @@ export async function projectFinance(
         subProjectId: true,
         status: true,
         costEstimate: true,
-        _count: { select: { requests: true } },
       },
     }),
     prisma.expense.findMany({
@@ -74,6 +73,7 @@ export async function projectFinance(
 
   for (const pid of projectIds) {
     const inputs: ForecastRequestInput[] = [];
+    const pricedTasks = new Set<string>();
     for (const r of reqs) {
       if (r.projectId !== pid) continue;
       const priced = r.offers.filter((o) => o.price != null);
@@ -81,6 +81,7 @@ export async function projectFinance(
       const cheapest = priced.sort((a, b) => Number(a.price) - Number(b.price))[0];
       const price = r.price ?? chosen?.price ?? cheapest?.price ?? null;
       if (price == null) continue;
+      if (r.taskId) pricedTasks.add(r.taskId);
       inputs.push({
         price: Number(price),
         taskId: r.taskId,
@@ -90,7 +91,8 @@ export async function projectFinance(
     }
     const ptasks = tasks.filter((t) => t.projectId === pid);
     for (const t of ptasks) {
-      if (t.costEstimate == null || t._count.requests > 0) continue;
+      // Odhad platí, dokud žádanka k úkolu nemá cenu (ani nabídku).
+      if (t.costEstimate == null || pricedTasks.has(t.id)) continue;
       if (TASK_DONE_STATUSES.includes(t.status)) continue;
       if (kidHasEstimate.has(t.id)) continue;
       inputs.push({ price: Number(t.costEstimate), taskId: t.id, subId: t.subProjectId, realOnRequest: 0 });

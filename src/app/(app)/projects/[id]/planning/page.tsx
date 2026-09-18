@@ -8,6 +8,9 @@ import { getProjectAccess, expandScope } from "@/server/access";
 import { GanttChart } from "@/components/planning/gantt-chart";
 import { buildProjectGantt } from "@/server/planning";
 import { recomputeSchedule } from "@/server/actions/tasks";
+import { PlanAi } from "@/components/planning/plan-ai";
+import { planAiProps } from "@/server/plan-ai";
+import { isManager } from "@/server/access";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +185,12 @@ export default async function ProjectPlanningPage({
           )}
         </div>
       </header>
+
+      {isManager(access.role) && (
+        <div className="mb-6">
+          <PlanAi {...await planAiProps(project.id)} />
+        </div>
+      )}
 
       {/* Filtry – výchozí sbalené (standard filtrů, viz src/lib/list-filter.ts) */}
       <details className="group/filtr mb-6">

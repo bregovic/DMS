@@ -18,6 +18,8 @@ import { RequestStatusSelect } from "@/components/requests/request-status-select
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { RequestAttachments } from "@/components/requests/request-attachments";
 import { OfferComparison } from "@/components/requests/offer-comparison";
+import { PlanAi } from "@/components/planning/plan-ai";
+import { planAiProps } from "@/server/plan-ai";
 import type { ComparisonResult } from "@/server/extraction";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
@@ -337,9 +339,9 @@ export default async function ProjectDetailPage({
         subId: r.subProjectId,
         realOnRequest: realByReq.get(r.id) ?? 0,
       }));
-    // Odhady nákladů v plánu – dokud úkol nemá žádanku a není hotový;
+    // Odhady nákladů v plánu – dokud žádanka k úkolu nemá cenu a úkol není hotový;
     // u fáze jen, když odhad nemá žádný její úkol (viz server/finance.ts).
-    const tasksWithReq = new Set(project.requests.map((r) => r.taskId).filter(Boolean));
+    const tasksWithReq = new Set(project.requests.filter((r) => reqPrice(r) != null).map((r) => r.taskId).filter(Boolean));
     const kidHasEstimate = new Set(project.tasks.filter((t) => t.parentId && t.costEstimate != null).map((t) => t.parentId));
     for (const t of project.tasks)
       if (
@@ -1426,6 +1428,11 @@ export default async function ProjectDetailPage({
           )
         }
       >
+        {isManager && sub === null && (
+          <div className="mb-4">
+            <PlanAi {...await planAiProps(project.id)} />
+          </div>
+        )}
         {planTasks.length > 0 && (
           <ListFilters
             prefix="t"
