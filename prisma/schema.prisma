@@ -468,6 +468,7 @@ model Document {
   offerId      String?
   requestId    String? // příloha hlavičky žádanky – e-mail, nabídka v PDF (#32)
   summary      String? // u e-mailu "Od · Předmět", ať je vidět bez otevírání
+  note         String? // poznámka uživatele – např. změny oproti dokumentaci (AI ji bere v potaz)
   fileName     String // klíč v úložišti (storage key)
   originalName String
   mimeType     String

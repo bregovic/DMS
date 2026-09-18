@@ -82,6 +82,7 @@ Formát katalogu (dodrž ho přesně):
 - operation.unit = měrná jednotka úkonu (m2, bm, m3, ks, kpl…); code = krátký kód VELKÝMI písmeny s pomlčkou (např. FAS-ETICS), name česky.
 - params = vstupní parametry; klíč bez diakritiky malými písmeny. Standardně jediný parametr "mnozstvi" (Množství v MJ úkonu); další jen když opravdu pomohou (např. "tloustka" izolace v mm).
 - quantityFormula = množství v MJ z parametrů (typicky "mnozstvi"); laborFormula = normohodiny celkem (např. "0.9 * mnozstvi"); povolené jsou + - * / závorky a čísla s desetinnou tečkou.
+- laborFormula realisticky podle ceníků ÚRS/RTS a praxe – započítej všechny pracovní kroky (např. ETICS ~0,8–1,2 Nh/m2, zdění ~0,6–0,9 Nh/m2).
 - laborRate = hodinová sazba práce v Kč (ČR 2026, bez materiálu); crew = počet lidí v partě; techPauseDays = technologická pauza po činnosti (zrání, vysychání) nebo null.
 - materials = recept: spotřeba materiálu na úkon (quantityFormula z parametrů, např. "1.05 * mnozstvi" nebo "0.004 * mnozstvi" pro m3); wastePct = prořez v %.
   Když materiál odpovídá některému ze stávajících, dej jeho kód do existingCode (a jeho jednotku). Jinak nový kód, název, jednotku, category.

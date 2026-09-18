@@ -138,7 +138,7 @@ export async function runPlanDraft(draftId: string) {
       }),
       prisma.document.findMany({
         where: { id: { in: d.documentIds }, projectId: p.id },
-        select: { fileName: true, originalName: true, mimeType: true },
+        select: { fileName: true, originalName: true, mimeType: true, note: true },
       }),
     ]);
 
@@ -169,6 +169,8 @@ export async function runPlanDraft(draftId: string) {
         technologickaPauzaDni: o.techPauseDays,
       })),
       nepodarilo_se_precist: skipped,
+      // „Změny oproti dokumentaci“ od uživatele – mají přednost před dokumentací.
+      poznamkyKDokumentum: docs.filter((x) => x.note).map((x) => ({ soubor: x.originalName, poznamka: x.note })),
     };
 
     const { data, costUsd } = await callModel<PlanResult>(
@@ -180,6 +182,7 @@ export async function runPlanDraft(draftId: string) {
           text:
             `Kontext projektu (JSON):\n${JSON.stringify(context, null, 1)}` +
             (context.uzExistujiciUkoly.length ? "\nNeduplikuj úkoly, které už v projektu jsou." : "") +
+            (context.poznamkyKDokumentum.length ? "\nPoznámky uživatele k dokumentům popisují změny oproti dokumentaci – mají přednost." : "") +
             (d.prompt ? `\n\nPokyn uživatele: ${d.prompt}` : "") +
             (parts.length ? "" : "\n\nDokumentace není přiložená – plán postav z popisu projektu a uveď to v missingInfo."),
         },

@@ -241,3 +241,20 @@ export async function deleteDocument(formData: FormData) {
 
   revalidatePath(`/projects/${doc.projectId}`);
 }
+
+/** Poznámka k dokumentu – např. co se oproti dokumentaci změnilo (AI ji použije). */
+export async function updateDocumentNote(formData: FormData) {
+  const user = await requireUser();
+  const doc = await prisma.document.findUnique({
+    where: { id: String(formData.get("id")) },
+    select: { id: true, projectId: true },
+  });
+  if (!doc) throw new Error("Dokument nenalezen.");
+  if (!isManager(await getProjectRole(doc.projectId, user))) throw new Error("Poznámku mění správce projektu.");
+  await prisma.document.update({
+    where: { id: doc.id },
+    data: { note: String(formData.get("note") || "").trim().slice(0, 4000) || null },
+  });
+  revalidatePath(`/projects/${doc.projectId}`);
+  revalidatePath(`/projects/${doc.projectId}/prilohy`);
+}

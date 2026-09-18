@@ -83,8 +83,8 @@ export async function applyPlanDraft(formData: FormData) {
   const DAY = 86400000;
   const now = new Date();
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  // Nové fáze jdou za ty, co už v plánu jsou; jinak od začátku projektu / dneška.
-  let base = Math.max(today, project?.startDate?.getTime() ?? 0, lastPhase?.dueDate ? lastPhase.dueDate.getTime() + DAY : 0);
+  // Nové fáze za ty, co už v plánu jsou; jinak od začátku projektu (i zpětně), jinak od dneška.
+  let base = lastPhase?.dueDate ? lastPhase.dueDate.getTime() + DAY : (project?.startDate?.getTime() ?? today);
   // Plánovač řadí fáze podle začátku a úkoly podle vzniku – obojí musí jít
   // v pořadí návrhu, i když se zakládá v jedné transakci.
   let stamp = Date.now();

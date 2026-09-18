@@ -11,6 +11,7 @@ import { UploadForm } from "@/components/documents/upload-form";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteDocument } from "@/server/actions/documents";
 import { FileText } from "lucide-react";
+import { DocumentNote } from "@/components/documents/document-note";
 import {
   AttachmentsBrowser,
   type BrowserItem,
@@ -59,7 +60,7 @@ export default async function AttachmentsPage({
         prisma.document.findMany({
           where: { projectId: id, expenseId: null, requestId: null, offerId: null },
           orderBy: { createdAt: "desc" },
-          select: { id: true, originalName: true, size: true, type: true, createdAt: true },
+          select: { id: true, originalName: true, size: true, type: true, createdAt: true, note: true },
         }),
         getDocumentTypes(),
       ]);
@@ -101,7 +102,8 @@ export default async function AttachmentsPage({
           {projectDocs.length > 0 && (
             <ul className="mt-3">
               {projectDocs.map((d) => (
-                <li key={d.id} className="group flex items-center gap-2 border-b border-stone-200 py-2.5 text-sm">
+                <li key={d.id} className="group border-b border-stone-200 py-2.5 text-sm">
+                  <div className="flex items-center gap-2">
                   <FileText className="size-4 shrink-0 text-stone-400" />
                   <a
                     href={`/api/documents/${d.id}`}
@@ -119,6 +121,10 @@ export default async function AttachmentsPage({
                       <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat tento dokument?" />
                     </span>
                   )}
+                  </div>
+                  <div className="pl-6">
+                    <DocumentNote id={d.id} note={d.note} canEdit={canUpload} />
+                  </div>
                 </li>
               ))}
             </ul>

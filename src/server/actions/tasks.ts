@@ -426,6 +426,13 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     },
   });
   const byId = new Map(tasks.map((t) => [t.id, t]));
+  // Začátek projektu = kotva plánu: první fáze (a úkoly bez návaznosti a bez
+  // pevného termínu) začínají od něj – i zpětně, když se plán zapisuje podle
+  // skutečnosti. Změna začátku projektu tak přeplánuje vše, co není ukotvené.
+  const proj = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } });
+  const PROJECT_START = proj?.startDate
+    ? Date.UTC(proj.startDate.getUTCFullYear(), proj.startDate.getUTCMonth(), proj.startDate.getUTCDate())
+    : null;
 
   // dílčí úkoly fází (řazené dle vzniku)
   const childrenOf = new Map<string, typeof tasks>();
@@ -572,7 +579,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
             ? explicitPred.has(uid)
               ? depFloor // výslovná návaznost: hned za předchůdcem
               : Math.max(depFloor, curS ?? depFloor) // implicitní pořadí: jen dopředu
-            : (curS ?? TODAY);
+            : (PROJECT_START ?? curS ?? TODAY); // první fáze od začátku projektu
       const dates: { start: number; end: number }[] = [];
       for (const k of kids) {
         let s: number, e: number;
@@ -594,8 +601,8 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
           cursor = Math.max(cursor, e + DAY_MS);
         } else {
           const dur = Math.max(k.estimateDays ?? 1, 1);
-          // Nezačatá práce nemůže začít v minulosti.
-          cursor = Math.max(cursor, TODAY);
+          // Nezačatá práce se plánuje podle pořadí – i do minulosti (plán
+          // zpětně podle dokumentace); co je po termínu, zčervená.
           const av = bookAvail(k.vendorId, cursor, dur);
           if (av) { s = av.start; e = av.end; } // dle dostupnosti dodavatele
           else { s = cursor; e = s + (dur - 1) * DAY_MS; } // kalendářní dny
@@ -627,7 +634,7 @@ async function scheduleProject(projectId: string, subProjectId: string | null) {
     // 4) Samostatný úkol (nebo prázdná fáze) s odhadem dní → plán dle dostupnosti.
     const hasDur = (u.estimateDays ?? 0) > 0;
     if (hasDur && !(u.kind === "phase" && done(u.status))) {
-      const cursor = Math.max(depFloor ?? curS ?? TODAY, TODAY);
+      const cursor = depFloor ?? (u.dateLocked ? curS : null) ?? PROJECT_START ?? curS ?? TODAY;
       const dur = Math.max(u.estimateDays!, 1);
       const av = bookAvail(u.vendorId, cursor, dur);
       const s = av ? av.start : cursor;

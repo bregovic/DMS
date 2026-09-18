@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { slugifyType } from "@/server/project-types";
 import { deleteWithFiles } from "@/server/document-files";
+import { recomputeSchedule } from "@/server/actions/tasks";
 
 const projectSchema = z.object({
   name: z.string().min(1, "Zadej název projektu."),
@@ -66,7 +67,7 @@ export async function updateProject(formData: FormData) {
   const id = String(formData.get("id"));
   const project = await prisma.project.findFirst({
     where: { id, ownerId: user.id },
-    select: { id: true },
+    select: { id: true, startDate: true },
   });
   if (!project) throw new Error("Nemáš oprávnění.");
 
@@ -101,6 +102,14 @@ export async function updateProject(formData: FormData) {
       actualEnd: dateOrNull(formData.get("actualEnd")),
     },
   });
+
+  // Nový začátek projektu → přeplánovat vše, co nemá pevný termín.
+  const newStart = dateOrNull(formData.get("startDate"));
+  if ((newStart?.getTime() ?? null) !== (project.startDate?.getTime() ?? null) && newStart) {
+    const fd = new FormData();
+    fd.set("projectId", id);
+    await recomputeSchedule(fd);
+  }
 
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");

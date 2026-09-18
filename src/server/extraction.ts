@@ -313,7 +313,7 @@ export async function callModel<T>(
       ],
       text: { format: { type: "json_schema", name, strict: true, schema } },
       reasoning: { effort: opts.effort ?? "low" },
-      ...(opts.webSearch ? { tools: [{ type: "web_search" }] } : {}),
+      ...(opts.webSearch ? { tools: [{ type: "web_search", search_context_size: "low" }] } : {}),
       max_output_tokens: opts.maxOutput ?? 12_000,
     }),
   });
@@ -375,7 +375,7 @@ export async function runExtraction(extractionId: string) {
         requestId: true,
         model: true,
         instructions: true,
-        document: { select: { fileName: true, originalName: true, mimeType: true } },
+        document: { select: { fileName: true, originalName: true, mimeType: true, note: true } },
       },
     });
     if (!ex) return;
@@ -403,7 +403,8 @@ export async function runExtraction(extractionId: string) {
           type: "input_text",
           text:
             `Otevřené poptávky projektu (attachedHere = dokument je přiložený u této):\n${JSON.stringify(reqList, null, 1)}` +
-            (ex.instructions ? `\n\nPokyn uživatele: ${ex.instructions}` : ""),
+            (ex.instructions ? `\n\nPokyn uživatele: ${ex.instructions}` : "") +
+            (ex.document.note ? `\n\nPoznámka uživatele k dokumentu (změny oproti němu): ${ex.document.note}` : ""),
         },
         part,
       ],
