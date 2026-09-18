@@ -548,6 +548,12 @@ export function TaskDetailDialog({
             {d.candidates.length > 0 && (
               <div className="space-y-1.5">
                 <Label>{d.kind === "phase" ? "Navazuje na fáze" : "Navazuje na úkoly"}</Label>
+                {d.kind === "phase" && (
+                  <p className="text-[11px] text-stone-400">
+                    Nic nezaškrtnuto = fáze jde hned za předchozí fází. Zaškrtnuté = začne hned po nich – fáze navazující
+                    na stejnou fázi běží souběžně (např. Voda i Elektro po Obálce). Pevný termín: přetáhni fázi v Ganttu.
+                  </p>
+                )}
                 <div className="max-h-44 space-y-1 overflow-y-auto border border-stone-200 p-2">
                   {d.candidates.map((cd) => (
                     <label key={cd.id} className="flex items-center gap-2 text-sm text-stone-700">
