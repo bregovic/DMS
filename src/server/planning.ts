@@ -18,6 +18,7 @@ export type PlanTaskRow = {
   parentId: string | null;
   kind: string;
   percentDone: number;
+  estimateDays?: number | null;
   subProject: { name: string } | null;
   dependsOn: { dependsOn: { id: string; title: string; status: string } }[];
   requests?: {
@@ -225,8 +226,22 @@ export function buildProjectGantt(
         const blockers = (t.dependsOn ?? [])
           .map((d) => d.dependsOn)
           .filter((p) => !(phaseDone.get(p.id) ?? done(p.status)));
-        // Fáze jsou ruční: % i „hotovo" se berou z fáze samotné, ne z dílčích úkolů.
-        const pct = effPct(t);
+        // % fáze = vážený průměr dílčích úkolů (váha = odhad dní, jinak délka).
+        // Dřív se bralo jen ruční % fáze – to nikdo nevyplňoval, takže fáze
+        // s lešením na 95 % vypadala nezačatá a svítila červeně. Ruční %
+        // fáze platí, jen když je vyšší (např. fáze bez rozpadu na úkoly).
+        const weight = (k: PlanTaskRow) =>
+          Math.max(
+            1,
+            k.estimateDays ??
+              (k.startDate && k.dueDate
+                ? Math.round((k.dueDate.getTime() - k.startDate.getTime()) / 86400000) + 1
+                : 1),
+          );
+        const realKids = kids.filter((k) => k.status !== "cancelled");
+        const wSum = realKids.reduce((a, k) => a + weight(k), 0);
+        const derived = wSum > 0 ? Math.round(realKids.reduce((a, k) => a + weight(k) * effPct(k), 0) / wSum) : 0;
+        const pct = done(t.status) ? 100 : Math.max(t.percentDone ?? 0, derived);
         return {
           id: t.id,
           name: name(t),

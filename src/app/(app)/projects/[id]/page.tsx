@@ -20,6 +20,7 @@ import { RequestAttachments } from "@/components/requests/request-attachments";
 import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form";
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
+import { BulkTaskBar, BULK_FORM_ID } from "@/components/tasks/bulk-task-bar";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
@@ -1286,7 +1287,14 @@ export default async function ProjectDetailPage({
         }
         actions={
           canAdd && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {planTasks.length > 0 && (
+                <BulkTaskBar
+                  projectId={project.id}
+                  statuses={taskStatuses}
+                  vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+                />
+              )}
               <CatalogGenerateDialog projectId={project.id} subProjectId={sub ?? undefined} phases={phaseOptions} />
               <NewTaskForm
                 projectId={project.id}
@@ -1310,7 +1318,7 @@ export default async function ProjectDetailPage({
         ) : orderedTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Žádný úkol v tomhle stavu.</p>
         ) : (
-          <ul>
+          <ul id="task-list" className="group/tasks data-[bulk]:pb-32">
             {orderedTasks.map(({ t, level }) => {
               const isPhase = t.kind === "phase";
               const canEditTask = isManager || t.createdById === user.id;
@@ -1340,6 +1348,16 @@ export default async function ProjectDetailPage({
                   style={level > 0 ? { paddingLeft: `${level * 24}px` } : undefined}
                 >
                   <div className="flex min-w-0 flex-1 basis-60 items-start gap-2.5">
+                    {canEditTask && (
+                      <input
+                        type="checkbox"
+                        name="ids"
+                        value={t.id}
+                        form={BULK_FORM_ID}
+                        aria-label={`Vybrat: ${t.title}`}
+                        className="mt-0.5 hidden size-5 shrink-0 cursor-pointer accent-stone-900 group-data-[bulk]/tasks:block"
+                      />
+                    )}
                     {canStatusTask && <TaskDoneCheckbox id={t.id} done={done} />}
                     <div className="min-w-0">
                       <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
@@ -1368,6 +1386,7 @@ export default async function ProjectDetailPage({
                         )}
                       </p>
                       <p className="kicker mt-0.5">
+                        {t.vendor ? `${t.vendor.name} · ` : t.selfPerformed ? "svépomocí · " : ""}
                         {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
                         {t.dueDate ? (
                           <span className={overdue ? "text-red-600" : undefined}>

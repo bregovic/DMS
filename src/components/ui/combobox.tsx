@@ -13,6 +13,7 @@ export function Combobox({
   emptyLabel = "— bez dodavatele —",
   onSelect,
   clearOnFocus = false,
+  dropUp = false,
 }: {
   items: ComboItem[];
   name: string;
@@ -23,6 +24,8 @@ export function Combobox({
   onSelect?: (item: ComboItem | null) => void;
   // Předvyplněnou hodnotu při prvním kliknutí vynuluje, ať se hledá od začátku.
   clearOnFocus?: boolean;
+  /** Nabídka nad polem (pro lišty u spodního okraje). */
+  dropUp?: boolean;
 }) {
   const initial = items.find((i) => i.id === defaultId) ?? null;
   const [id, setId] = useState(initial?.id ?? "");
@@ -75,7 +78,7 @@ export function Combobox({
         className="flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
       />
       {open && (
-        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto border border-stone-300 bg-white shadow-lg">
+        <ul className={`absolute z-20 ${dropUp ? "bottom-full mb-1" : "mt-1"} max-h-56 w-full overflow-auto border border-stone-300 bg-white shadow-lg`}>
           {allowEmpty && (
             <li
               onMouseDown={(e) => {

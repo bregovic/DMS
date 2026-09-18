@@ -74,6 +74,7 @@ export default async function PlanningPage({
               parentId: true,
               kind: true,
               percentDone: true,
+              estimateDays: true,
               subProject: { select: { name: true } },
               dependsOn: {
                 select: {

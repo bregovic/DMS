@@ -1102,3 +1102,63 @@ export async function deleteTask(formData: FormData) {
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
+
+/**
+ * Hromadná úprava úkolů ze seznamu (zaškrtnuté řádky): stav a/nebo dodavatel.
+ *
+ * Prázdná hodnota = neměnit. Dodavatel "__none" = odebrat, "__self" = svépomocí.
+ * Upraví jen úkoly, které by uživatel mohl upravit i jednotlivě (správce nebo
+ * autor); ostatní přeskočí a vrátí jejich počet.
+ */
+export async function bulkUpdateTasks(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const status = String(formData.get("status") || "").trim();
+  const vendorRaw = String(formData.get("vendorId") || "").trim();
+  if (ids.length === 0) throw new Error("Nevybral jsi žádný úkol.");
+  if (!status && !vendorRaw) throw new Error("Vyber stav nebo dodavatele.");
+
+  const access = await getProjectAccess(projectId, user);
+  if (!access) throw new Error("Nemáš přístup.");
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+  if (!project) throw new Error("Projekt nenalezen.");
+
+  let vendorPatch: { vendorId: string | null; selfPerformed: boolean } | null = null;
+  if (vendorRaw === "__none") vendorPatch = { vendorId: null, selfPerformed: false };
+  else if (vendorRaw === "__self") vendorPatch = { vendorId: null, selfPerformed: true };
+  else if (vendorRaw) {
+    const v = await prisma.vendor.findFirst({
+      where: { id: vendorRaw, ownerId: project.ownerId },
+      select: { id: true },
+    });
+    if (!v) throw new Error("Dodavatel nenalezen.");
+    vendorPatch = { vendorId: v.id, selfPerformed: false };
+  }
+
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: ids }, projectId },
+    select: { id: true, createdById: true, actualStart: true, actualEnd: true },
+  });
+  const allowed = tasks.filter((t) => isManager(access.role) || t.createdById === user.id);
+
+  await prisma.$transaction(
+    allowed.map((t) =>
+      prisma.task.update({
+        where: { id: t.id },
+        data: {
+          ...(status ? { status, ...actualPatch(t, status) } : {}),
+          ...(vendorPatch ?? {}),
+        },
+      }),
+    ),
+  );
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/planning");
+  revalidatePath("/ukoly");
+  return { updated: allowed.length, skipped: ids.length - allowed.length };
+}
