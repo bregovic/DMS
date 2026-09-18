@@ -61,6 +61,38 @@ export function PlanAi({
   const running = draft?.status === "running" || costDraft?.status === "running";
   const [costAsk, setCostAsk] = useState(false);
   const [costs, setCosts] = useState<Costs | null>(null);
+  // Odpovědi k otevřeným bodům návrhu plánu (index bodu → text).
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const answered = Object.values(answers).filter((a) => a.trim()).length;
+
+  /** Otevřené body doplnit a plán připravit znovu se stejnými dokumenty. */
+  async function refine() {
+    if (!review?.result) return;
+    const pairs = review.result.missingInfo
+      .map((q, i) => ({ q, a: (answers[i] ?? "").trim() }))
+      .filter((x) => x.a);
+    setBusy(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.set("projectId", projectId);
+      for (const id of review.documentIds ?? []) fd.append("documentIds", id);
+      fd.set(
+        "prompt",
+        [review.prompt, "Doplnění k otevřeným bodům:", ...pairs.map((x) => `- ${x.q} → ${x.a}`)].filter(Boolean).join(String.fromCharCode(10)),
+      );
+      const old = new FormData();
+      old.set("id", review.id);
+      await dismissPlanDraft(old);
+      await startPlanDraft(fd);
+      setReview(null);
+      setAnswers({});
+      setMsg("Plán se připravuje znovu s doplněnými údaji.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+    }
+    setBusy(false);
+  }
 
   useEffect(() => {
     if (!running) return;
@@ -374,14 +406,32 @@ export function PlanAi({
               {review.prompt ? ` · pokyn: ${review.prompt}` : ""}
             </p>
             {review.result.missingInfo.length > 0 && (
-              <ul className="space-y-1 border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <div className="space-y-2 border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-medium text-amber-900">
+                  Otevřené body – doplň, co víš, a plán se přepočítá přesněji
+                </p>
                 {review.result.missingInfo.map((w, i) => (
-                  <li key={i} className="flex gap-1.5">
-                    <AlertTriangle className="mt-0.5 size-3 shrink-0" />
-                    {w}
-                  </li>
+                  <div key={i} className="space-y-1">
+                    <p className="flex gap-1.5 text-xs text-amber-900">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      {w}
+                    </p>
+                    <textarea
+                      rows={1}
+                      value={answers[i] ?? ""}
+                      onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
+                      placeholder="Doplnění (volitelné) – např. rozměr, materiál, co se dělá svépomocí"
+                      aria-label={`Doplnění: ${w}`}
+                      className="ml-4.5 flex w-[calc(100%-1.125rem)] rounded-none border border-amber-200 bg-white px-2 py-1.5 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
+                    />
+                  </div>
                 ))}
-              </ul>
+                {answered > 0 && (
+                  <Button type="button" size="sm" disabled={busy} onClick={refine}>
+                    Doplnit a připravit znovu ({answered})
+                  </Button>
+                )}
+              </div>
             )}
             {review.result.assumptions.length > 0 && (
               <details className="text-xs text-stone-600">

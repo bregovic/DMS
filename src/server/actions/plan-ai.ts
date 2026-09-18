@@ -46,7 +46,7 @@ export async function startPlanDraft(formData: FormData) {
 export async function getPlanDraft(id: string) {
   const d = await prisma.planDraft.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, result: true, prompt: true, costUsd: true, createdAt: true },
+    select: { id: true, projectId: true, status: true, result: true, prompt: true, costUsd: true, createdAt: true, documentIds: true },
   });
   if (!d) throw new Error("Návrh nenalezen.");
   await managerOf(d.projectId);

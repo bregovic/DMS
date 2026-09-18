@@ -243,7 +243,7 @@ export default async function DashboardPage({
 
       <div className="grid gap-12 lg:grid-cols-2">
         {/* Projekty */}
-        <section>
+        <section className="min-w-0">
           <div className="mb-4 flex items-baseline justify-between border-b border-stone-300/80 pb-2">
             <h2 className="kicker">Projekty</h2>
             <Link
@@ -290,7 +290,7 @@ export default async function DashboardPage({
         </section>
 
         {/* Poslední výdaje */}
-        <section>
+        <section className="min-w-0">
           <div className="mb-4 border-b border-stone-300/80 pb-2">
             <h2 className="kicker">Poslední výdaje</h2>
           </div>
