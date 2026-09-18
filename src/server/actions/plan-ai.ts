@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager } from "@/server/access";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
-import { createPlanDraft, runPlanDraft, type PlanResult } from "@/server/plan-ai";
+import { createPlanDraft, createVendorSelectionTodos, runPlanDraft, type PlanResult } from "@/server/plan-ai";
 import { recomputeSchedule } from "@/server/actions/tasks";
 
 async function managerOf(projectId: string) {
@@ -141,6 +141,8 @@ export async function applyPlanDraft(formData: FormData) {
     });
     if (last?.dueDate) await prisma.project.update({ where: { id: d.projectId }, data: { plannedEnd: last.dueDate } });
   }
+  // Vlastníkovi úkoly na výběr dodavatelů – s termínem před začátkem fází.
+  await createVendorSelectionTodos(d.projectId, user.id);
   refresh(d.projectId);
 }
 
@@ -186,4 +188,14 @@ export async function createRequestsFromPlan(formData: FormData) {
   });
   refresh(projectId);
   return { created: tasks.length };
+}
+
+/** Doplnit vlastníkovi úkoly „Vybrat dodavatele – fáze“ (i do stávajícího plánu). */
+export async function addVendorSelectionTodos(formData: FormData) {
+  const projectId = String(formData.get("projectId"));
+  const user = await managerOf(projectId);
+  const n = await createVendorSelectionTodos(projectId, user.id);
+  refresh(projectId);
+  revalidatePath("/ukoly");
+  return { created: n };
 }

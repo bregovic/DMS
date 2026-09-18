@@ -221,5 +221,81 @@ export async function planAiProps(projectId: string) {
       },
     }),
   ]);
-  return { projectId, docs: docs.map((d) => ({ id: d.id, name: d.originalName })), draft, procurable };
+  const vendorSelection = (await vendorSelectionCandidates(projectId)).length;
+  return { projectId, docs: docs.map((d) => ({ id: d.id, name: d.originalName })), draft, procurable, vendorSelection };
+}
+
+/** Kolik dní před začátkem fáze má být vybraný dodavatel (poptávka, nabídky, smlouva). */
+export const VENDOR_SELECTION_LEAD_DAYS = 21;
+export const vendorSelectionTitle = (phase: string) => `Vybrat dodavatele – ${phase}`;
+
+/**
+ * Fáze, které potřebují výběr dodavatele a ještě nemají úkol na vlastníka:
+ * nehotové, bez dodavatele fáze, ne svépomocí, a některý jejich úkol nemá
+ * dodavatele ani řešitele.
+ */
+export async function vendorSelectionCandidates(projectId: string) {
+  const [phases, todos] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        projectId,
+        kind: "phase",
+        status: { notIn: ["done", "cancelled"] },
+        vendorId: null,
+        selfPerformed: false,
+      },
+      select: {
+        id: true,
+        title: true,
+        startDate: true,
+        subProjectId: true,
+        children: {
+          where: { status: { notIn: ["done", "cancelled"] } },
+          select: { vendorId: true, selfPerformed: true, assigneeEmail: true },
+        },
+      },
+    }),
+    prisma.task.findMany({ where: { projectId, kind: "todo" }, select: { title: true } }),
+  ]);
+  const existing = new Set(todos.map((t) => t.title));
+  return phases.filter(
+    (p) =>
+      p.children.length > 0 &&
+      p.children.some((k) => !k.vendorId && !k.selfPerformed && !k.assigneeEmail) &&
+      !existing.has(vendorSelectionTitle(p.title)),
+  );
+}
+
+/** Založí vlastníkovi todo „Vybrat dodavatele – fáze“ s termínem před začátkem fáze. */
+export async function createVendorSelectionTodos(projectId: string, userId: string) {
+  const [cands, project] = await Promise.all([
+    vendorSelectionCandidates(projectId),
+    prisma.project.findUnique({ where: { id: projectId }, select: { owner: { select: { email: true } } } }),
+  ]);
+  if (!cands.length) return 0;
+  const DAY = 86400000;
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  await prisma.task.createMany({
+    data: cands.map((p) => {
+      const start = p.startDate?.getTime() ?? null;
+      const due = start != null ? Math.max(today, start - VENDOR_SELECTION_LEAD_DAYS * DAY) : today + 7 * DAY;
+      return {
+        projectId,
+        subProjectId: p.subProjectId,
+        kind: "todo",
+        title: vendorSelectionTitle(p.title),
+        description:
+          `Poptat a vybrat dodavatele pro fázi „${p.title}“` +
+          (start != null ? ` (začíná ${new Date(start).toLocaleDateString("cs-CZ")})` : "") +
+          `. Nabídky přidej k žádankám, porovnej a vyber – dodavatele pak nastav u fáze nebo jejích úkolů.`,
+        status: "todo",
+        priority: due - today <= 14 * DAY ? "high" : "medium",
+        dueDate: new Date(due),
+        assigneeEmail: project?.owner.email?.toLowerCase() ?? null,
+        createdById: userId,
+      };
+    }),
+  });
+  return cands.length;
 }

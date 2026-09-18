@@ -691,3 +691,16 @@ model PlanDraft {
   @@index([projectId])
   @@index([createdAt])
 }
+
+// Záznam útraty za AI – bez vazeb, aby se se smazaným projektem neztratil
+// (limity počítají z něj, jinak by smazání projektu „vynulovalo“ útratu).
+model AiUsageLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  kind      String // extraction | comparison | plan
+  model     String
+  costUsd   Float
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ClipboardList, Loader2, Sparkles } from "lucide-react";
 import {
+  addVendorSelectionTodos,
   applyPlanDraft,
   createRequestsFromPlan,
   dismissPlanDraft,
@@ -32,11 +33,14 @@ export function PlanAi({
   docs,
   draft,
   procurable,
+  vendorSelection = 0,
 }: {
   projectId: string;
   docs: { id: string; name: string }[];
   draft: Draft;
   procurable: number;
+  /** Fáze bez dodavatele a bez úkolu na jeho výběr. */
+  vendorSelection?: number;
 }) {
   const router = useRouter();
   const [ask, setAsk] = useState(false);
@@ -100,6 +104,28 @@ export function PlanAi({
             title="Z úkolů, u kterých plán říká, co poptat"
           >
             <ClipboardList className="size-3.5" /> Vytvořit žádanky z plánu ({procurable})
+          </button>
+        )}
+        {vendorSelection > 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const fd = new FormData();
+                fd.set("projectId", projectId);
+                const r = await addVendorSelectionTodos(fd);
+                setMsg(`Přidáno ${r.created} úkolů „Vybrat dodavatele“ do todo listu (3 týdny před začátkem fáze).`);
+              } catch (e) {
+                setMsg(e instanceof Error ? e.message : "Nepodařilo se.");
+              }
+              setBusy(false);
+            }}
+            className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
+            title="Úkol pro vlastníka ke každé fázi, která nemá dodavatele – s termínem 3 týdny před jejím začátkem"
+          >
+            <ClipboardList className="size-3.5" /> Doplnit výběr dodavatelů ({vendorSelection})
           </button>
         )}
         {msg && <span className="text-xs text-stone-600">{msg}</span>}

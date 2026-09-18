@@ -164,12 +164,8 @@ headline: jedna věta shrnutí. Pokyn uživatele má přednost (co je pro něj d
 
 /** Útrata za AI od daného okamžiku (USD) – vytěžení, porovnání i plány. */
 async function aiSpendSince(since: Date) {
-  const [a, b, c] = await Promise.all([
-    prisma.extraction.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
-    prisma.offerComparison.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
-    prisma.planDraft.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
-  ]);
-  return (a._sum.costUsd ?? 0) + (b._sum.costUsd ?? 0) + (c._sum.costUsd ?? 0);
+  const a = await prisma.aiUsageLog.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } });
+  return a._sum.costUsd ?? 0;
 }
 
 /** Útrata za AI v aktuálním měsíci (USD). */
@@ -322,16 +318,19 @@ export async function callModel<T>(
   });
   const j = await res.json();
   if (!res.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${res.status}`);
+  const inTok = j.usage?.input_tokens ?? 0;
+  const outTok = j.usage?.output_tokens ?? 0;
+  const [pin, pout] = PRICES[model] ?? PRICES["gpt-5-mini"];
+  const costUsd = (inTok * pin + outTok * pout) / 1_000_000;
+  // Útrata do trvalého záznamu (limity) – zaplacená je i useknutá odpověď.
+  await prisma.aiUsageLog.create({ data: { kind: name, model, costUsd } }).catch(() => {});
   if (j.status === "incomplete")
     throw new Error("Odpověď AI byla useknutá (strop délky) – zkus menší dokument nebo užší pokyn.");
   const text = j.output
     ?.find((o: { type: string }) => o.type === "message")
     ?.content?.find((c: { type: string }) => c.type === "output_text")?.text;
   if (!text) throw new Error("Model nevrátil výsledek.");
-  const inTok = j.usage?.input_tokens ?? 0;
-  const outTok = j.usage?.output_tokens ?? 0;
-  const [pin, pout] = PRICES[model] ?? PRICES["gpt-5-mini"];
-  return { data: JSON.parse(text) as T, costUsd: (inTok * pin + outTok * pout) / 1_000_000, inTok, outTok };
+  return { data: JSON.parse(text) as T, costUsd, inTok, outTok };
 }
 
 // ---------------------------------------------------------------------------
