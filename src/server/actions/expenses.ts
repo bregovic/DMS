@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { deleteWithFiles } from "@/server/document-files";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
@@ -296,14 +297,14 @@ export async function bulkUpdateExpenses(formData: FormData) {
 
   const where = { id: { in: ids }, projectId };
   if (op === "delete") {
-    // smaž i přílohy z úložiště (R2)
-    const docs = await prisma.document.findMany({
-      where: { expenseId: { in: ids } },
-      select: { fileName: true },
-    });
-    await Promise.all(docs.map((d) => storage.delete(d.fileName)));
-    await prisma.document.deleteMany({ where: { expenseId: { in: ids } } });
-    await prisma.expense.deleteMany({ where });
+    // Přílohy i z úložiště (R2) – jen výdajů TOHOTO projektu (dřív se
+    // přílohy hledaly jen podle id a šlo tak smazat přílohy cizího výdaje).
+    await deleteWithFiles({ projectId, expenseId: { in: ids } }, () =>
+      prisma.$transaction([
+        prisma.document.deleteMany({ where: { projectId, expenseId: { in: ids } } }),
+        prisma.expense.deleteMany({ where }),
+      ]),
+    );
   } else if (op === "paid") {
     await prisma.expense.updateMany({ where, data: { stage: EXPENSE_PAID_STAGE } });
   } else if (op === "unpaid") {
@@ -362,14 +363,13 @@ export async function deleteExpense(formData: FormData) {
   if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Mazat může jen vlastník projektu.");
   }
-  // smaž i připojené skeny z úložiště (R2)
-  const docs = await prisma.document.findMany({
-    where: { expenseId: id },
-    select: { fileName: true },
-  });
-  await Promise.all(docs.map((d) => storage.delete(d.fileName)));
-  await prisma.document.deleteMany({ where: { expenseId: id } });
-  await prisma.expense.deleteMany({ where: { id, projectId } });
+  // Skeny i z úložiště (R2) – jen výdaje tohoto projektu; nejdřív záznamy, pak soubory.
+  await deleteWithFiles({ projectId, expenseId: id }, () =>
+    prisma.$transaction([
+      prisma.document.deleteMany({ where: { projectId, expenseId: id } }),
+      prisma.expense.deleteMany({ where: { id, projectId } }),
+    ]),
+  );
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");

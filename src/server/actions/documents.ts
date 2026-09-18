@@ -236,8 +236,9 @@ export async function deleteDocument(formData: FormData) {
   }
   if (!allowed) return;
 
-  await storage.delete(doc.fileName);
+  // Nejdřív záznam, pak soubor – při chybě databáze nezůstane odkaz na smazaný soubor.
   await prisma.document.delete({ where: { id: doc.id } });
+  await storage.delete(doc.fileName).catch(() => {});
 
   revalidatePath(`/projects/${doc.projectId}`);
 }
