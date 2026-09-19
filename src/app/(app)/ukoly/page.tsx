@@ -8,6 +8,8 @@ import { TaskRow } from "@/components/tasks/task-row";
 import { INV_ATTR } from "@/lib/bulk-ids";
 import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ListFilters } from "@/components/ui/list-filters";
+import { parseStatusFilter } from "@/lib/list-filter";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { taskStatusLabel } from "@/lib/constants";
@@ -23,8 +25,13 @@ import { taskStatusLabel } from "@/lib/constants";
  * Patří sem i úkoly s řešitelem = můj e-mail, takže to funguje i pro
  * členy rodiny, kterým je úkol přidělený jménem.
  */
-export default async function MyTasksPage() {
+export default async function MyTasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
   const email = user.email?.toLowerCase() ?? "";
 
   // Moje výkazy (k fakturaci) a moje faktury.
@@ -100,12 +107,45 @@ export default async function MyTasksPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
+  // Filtr (prefix m): hledání, stav (výchozí neukončené), projekt, termín, řazení.
+  const mstRaw = sp?.mst;
+  const mstSel = parseStatusFilter(mstRaw, []);
+  const mq = (typeof sp?.mq === "string" ? sp.mq : "").trim().toLowerCase();
+  const mproj = typeof sp?.mproj === "string" ? sp.mproj : "";
+  const mfrom = typeof sp?.mfrom === "string" && sp.mfrom ? new Date(sp.mfrom) : null;
+  const mto = typeof sp?.mto === "string" && sp.mto ? new Date(sp.mto) : null;
+  if (mto) mto.setHours(23, 59, 59, 999);
+  const msort = sp?.msort === "title" ? "title" : "due";
+  const mdir = sp?.mdir === "desc" ? -1 : 1;
+  const customStatus = typeof mstRaw === "string";
+  const shown = tasks
+    .filter(
+      (t) =>
+        (customStatus ? !mstSel || mstSel.has(t.status) : !isDone(t.status)) &&
+        (!mq || t.title.toLowerCase().includes(mq) || t.project.name.toLowerCase().includes(mq)) &&
+        (!mproj || t.project.id === mproj) &&
+        (!mfrom || (!!t.dueDate && t.dueDate >= mfrom)) &&
+        (!mto || (!!t.dueDate && t.dueDate <= mto)),
+    )
+    .sort((a, b) =>
+      msort === "title"
+        ? a.title.localeCompare(b.title, "cs") * mdir
+        : ((a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)) * mdir,
+    );
+  const filterActive = customStatus || !!mq || !!mproj || !!mfrom || !!mto;
+  const statusCounts: Record<string, number> = {};
+  for (const t of tasks) statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
+  const projectOptions = [...new Map(tasks.map((t) => [t.project.id, t.project.name])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], "cs"))
+    .map(([value, label]) => ({ value, label }));
+
   const open = tasks.filter((t) => !isDone(t.status));
-  const done = tasks.filter((t) => isDone(t.status));
+  // bez vlastního výběru stavu se hotové ukazují zvlášť dole (sbalené)
+  const done = customStatus ? [] : tasks.filter((t) => isDone(t.status));
 
   // Seskupit podle projektu - dodavatel dělá často pro víc zakázek.
   const byProject = new Map<string, { name: string; id: string; rows: typeof open }>();
-  for (const t of open) {
+  for (const t of shown) {
     const g = byProject.get(t.project.id) ?? { name: t.project.name, id: t.project.id, rows: [] };
     g.rows.push(t);
     byProject.set(t.project.id, g);
@@ -186,6 +226,24 @@ export default async function MyTasksPage() {
         />
       ) : (
         <>
+          <ListFilters
+            prefix="m"
+            placeholder="Hledat úkol nebo projekt…"
+            sortOptions={[
+              { value: "due", label: "Termín" },
+              { value: "title", label: "Název" },
+            ]}
+            selects={
+              projectOptions.length > 1 ? [{ key: "proj", label: "Projekt – vše", options: projectOptions }] : []
+            }
+            statuses={statuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: statusCounts[st.key] ?? 0 }))}
+            defaultStatuses={statuses.map((st) => st.key).filter((k) => !isDone(k))}
+          />
+          {shown.length === 0 && (
+            <p className="py-6 text-sm text-stone-500">
+              {filterActive ? "Filtru nic neodpovídá." : "Všechno hotovo – hotové úkoly najdeš níže nebo ve Filtru, stav Vše."}
+            </p>
+          )}
           {[...byProject.values()].map((g) => (
             <section key={g.id} className="mb-8">
               <h2 className="kicker mb-1">

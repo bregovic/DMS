@@ -468,15 +468,42 @@ export default async function ProjectDetailPage({
   const ttoRaw = typeof sp?.tto === "string" && sp.tto ? new Date(sp.tto) : null;
   if (ttoRaw) ttoRaw.setHours(23, 59, 59, 999);
   const tsort = sp?.tsort === "due" || sp?.tsort === "title" ? sp.tsort : "plan";
+  // Přidělení (parametr tas): mine | none | self | v:<dodavatel> | a:<e-mail řešitele>
+  const tas = typeof sp?.tas === "string" ? sp.tas : "";
+  const assignMatch = (t: (typeof levelTasks)[number]) =>
+    !tas ||
+    (tas === "mine"
+      ? (!!t.assigneeEmail && t.assigneeEmail === myEmail) || (!!t.vendorId && myVendorIds.has(t.vendorId))
+      : tas === "none"
+        ? !t.vendorId && !t.assigneeEmail && !t.selfPerformed
+        : tas === "self"
+          ? t.selfPerformed
+          : tas.startsWith("v:")
+            ? t.vendorId === tas.slice(2)
+            : tas.startsWith("a:")
+              ? t.assigneeEmail === tas.slice(2)
+              : true);
   const tdir = sp?.tdir === "desc" ? -1 : 1;
   const taskStatusCounts: Record<string, number> = {};
   for (const t of planTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
   const statusMatch = (t: (typeof levelTasks)[number]) =>
     (typeof tstRaw === "string" ? !tstSel || tstSel.has(t.status) : !TASK_DONE_STATUSES.includes(t.status)) &&
     (!tq || t.title.toLowerCase().includes(tq)) &&
+    assignMatch(t) &&
     (!tfrom || (!!t.dueDate && t.dueDate >= tfrom)) &&
     (!ttoRaw || (!!t.startDate ? t.startDate <= ttoRaw : !!t.dueDate && t.dueDate <= ttoRaw));
-  const taskFilterActive = typeof tstRaw === "string" || !!tq || !!tfrom || !!ttoRaw;
+  const taskFilterActive = typeof tstRaw === "string" || !!tq || !!tfrom || !!ttoRaw || !!tas;
+  const assignOptions = [
+    { value: "mine", label: "Přidělené mně" },
+    { value: "none", label: "Nepřidělené" },
+    { value: "self", label: "Svépomocí" },
+    ...[...new Map(planTasks.filter((t) => t.vendor).map((t) => [t.vendorId!, t.vendor!.name])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], "cs"))
+      .map(([id, name]) => ({ value: `v:${id}`, label: name })),
+    ...[...new Set(planTasks.map((t) => t.assigneeEmail).filter((e): e is string => !!e))]
+      .sort()
+      .map((e) => ({ value: `a:${e}`, label: e })),
+  ];
   const taskSort = <T extends { title: string; dueDate: Date | null }>(xs: T[]) =>
     tsort === "plan"
       ? xs
@@ -1471,6 +1498,7 @@ export default async function ProjectDetailPage({
           <ListFilters
             prefix="t"
             placeholder="Hledat úkol…"
+            selects={[{ key: "as", label: "Přidělení – vše", options: assignOptions }]}
             sortOptions={[
               { value: "plan", label: "Pořadí plánu" },
               { value: "due", label: "Termín" },
