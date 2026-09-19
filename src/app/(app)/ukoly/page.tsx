@@ -138,18 +138,6 @@ export default async function MyTasksPage({
         : mper.startsWith("p:")
           ? [low(t.assigneeEmail), low(t.vendor?.email)].includes(mper.slice(2))
           : true);
-  const myHref = (over: Record<string, string | null>) => {
-    const u = new URLSearchParams();
-    for (const [k, v] of Object.entries(sp ?? {})) if (typeof v === "string") u.set(k, v);
-    for (const [k, v] of Object.entries(over)) if (v == null) u.delete(k); else u.set(k, v);
-    const q = u.toString();
-    return q ? `/ukoly?${q}` : "/ukoly";
-  };
-  const chip = (active: boolean) =>
-    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
-      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
-    }`;
-
   // Filtr (prefix m): hledání, stav (výchozí neukončené), projekt, termín, řazení.
   const mstRaw = sp?.mst;
   const mstSel = parseStatusFilter(mstRaw, []);
@@ -264,73 +252,47 @@ export default async function MyTasksPage({
         )}
       </header>
 
-      {(managedIds.length > 0 || tasks.length > 0) && (
-        <div className="mb-4 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
-          {managedIds.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="kicker mr-1 w-14">Úkoly</span>
-              <Link href={myHref({ mscope: null, mper: null })} className={chip(!scopeAll)}>
-                Přidělené mně
-              </Link>
-              <Link href={myHref({ mscope: "all" })} className={chip(scopeAll)}>
-                Všechny v mých projektech
-              </Link>
-            </div>
-          )}
-          {scopeAll && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="kicker mr-1 w-14">Kdo</span>
-              <Link href={myHref({ mper: null })} className={chip(!mper)}>
-                Všichni
-              </Link>
-              <Link href={myHref({ mper: "mine" })} className={chip(mper === "mine")}>
-                Já
-              </Link>
-              {people.map((x) => (
-                <Link key={x.email} href={myHref({ mper: `p:${x.email}` })} className={chip(mper === `p:${x.email}`)}>
-                  {x.name}
-                </Link>
-              ))}
-              <Link href={myHref({ mper: "none" })} className={chip(mper === "none")}>
-                Nepřidělené
-              </Link>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="kicker mr-1 w-14">Stav</span>
-            <Link href={myHref({ mst: null })} className={chip(!customStatus)}>
-              Otevřené
-            </Link>
-            <Link href={myHref({ mst: "done" })} className={chip(mstRaw === "done")}>
-              Hotové
-            </Link>
-            <Link href={myHref({ mst: "all" })} className={chip(mstRaw === "all")}>
-              Vše
-            </Link>
-          </div>
-        </div>
+      {(tasks.length > 0 || managedIds.length > 0) && (
+      <ListFilters
+        prefix="m"
+        placeholder="Hledat úkol nebo projekt…"
+        sortOptions={[
+          { value: "due", label: "Termín" },
+          { value: "title", label: "Název" },
+        ]}
+        selects={[
+          ...(managedIds.length > 0
+            ? [{ key: "scope", label: "Úkoly", chips: true, allLabel: "Přidělené mně", options: [{ value: "all", label: "Všechny v mých projektech" }] }]
+            : []),
+          ...(scopeAll
+            ? [
+                {
+                  key: "per",
+                  label: "Kdo",
+                  chips: true,
+                  allLabel: "Všichni",
+                  options: [
+                    { value: "mine", label: "Já" },
+                    ...people.map((x) => ({ value: `p:${x.email}`, label: x.name })),
+                    { value: "none", label: "Nepřidělené" },
+                  ],
+                },
+              ]
+            : []),
+          ...(projectOptions.length > 1 ? [{ key: "proj", label: "Projekt – vše", options: projectOptions }] : []),
+        ]}
+        statuses={statuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: statusCounts[st.key] ?? 0 }))}
+        defaultStatuses={statuses.map((st) => st.key).filter((k) => !isDone(k))}
+      />
       )}
 
       {tasks.length === 0 ? (
         <EmptyState
-          title="Žádné přidělené úkoly"
+          title={scopeAll ? "V projektech nejsou úkoly" : "Žádné přidělené úkoly"}
           description="Až ti někdo přidělí úkol (jako dodavateli nebo řešiteli), objeví se tady a půjde na něj vykázat práci."
         />
       ) : (
         <>
-          <ListFilters
-            prefix="m"
-            placeholder="Hledat úkol nebo projekt…"
-            sortOptions={[
-              { value: "due", label: "Termín" },
-              { value: "title", label: "Název" },
-            ]}
-            selects={
-              projectOptions.length > 1 ? [{ key: "proj", label: "Projekt – vše", options: projectOptions }] : []
-            }
-            statuses={statuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: statusCounts[st.key] ?? 0 }))}
-            defaultStatuses={statuses.map((st) => st.key).filter((k) => !isDone(k))}
-          />
           {shown.length === 0 && (
             <p className="py-6 text-sm text-stone-500">
               {filterActive ? "Filtru nic neodpovídá." : "Všechno hotovo – hotové úkoly najdeš níže nebo ve Filtru, stav Vše."}

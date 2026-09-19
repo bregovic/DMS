@@ -532,13 +532,6 @@ export default async function ProjectDetailPage({
   // Pohled Aktivita (tview=akt): kdo co v období udělal
   const tview = sp?.tview === "akt" ? "akt" : "list";
   const tper = (["dnes", "vcera", "tyden", "mesic"] as const).find((x) => x === sp?.tper) ?? "dnes";
-  const taskHref = (over: Record<string, string | null>) => {
-    const u = new URLSearchParams();
-    for (const [k, v] of Object.entries(sp ?? {})) if (typeof v === "string") u.set(k, v);
-    u.set("tab", "ukoly");
-    for (const [k, v] of Object.entries(over)) if (v == null) u.delete(k); else u.set(k, v);
-    return `/projects/${project.id}?${u.toString()}`;
-  };
   const taskSort = <T extends { title: string; dueDate: Date | null }>(xs: T[]) =>
     tsort === "plan"
       ? xs
@@ -1448,53 +1441,41 @@ export default async function ProjectDetailPage({
       {/* Úkoly */}
       {tab === "ukoly" && (
       <>
-        {/* Přehledová lišta: pohled, kdo, stav / období – vždy vidět, jedním klikem. */}
-        <div className="mt-6 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="kicker mr-1 w-14">Pohled</span>
-            <Link href={taskHref({ tview: null })} className={chipClass(tview === "list")}>
-              Seznam úkolů
-            </Link>
-            <Link href={taskHref({ tview: "akt" })} className={chipClass(tview === "akt")}>
-              Aktivita – kdo co udělal
-            </Link>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="kicker mr-1 w-14">Kdo</span>
-            <Link href={taskHref({ tas: null })} className={chipClass(!tas)}>
-              Všichni
-            </Link>
-            {assignOptions
-              .filter((o) => tview === "list" || (o.value !== "none" && o.value !== "self"))
-              .map((o) => (
-                <Link key={o.value} href={taskHref({ tas: o.value })} className={chipClass(tas === o.value)}>
-                  {o.label}
-                </Link>
-              ))}
-          </div>
-          {tview === "list" ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="kicker mr-1 w-14">Stav</span>
-              <Link href={taskHref({ tst: null })} className={chipClass(typeof tstRaw !== "string")}>
-                Otevřené
-              </Link>
-              <Link href={taskHref({ tst: "done" })} className={chipClass(tstRaw === "done")}>
-                Hotové
-              </Link>
-              <Link href={taskHref({ tst: "all" })} className={chipClass(tstRaw === "all")}>
-                Vše
-              </Link>
-              <span className="ml-auto text-[11px] text-stone-400">hledání, termíny a řazení ve Filtru u plánu</span>
-            </div>
+        {/* Jeden standardní filtr úkolů (jako všude): pohled, kdo, stav vždy vidět; hledání a termíny ve Filtru */}
+        <div className="mt-6">
+          {tview === "akt" ? (
+            <ListFilters
+              prefix="t"
+              search={false}
+              dates={false}
+              selects={[
+                { key: "view", label: "Pohled", chips: true, allLabel: "Seznam úkolů", options: [{ value: "akt", label: "Aktivita – kdo co udělal" }] },
+                { key: "as", label: "Kdo", chips: true, allLabel: "Všichni", options: assignOptions.filter((o) => o.value !== "none" && o.value !== "self") },
+                {
+                  key: "per",
+                  label: "Kdy",
+                  chips: true,
+                  allLabel: "Dnes",
+                  options: ACTIVITY_PERIODS.filter((x) => x.key !== "dnes").map((x) => ({ value: x.key, label: x.label })),
+                },
+              ]}
+            />
           ) : (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="kicker mr-1 w-14">Kdy</span>
-              {ACTIVITY_PERIODS.map((x) => (
-                <Link key={x.key} href={taskHref({ tper: x.key === "dnes" ? null : x.key })} className={chipClass(tper === x.key)}>
-                  {x.label}
-                </Link>
-              ))}
-            </div>
+            <ListFilters
+              prefix="t"
+              placeholder="Hledat úkol…"
+              sortOptions={[
+                { value: "plan", label: "Pořadí plánu" },
+                { value: "due", label: "Termín" },
+                { value: "title", label: "Název" },
+              ]}
+              selects={[
+                { key: "view", label: "Pohled", chips: true, allLabel: "Seznam úkolů", options: [{ value: "akt", label: "Aktivita – kdo co udělal" }] },
+                { key: "as", label: "Kdo", chips: true, allLabel: "Všichni", options: assignOptions },
+              ]}
+              statuses={taskStatuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: taskStatusCounts[st.key] ?? 0 }))}
+              defaultStatuses={taskStatuses.map((st) => st.key).filter((k) => !TASK_DONE_STATUSES.includes(k))}
+            />
           )}
         </div>
         {tview === "akt" ? (
@@ -1589,19 +1570,6 @@ export default async function ProjectDetailPage({
           <div className="mb-4">
             <PlanAi {...await planAiProps(project.id)} />
           </div>
-        )}
-        {planTasks.length > 0 && (
-          <ListFilters
-            prefix="t"
-            placeholder="Hledat úkol…"
-            sortOptions={[
-              { value: "plan", label: "Pořadí plánu" },
-              { value: "due", label: "Termín" },
-              { value: "title", label: "Název" },
-            ]}
-            statuses={taskStatuses.map((st) => ({ key: st.key, label: st.label, color: st.color ?? null, count: taskStatusCounts[st.key] ?? 0 }))}
-            defaultStatuses={taskStatuses.map((st) => st.key).filter((k) => !TASK_DONE_STATUSES.includes(k))}
-          />
         )}
         {planTasks.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné naplánované úkoly.</p>

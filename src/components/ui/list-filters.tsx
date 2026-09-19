@@ -11,14 +11,16 @@ import { ALL_STATUSES } from "@/lib/list-filter";
  * Jednotná lišta filtrace a řazení pro všechny seznamy – standard
  * a názvy parametrů popisuje `src/lib/list-filter.ts`.
  *
- * Výchozí je sbalená: tlačítko Filtr (s počtem aktivních filtrů), shrnutí
- * aktivních filtrů a řazení. Po rozbalení hledání, datum od–do, stavy
- * (čipy, víc najednou) a další rozbalovací filtry.
+ * Vždy vidět: tlačítko Filtr (s počtem aktivních filtrů), shrnutí, řazení,
+ * rychlé volby jako čipy (`selects` s `chips: true`, např. Kdo) a stav
+ * Neukončené / Ukončené / Vše. Po rozbalení hledání, datum od–do,
+ * jednotlivé stavy (víc najednou) a rozbalovací filtry.
  */
 export function ListFilters({
   prefix,
   placeholder = "Hledat v názvu…",
-  sortOptions,
+  sortOptions = [],
+  search = true,
   selects = [],
   statuses,
   defaultStatuses = [],
@@ -26,12 +28,18 @@ export function ListFilters({
 }: {
   prefix: string;
   placeholder?: string;
-  sortOptions: { value: string; label: string }[];
-  // Volitelné rozbalovací filtry (např. dodavatel) – stav v URL pod prefixem.
+  /** Bez řazení se volba řazení neukazuje. */
+  sortOptions?: { value: string; label: string }[];
+  /** Hledání v rozbaleném filtru (výchozí ano). */
+  search?: boolean;
+  // Volitelné filtry (např. dodavatel) – stav v URL pod prefixem. `chips` = vždy
+  // vidět jako řádek čipů; `allLabel` = popis čipu bez hodnoty (null = žádný).
   selects?: {
     key: string;
     label: string;
     options: { value: string; label: string }[];
+    chips?: boolean;
+    allLabel?: string | null;
   }[];
   /** Stavy jako čipy (víc najednou), parametr <prefix>st. */
   statuses?: { key: string; label: string; color?: string | null; count?: number }[];
@@ -65,7 +73,7 @@ export function ListFilters({
       [k("to")]: over?.to ?? draftTo,
     });
   }
-  const sort = sp.get(k("sort")) ?? sortOptions[0].value;
+  const sort = sp.get(k("sort")) ?? sortOptions[0]?.value ?? "";
   const dir = sp.get(k("dir")) ?? "desc";
 
   // Stavy: bez parametru platí výchozí výběr, "all" = všechny.
@@ -118,25 +126,26 @@ export function ListFilters({
   if (curQ) summary.push(`„${curQ}“`);
   if (from || to) summary.push(`${from ? `od ${from.split("-").reverse().join(".")}` : ""}${from && to ? " " : ""}${to ? `do ${to.split("-").reverse().join(".")}` : ""}`);
   for (const s of selects) {
+    if (s.chips) continue; // čipy jsou vidět
     const v = sp.get(k(s.key));
     if (v) summary.push(s.options.find((o) => o.value === v)?.label ?? v);
   }
-  if (statuses) {
-    if (isDefaultSt && defaultStatuses.length) summary.push("neukončené");
-    else if (closedStatuses.length && stSelected && sameSet(stSelected, closedStatuses)) summary.push("ukončené");
-    else if (stSelected)
-      summary.push(
-        statuses
-          .filter((s) => stSelected.has(s.key))
-          .map((s) => s.label)
-          .join(", ") || "žádný stav",
-      );
-  }
+  // Neukončené / Ukončené / Vše jsou vidět v řádku stavu – do shrnutí jen vlastní výběr stavů
+  const customSt =
+    !!statuses && !isDefaultSt && !!stSelected && !(closedStatuses.length && sameSet(stSelected, closedStatuses));
+  if (statuses && defaultStatuses.length === 0 && stSelected) summary.push(statuses.filter((s) => stSelected.has(s.key)).map((s) => s.label).join(", "));
+  else if (customSt && stSelected && statuses)
+    summary.push(
+      statuses
+        .filter((s) => stSelected.has(s.key))
+        .map((s) => s.label)
+        .join(", ") || "žádný stav",
+    );
   const activeCount =
     (curQ ? 1 : 0) +
     (from || to ? 1 : 0) +
-    selects.filter((s) => sp.get(k(s.key))).length +
-    (statuses && stSelected ? 1 : 0);
+    selects.filter((s) => !s.chips && sp.get(k(s.key))).length +
+    (customSt || (statuses && defaultStatuses.length === 0 && stSelected) ? 1 : 0);
   const resettable =
     curQ || from || to || sp.get(k("sort")) || sp.get(k("dir")) || stRaw !== null ||
     selects.some((s) => sp.get(k(s.key)));
@@ -177,6 +186,8 @@ export function ListFilters({
         )}
 
         <div className="ml-auto flex items-center gap-1">
+          {sortOptions.length > 0 && (
+          <>
           <select
             value={sort}
             onChange={(e) => setParam({ [k("sort")]: e.target.value })}
@@ -199,6 +210,8 @@ export function ListFilters({
             <ArrowDownUp className="size-3.5" />
             {dir === "asc" ? "↑" : "↓"}
           </button>
+          </>
+          )}
           {resettable && (
             <button
               type="button"
@@ -226,9 +239,65 @@ export function ListFilters({
         </div>
       </div>
 
+      {(selects.some((s) => s.chips) || (statuses && statuses.length > 0 && defaultStatuses.length > 0)) && (
+        <div className="mt-2 space-y-1.5">
+          {selects
+            .filter((s) => s.chips)
+            .map((s) => {
+              const cur = sp.get(k(s.key)) ?? "";
+              const opts = [
+                ...(s.allLabel === null ? [] : [{ value: "", label: s.allLabel ?? "Vše" }]),
+                ...s.options,
+              ];
+              return (
+                <div key={s.key} className="flex flex-wrap items-center gap-1.5" role="group" aria-label={s.label}>
+                  <span className="kicker mr-1 w-12 shrink-0">{s.label}</span>
+                  {opts.map((o) => (
+                    <button
+                      key={o.value || "_all"}
+                      type="button"
+                      onClick={() => setParam({ [k(s.key)]: o.value || null })}
+                      aria-pressed={cur === o.value}
+                      className={chip(cur === o.value)}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          {statuses && statuses.length > 0 && defaultStatuses.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stav">
+              <span className="kicker mr-1 w-12 shrink-0">Stav</span>
+              <button type="button" onClick={() => setParam({ [k("st")]: null })} className={chip(isDefaultSt)}>
+                Neukončené
+              </button>
+              {closedStatuses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStatuses(new Set(closedStatuses))}
+                  className={chip(!isDefaultSt && !!stSelected && sameSet(stSelected, closedStatuses))}
+                >
+                  Ukončené
+                </button>
+              )}
+              <button type="button" onClick={() => setStatuses(null)} className={chip(!isDefaultSt && stSelected === null)}>
+                Vše
+              </button>
+              {!isDefaultSt && !!stSelected && !sameSet(stSelected, closedStatuses) && (
+                <span className="text-xs text-stone-500">
+                  + vybrané: {statuses.filter((x) => stSelected.has(x.key)).map((x) => x.label).join(", ")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {open && (
         <div className="mt-2 space-y-3 border border-stone-200 bg-white/60 p-3">
           <div className="flex flex-wrap items-center gap-2">
+            {search && (
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -238,6 +307,7 @@ export function ListFilters({
               placeholder={placeholder}
               className={`${inputClass} w-full sm:w-44`}
             />
+            )}
             {dates && (
               <>
                 <label className="flex items-center gap-1 text-xs text-stone-500">
@@ -267,7 +337,7 @@ export function ListFilters({
             >
               Filtrovat
             </button>
-            {selects.map((s) => (
+            {selects.filter((s) => !s.chips).map((s) => (
               <select
                 key={s.key}
                 value={sp.get(k(s.key)) ?? ""}
@@ -287,24 +357,12 @@ export function ListFilters({
 
           {statuses && statuses.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtr podle stavu">
-              <span className="kicker mr-1">Stav</span>
-              {defaultStatuses.length > 0 && (
-                <button type="button" onClick={() => setParam({ [k("st")]: null })} className={chip(isDefaultSt)}>
-                  Neukončené
+              <span className="kicker mr-1">Stavy</span>
+              {defaultStatuses.length === 0 && (
+                <button type="button" onClick={() => setStatuses(null)} className={chip(stSelected === null)}>
+                  Vše
                 </button>
               )}
-              {closedStatuses.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setStatuses(new Set(closedStatuses))}
-                  className={chip(!isDefaultSt && !!stSelected && sameSet(stSelected, closedStatuses))}
-                >
-                  Ukončené
-                </button>
-              )}
-              <button type="button" onClick={() => setStatuses(null)} className={chip(!isDefaultSt && stSelected === null)}>
-                Vše
-              </button>
               {statuses.map((s) => {
                 const on = !!stSelected?.has(s.key) && !isDefaultSt;
                 return (
