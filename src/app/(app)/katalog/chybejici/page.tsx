@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { CatalogNav } from "@/components/catalog/catalog-nav";
 import { WishForm } from "@/components/catalog/wish-form";
+import { WishFill } from "@/components/catalog/wish-fill";
 import { deleteCatalogWish, setCatalogWishDone } from "@/server/actions/process-tables";
 
 export default async function WishesPage() {
@@ -33,9 +34,9 @@ export default async function WishesPage() {
       <div className="mt-6 max-w-3xl space-y-8">
         <section className="space-y-3">
           <p className="text-sm text-stone-500">
-            Když v katalogu nenajdeš činnost, zapiš si ji sem. Pak hromadně
-            stáhneš šablonu s promptem pro AI, necháš ji doplnit a naimportuješ
-            zpět do katalogu.
+            Když v katalogu nenajdeš činnost, zapiš si ji sem. „Doplnit“ ji rovnou
+            navrhne do katalogu (norma práce, materiály s cenami z webu) – po
+            kontrole ji uložíš. Víc najednou jde přes šablonu a import.
           </p>
           <WishForm />
         </section>
@@ -48,12 +49,13 @@ export default async function WishesPage() {
         ) : (
           <ul className="divide-y divide-stone-100 border-y border-stone-200">
             {wishes.map((w) => (
-              <li key={w.id} className="group flex items-start justify-between gap-3 py-3">
-                <div className="min-w-0">
+              <li key={w.id} className="group flex flex-wrap items-start justify-between gap-3 py-3">
+                <div className="min-w-0 flex-1">
                   <p className={`text-sm ${w.done ? "text-stone-400 line-through" : "text-stone-950"}`}>
                     {w.title}
                   </p>
                   {w.note && <p className="mt-0.5 text-xs text-stone-500">{w.note}</p>}
+                  {!w.done && <WishFill id={w.id} title={w.note ? `${w.title} (${w.note})` : w.title} />}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <form action={setCatalogWishDone}>
