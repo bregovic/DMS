@@ -523,7 +523,7 @@ export async function catalogPriceList() {
   for (const o of ops) {
     const values: Record<string, number> = {};
     for (const p of o.params) values[p.key] = Number(p.defaultValue ?? 1) || 1;
-    values.mnozstvi = 1;
+    values.mnozstvi = 100; // při 100 MJ → jednorázové položky se rozpočítají
     const r = calcOperation(
       {
         unit: o.unit,
@@ -542,7 +542,7 @@ export async function catalogPriceList() {
       },
       values,
     );
-    perUnit.set(o.id, r.totalCost);
+    perUnit.set(o.id, r.totalCost / 100);
   }
   const pkgs = await prisma.package.findMany({ orderBy: { name: "asc" }, include: { items: true } });
   const fmt = (n: number) => Math.round(n).toLocaleString("cs-CZ");
