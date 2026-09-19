@@ -139,10 +139,17 @@ export function LogTaskExpense({
             )}
           </div>
         ) : (
-          <label className="block text-xs text-stone-600">
-            Částka Kč
-            <input name="amount" inputMode="decimal" autoFocus placeholder="např. 1 250" className={`${fieldClass} mt-1`} />
-          </label>
+          <div className="grid grid-cols-2 items-end gap-3">
+            <label className="block text-xs text-stone-600">
+              Částka Kč
+              <input name="amount" inputMode="decimal" autoFocus placeholder="např. 1 250" className={`${fieldClass} mt-1`} />
+            </label>
+            <label className="block text-xs text-stone-600">
+              Hodin <span className="text-stone-400">(nepovinné)</span>
+              <input name="amountHours" inputMode="decimal" placeholder="jen pro evidenci" className={`${fieldClass} mt-1`} />
+            </label>
+            <p className="col-span-2 text-[11px] text-stone-400">Hodiny se uloží k výkazu, částku nepřepočítávají.</p>
+          </div>
         )}
 
         <div className="grid grid-cols-2 items-end gap-3">

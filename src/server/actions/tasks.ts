@@ -937,60 +937,75 @@ export async function deleteTask(formData: FormData) {
  */
 export async function bulkUpdateTasks(formData: FormData) {
   const user = await requireUser();
-  const projectId = String(formData.get("projectId"));
+  // projekt je nepovinný – v Moje úkoly jsou vybrané úkoly z různých projektů
+  const projectId = String(formData.get("projectId") || "") || null;
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   const status = String(formData.get("status") || "").trim();
   const vendorRaw = String(formData.get("vendorId") || "").trim();
   if (ids.length === 0) throw new Error("Nevybral jsi žádný úkol.");
   if (!status && !vendorRaw) throw new Error("Vyber stav nebo dodavatele.");
 
-  const access = await getProjectAccess(projectId, user);
-  if (!access) throw new Error("Nemáš přístup.");
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { ownerId: true },
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: ids }, ...(projectId ? { projectId } : {}) },
+    select: {
+      id: true,
+      projectId: true,
+      createdById: true,
+      assigneeEmail: true,
+      actualStart: true,
+      actualEnd: true,
+      kind: true,
+      subProjectId: true,
+      vendor: { select: { email: true } },
+      project: { select: { ownerId: true } },
+    },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
 
-  let vendorPatch: { vendorId: string | null; selfPerformed: boolean } | null = null;
-  if (vendorRaw === "__none") vendorPatch = { vendorId: null, selfPerformed: false };
-  else if (vendorRaw === "__self") vendorPatch = { vendorId: null, selfPerformed: true };
+  // Oprávnění po úkolech: dodavatele mění správce nebo autor, stav i řešitel
+  // (dodavatel podle e-mailu) – stejně jako v řádku úkolu.
+  const myEmail = user.email?.toLowerCase();
+  const roles = new Map<string, Awaited<ReturnType<typeof getProjectAccess>>>();
+  for (const pid of new Set(tasks.map((t) => t.projectId))) roles.set(pid, await getProjectAccess(pid, user));
+  const canEdit = (t: (typeof tasks)[number]) => isManager(roles.get(t.projectId)?.role) || t.createdById === user.id;
+  const canStatus = (t: (typeof tasks)[number]) =>
+    canEdit(t) ||
+    (!!myEmail && (t.assigneeEmail?.toLowerCase() === myEmail || t.vendor?.email?.toLowerCase() === myEmail));
+
+  let vendorFor: ((ownerId: string) => { vendorId: string | null; selfPerformed: boolean } | null) | null = null;
+  if (vendorRaw === "__none") vendorFor = () => ({ vendorId: null, selfPerformed: false });
+  else if (vendorRaw === "__self") vendorFor = () => ({ vendorId: null, selfPerformed: true });
   else if (vendorRaw) {
-    const v = await prisma.vendor.findFirst({
-      where: { id: vendorRaw, ownerId: project.ownerId },
-      select: { id: true },
-    });
+    const v = await prisma.vendor.findUnique({ where: { id: vendorRaw }, select: { id: true, ownerId: true } });
     if (!v) throw new Error("Dodavatel nenalezen.");
-    vendorPatch = { vendorId: v.id, selfPerformed: false };
+    // dodavatel musí být z evidence vlastníka projektu
+    vendorFor = (ownerId) => (ownerId === v.ownerId ? { vendorId: v.id, selfPerformed: false } : null);
   }
 
-  const tasks = await prisma.task.findMany({
-    where: { id: { in: ids }, projectId },
-    select: { id: true, createdById: true, actualStart: true, actualEnd: true, kind: true, subProjectId: true },
-  });
-  const allowed = tasks.filter((t) => isManager(access.role) || t.createdById === user.id);
+  const updates: { t: (typeof tasks)[number]; data: Record<string, unknown> }[] = [];
+  for (const t of tasks) {
+    const data: Record<string, unknown> = {};
+    if (status && canStatus(t)) Object.assign(data, { status, ...actualPatch(t, status) });
+    if (vendorFor && canEdit(t)) {
+      const vp = vendorFor(t.project.ownerId);
+      if (vp) Object.assign(data, vp);
+    }
+    if (Object.keys(data).length) updates.push({ t, data });
+  }
+  await prisma.$transaction(updates.map(({ t, data }) => prisma.task.update({ where: { id: t.id }, data })));
 
-  await prisma.$transaction(
-    allowed.map((t) =>
-      prisma.task.update({
-        where: { id: t.id },
-        data: {
-          ...(status ? { status, ...actualPatch(t, status) } : {}),
-          ...(vendorPatch ?? {}),
-        },
-      }),
-    ),
-  );
-
-  if (vendorPatch?.vendorId) await notifyTaskAssigned(allowed.map((t) => t.id), user.id);
+  const assigned = updates.filter((u) => u.data.vendorId).map((u) => u.t.id);
+  if (assigned.length) await notifyTaskAssigned(assigned, user.id);
   // Změna stavu mění skutečnost → přepočítat plán dotčených složek.
-  if (status)
-    for (const sub of new Set(allowed.filter((t) => t.kind !== "todo").map((t) => t.subProjectId)))
-      await scheduleProject(projectId, sub);
-  revalidatePath(`/projects/${projectId}`);
+  if (status) {
+    const groups = new Map<string, { projectId: string; sub: string | null }>();
+    for (const { t } of updates)
+      if (t.kind !== "todo") groups.set(`${t.projectId}|${t.subProjectId ?? ""}`, { projectId: t.projectId, sub: t.subProjectId });
+    for (const g of groups.values()) await scheduleProject(g.projectId, g.sub);
+  }
+  for (const pid of new Set(updates.map((u) => u.t.projectId))) revalidatePath(`/projects/${pid}`);
   revalidatePath("/planning");
   revalidatePath("/ukoly");
-  return { updated: allowed.length, skipped: ids.length - allowed.length };
+  return { updated: updates.length, skipped: ids.length - updates.length };
 }
 
 /**

@@ -25,11 +25,10 @@ import { NewSubProjectForm } from "@/components/subprojects/new-subproject-form"
 import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-form";
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
-import { BULK_FORM_ID } from "@/lib/bulk-ids";
+import { TaskRow } from "@/components/tasks/task-row";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
-import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { parseStatusFilter } from "@/lib/list-filter";
 import { extractable } from "@/server/extraction";
 import { RememberProject } from "@/components/projects/remember-project";
@@ -52,15 +51,12 @@ import {
   roleLabel,
   taskStatusLabel,
   unitLabel,
-  priorityLabel,
-  priorityColor,
   REQUEST_FORECAST_STATUSES,
   TASK_DONE_STATUSES,
   isExpensePaid,
   expenseStage,
 } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
-import { colorClasses } from "@/lib/status-colors";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
@@ -245,16 +241,17 @@ export default async function ProjectDetailPage({
 
   const myEmail = user.email?.toLowerCase();
   // Dodavatelé v evidenci vlastníka se stejným e-mailem (kde "se ho to týká")
-  const myVendorIds = new Set<string>(
-    onlyMine && myEmail
-      ? (
-          await prisma.vendor.findMany({
-            where: { ownerId: project.ownerId, email: myEmail },
-            select: { id: true },
-          })
-        ).map((v) => v.id)
-      : [],
-  );
+  const myVendors = myEmail
+    ? await prisma.vendor.findMany({
+        where: { ownerId: project.ownerId, email: { equals: myEmail, mode: "insensitive" } },
+        select: { id: true, hourlyRate: true },
+      })
+    : [];
+  const myVendorIds = new Set<string>(myVendors.map((v) => v.id));
+  const rateOf = (vendorId: string) => {
+    const r = myVendors.find((v) => v.id === vendorId)?.hourlyRate;
+    return r != null ? Number(r) : null;
+  };
 
   // Viditelné položky: aktivní dodavatel vidí své záznamy + kde je uveden jako
   // dodavatel; úkoly i ty přiřazené na jeho e-mail.
@@ -1418,6 +1415,32 @@ export default async function ProjectDetailPage({
             />
           )}
         </div>
+        {(planTasks.length > 0 || todoTasks.length > 0) && (
+          <BulkTaskBar
+            projectId={project.id}
+            statuses={taskStatuses}
+            vendors={canAdd ? accountVendors.map((v) => ({ id: v.id, name: v.name })) : undefined}
+            logTasks={levelTasks
+              .filter(
+                (t) =>
+                  t.kind !== "phase" &&
+                  !isTaskDone(t.status) &&
+                  (canAdd ||
+                    (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
+                    (!!t.vendorId && myVendorIds.has(t.vendorId))),
+              )
+              .map((t) => ({
+                id: t.id,
+                title: t.title,
+                percent: t.percentDone,
+                due: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+              }))}
+            defaultRate={(() => {
+              const v = levelTasks.find((t) => t.vendorId && myVendorIds.has(t.vendorId))?.vendorId;
+              return v ? rateOf(v) : null;
+            })()}
+          />
+        )}
       <TabSection
         title={
           <h2 className="kicker">
@@ -1428,13 +1451,6 @@ export default async function ProjectDetailPage({
         actions={
           canAdd && (
             <div className="flex flex-wrap items-center gap-2">
-              {(planTasks.length > 0 || todoTasks.length > 0) && (
-                <BulkTaskBar
-                  projectId={project.id}
-                  statuses={taskStatuses}
-                  vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
-                />
-              )}
               <CatalogGenerateDialog projectId={project.id} subProjectId={sub ?? undefined} phases={phaseOptions} />
               <NewTaskForm
                 projectId={project.id}
@@ -1475,155 +1491,93 @@ export default async function ProjectDetailPage({
             {orderedTasks.map(({ t, level }) => {
               const isPhase = t.kind === "phase";
               const canEditTask = isManager || t.createdById === user.id;
-              const canStatusTask =
-                canEditTask ||
+              const mineTask =
                 (!!t.assigneeEmail && t.assigneeEmail === myEmail) ||
                 (!!t.vendorId && myVendorIds.has(t.vendorId));
-              const done = isTaskDone(t.status);
-              const overdue =
-                !done && !!t.dueDate && new Date(t.dueDate) < todayStart;
+              const canStatusTask = canEditTask || mineTask;
               const kids = isPhase ? taskChildren.get(t.id) ?? [] : [];
               const kidsDone = kids.filter((k) => isTaskDone(k.status)).length;
-              const phaseWarn =
-                isPhase &&
-                kids.length > 0 &&
-                kidsDone < kids.length &&
-                !!t.startDate &&
-                new Date(t.startDate) <= todayStart;
               const prereqs = (t.dependsOn ?? []).map((d) => d.dependsOn);
-              const blockedBy = prereqs.filter((p) => !isTaskDone(p.status));
-              const col = colorClasses(statusColor(t.status));
               return (
-                <li
+                <TaskRow
                   key={t.id}
-                  className={`group flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-stone-200 py-3.5 ${
-                    isPhase ? "bg-stone-50/60" : ""
-                  }`}
-                  style={level > 0 ? { paddingLeft: `${level * 24}px` } : undefined}
-                >
-                  <div className="flex min-w-0 flex-1 basis-60 items-start gap-2.5">
-                    {canEditTask && (
-                      <input
-                        type="checkbox"
-                        name="ids"
-                        value={t.id}
-                        form={BULK_FORM_ID}
-                        aria-label={`Vybrat: ${t.title}`}
-                        title="Vybrat pro hromadnou úpravu"
-                        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-stone-900"
-                      />
-                    )}
-                    <div className="min-w-0">
-                      <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${done ? "text-stone-400 line-through" : "text-stone-950"}`}>
-                        <span
-                          className={`size-2 shrink-0 rounded-full ${col.dot}`}
-                          title={taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
-                        />
-                        {isPhase && (
-                          <span className="kicker !text-stone-500">Fáze</span>
-                        )}
-                        {t.title}
-                        {isPhase && kids.length > 0 && (
-                          <span className="text-[11px] font-normal text-stone-500">
-                            {kidsDone}/{kids.length} hotovo
-                          </span>
-                        )}
-                        {t.priority && (
-                          <span className={`border px-1.5 py-px text-[10px] font-medium uppercase tracking-wide ${colorClasses(priorityColor(t.priority)).chip}`}>
-                            {priorityLabel(t.priority)}
-                          </span>
-                        )}
-                        {t.profession && (
-                          <span className="border border-stone-200 bg-stone-50 px-1.5 py-px text-[10px] font-normal uppercase tracking-wide text-stone-500">
-                            {t.profession}
-                          </span>
-                        )}
-                      </p>
-                      <p className="kicker mt-0.5">
-                        {t.vendor ? `${t.vendor.name} · ` : t.selfPerformed ? "svépomocí · " : ""}
-                        {t.assigneeEmail ? `${t.assigneeEmail} · ` : ""}
-                        {t.dueDate ? (
-                          <span className={overdue ? "text-red-600" : undefined}>
-                            do {formatDate(t.dueDate)}
-                          </span>
+                  level={level}
+                  todayStart={todayStart}
+                  statuses={taskStatuses}
+                  canSelect={canStatusTask}
+                  canStatus={canStatusTask}
+                  canLog={mineTask || canAdd}
+                  defaultRate={t.vendorId && myVendorIds.has(t.vendorId) ? rateOf(t.vendorId) : null}
+                  t={{
+                    id: t.id,
+                    title: t.title,
+                    kind: t.kind,
+                    status: t.status,
+                    statusLabel: taskStatusMap.get(t.status) ?? taskStatusLabel(t.status),
+                    statusColor: statusColor(t.status),
+                    done: isTaskDone(t.status),
+                    priority: t.priority,
+                    profession: t.profession,
+                    dueDate: t.dueDate,
+                    estimateDays: t.estimateDays,
+                    percentDone: t.percentDone,
+                    description: t.description,
+                    vendorName: t.vendor?.name ?? null,
+                    selfPerformed: t.selfPerformed,
+                    assigneeEmail: t.assigneeEmail,
+                    createdByName: t.createdBy.name ?? t.createdBy.email ?? "?",
+                    prereqs: prereqs.map((p) => ({ title: p.title, done: isTaskDone(p.status) })),
+                    phaseKids: isPhase ? { done: kidsDone, total: kids.length } : undefined,
+                    phaseWarn:
+                      isPhase &&
+                      kids.length > 0 &&
+                      kidsDone < kids.length &&
+                      !!t.startDate &&
+                      new Date(t.startDate) <= todayStart,
+                  }}
+                  extra={
+                    canEditTask && (
+                      <>
+                        {isPhase ? (
+                          <CatalogGenerateDialog
+                            projectId={project.id}
+                            subProjectId={sub ?? undefined}
+                            phase={{ id: t.id, title: t.title }}
+                          />
                         ) : (
-                          "bez termínu"
+                          <TaskCatalogFillDialog taskId={t.id} taskTitle={t.title} />
                         )}
-                        {t.estimateDays ? ` · odhad ${t.estimateDays} d` : ""}
-                        {!done && t.percentDone ? ` · ${t.percentDone} %` : ""}
-                        {` · zadal ${t.createdBy.name ?? t.createdBy.email ?? "?"}`}
-                      </p>
-                      {prereqs.length > 0 && (
-                        <p className={`mt-1 text-xs ${blockedBy.length ? "text-red-600" : "text-stone-500"}`}>
-                          {blockedBy.length ? "⛔ Čeká na: " : "↳ Navazuje na: "}
-                          {prereqs.map((p) => p.title).join(", ")}
-                        </p>
-                      )}
-                      {phaseWarn && (
-                        <p className="mt-1 text-xs text-amber-700">
-                          ⚠ Fáze začíná, ale dílčí úkoly ještě nejsou hotové.
-                        </p>
-                      )}
-                      {t.description && (
-                        <p className="mt-1 max-w-xl text-sm text-stone-500">
-                          {t.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 pl-7 sm:pl-0">
-                    {canStatusTask ? (
-                      <TaskStatusSelect id={t.id} status={t.status} statuses={taskStatuses} />
-                    ) : (
-                      <span className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${col.chip}`}>
-                        {taskStatusMap.get(t.status) ?? taskStatusLabel(t.status)}
-                      </span>
-                    )}
-                    {canEditTask && isPhase && (
-                      <CatalogGenerateDialog
-                        projectId={project.id}
-                        subProjectId={sub ?? undefined}
-                        phase={{ id: t.id, title: t.title }}
-                      />
-                    )}
-                    {canEditTask && !isPhase && (
-                      <TaskCatalogFillDialog taskId={t.id} taskTitle={t.title} />
-                    )}
-                    {canEditTask && (
-                      <span className="flex items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                        <EditTaskForm
-                          task={{
-                            id: t.id,
-                            title: t.title,
-                            assigneeEmail: t.assigneeEmail,
-                            startDate: t.startDate
-                              ? t.startDate.toISOString().slice(0, 10)
-                              : null,
-                            dueDate: t.dueDate
-                              ? t.dueDate.toISOString().slice(0, 10)
-                              : null,
-                            status: t.status,
-                            description: t.description,
-                            kind: t.kind,
-                            parentId: t.parentId,
-                            priority: t.priority,
-                            profession: t.profession,
-                            estimateDays: t.estimateDays,
-                            percentDone: t.percentDone,
-                            dependsOnIds: prereqs.map((p) => p.id),
-                          }}
-                          statuses={taskStatuses}
-                          phases={phaseOptions}
-                        />
-                        <DeleteButton
-                          action={deleteTask}
-                          fields={{ id: t.id }}
-                          confirm={isPhase ? "Smazat fázi i s dílčími úkoly?" : "Smazat tento úkol?"}
-                        />
-                      </span>
-                    )}
-                  </div>
-                </li>
+                        <span className="flex items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                          <EditTaskForm
+                            task={{
+                              id: t.id,
+                              title: t.title,
+                              assigneeEmail: t.assigneeEmail,
+                              startDate: t.startDate ? t.startDate.toISOString().slice(0, 10) : null,
+                              dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+                              status: t.status,
+                              description: t.description,
+                              kind: t.kind,
+                              parentId: t.parentId,
+                              priority: t.priority,
+                              profession: t.profession,
+                              estimateDays: t.estimateDays,
+                              percentDone: t.percentDone,
+                              dependsOnIds: prereqs.map((p) => p.id),
+                            }}
+                            statuses={taskStatuses}
+                            phases={phaseOptions}
+                          />
+                          <DeleteButton
+                            action={deleteTask}
+                            fields={{ id: t.id }}
+                            confirm={isPhase ? "Smazat fázi i s dílčími úkoly?" : "Smazat tento úkol?"}
+                          />
+                        </span>
+                      </>
+                    )
+                  }
+                />
               );
             })}
           </ul>

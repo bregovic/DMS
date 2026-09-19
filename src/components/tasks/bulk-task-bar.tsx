@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ListChecks, X } from "lucide-react";
+import { Clock, X } from "lucide-react";
 import { bulkUpdateTasks } from "@/server/actions/tasks";
 import { Combobox } from "@/components/ui/combobox";
+import { BulkLogDialog, type BulkLogTask } from "@/components/tasks/bulk-log-dialog";
 
 import { BULK_FORM_ID } from "@/lib/bulk-ids";
 const LIST_ID = "task-list";
@@ -11,7 +12,8 @@ const LIST_ID = "task-list";
 /**
  * Hromadná úprava úkolů: zaškrtávátko v řádku úkol vybere (nesplní ho –
  * hotovo se nastavuje stavem) a jakmile je něco vybrané, dole se objeví
- * lišta se stavem a dodavatelem.
+ * lišta se stavem, dodavatelem a vykázáním. Stejná lišta je v projektu
+ * i v Moje úkoly – server u každého úkolu zvlášť ověří, co smím změnit.
  *
  * Řádky seznamu se vykreslují na serveru; zaškrtávátka jsou obyčejné
  * inputy s atributem form=BULK_FORM_ID, takže patří do formuláře v liště
@@ -22,12 +24,21 @@ export function BulkTaskBar({
   projectId,
   statuses,
   vendors,
+  logTasks = [],
+  defaultRate = null,
 }: {
-  projectId: string;
+  /** Bez projektu (Moje úkoly) – úkoly můžou být z různých projektů. */
+  projectId?: string;
   statuses: { key: string; label: string }[];
-  vendors: { id: string; name: string }[];
+  /** Jen pro správce projektu; bez nich se dodavatel v liště nenabízí. */
+  vendors?: { id: string; name: string }[];
+  /** Úkoly, na které smím vykazovat. */
+  logTasks?: BulkLogTask[];
+  defaultRate?: number | null;
 }) {
   const [count, setCount] = useState(0);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [logOpen, setLogOpen] = useState(false);
   const on = count > 0;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,7 +48,11 @@ export function BulkTaskBar({
     Array.from(
       document.querySelectorAll<HTMLInputElement>(`input[type=checkbox][form=${BULK_FORM_ID}]`),
     );
-  const recount = () => setCount(boxes().filter((b) => b.checked).length);
+  const recount = () => {
+    const ids = boxes().filter((b) => b.checked).map((b) => b.value);
+    setCount(ids.length);
+    setPicked(ids);
+  };
 
   useEffect(() => {
     document.getElementById(LIST_ID)?.toggleAttribute("data-bulk", on);
@@ -60,7 +75,9 @@ export function BulkTaskBar({
   const clear = () => {
     boxes().forEach((b) => (b.checked = false));
     setCount(0);
+    setPicked([]);
   };
+  const loggable = logTasks.filter((t) => picked.includes(t.id));
 
   const all = () => {
     const bs = boxes();
@@ -98,7 +115,7 @@ export function BulkTaskBar({
         className={on ? "" : "hidden"}
         onReset={() => setMsg(null)}
       >
-        <input type="hidden" name="projectId" value={projectId} />
+        {projectId && <input type="hidden" name="projectId" value={projectId} />}
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-stone-300 bg-white/95 px-4 py-3 shadow-lift backdrop-blur md:bottom-0">
           <div className="mx-auto flex max-w-5xl flex-wrap items-end gap-2">
             <div className="flex basis-full items-center justify-between gap-3 text-sm sm:basis-auto sm:flex-col sm:items-start sm:gap-0">
@@ -118,6 +135,7 @@ export function BulkTaskBar({
                 ))}
               </select>
             </label>
+            {vendors && (
             <div className="min-w-44 flex-1 text-[11px] uppercase tracking-wide text-stone-400">
               Dodavatel
               <div className="mt-1 normal-case tracking-normal">
@@ -135,6 +153,7 @@ export function BulkTaskBar({
                 />
               </div>
             </div>
+            )}
             <button
               type="submit"
               disabled={busy || count === 0}
@@ -142,6 +161,15 @@ export function BulkTaskBar({
             >
               {busy ? "Ukládám…" : "Použít"}
             </button>
+            {loggable.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setLogOpen(true)}
+                className="flex h-10 cursor-pointer items-center gap-1.5 border border-stone-950 px-3 text-sm text-stone-950 transition-colors hover:bg-stone-100"
+              >
+                <Clock className="size-4" /> Vykázat
+              </button>
+            )}
             <button
               type="button"
               onClick={clear}
@@ -154,6 +182,18 @@ export function BulkTaskBar({
           </div>
         </div>
       </form>
+      {logOpen && (
+        <BulkLogDialog
+          tasks={loggable}
+          defaultRate={defaultRate}
+          onClose={() => setLogOpen(false)}
+          onDone={(m) => {
+            setLogOpen(false);
+            clear();
+            setMsg(m);
+          }}
+        />
+      )}
       {!on && msg && (
         <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-40 -translate-x-1/2 bg-stone-950 px-3 py-2 text-xs text-white shadow-lift md:bottom-4">
           {msg}

@@ -37,6 +37,8 @@ type LogInput = {
   hours: number | null;
   rate: number | null;
   amount: number | null;
+  /** U zadání částkou: odpracované hodiny jen pro evidenci (částku nepřepočítávají). */
+  infoHours?: number | null;
   percent: number | null;
   expectedEnd: Date | null;
   date: Date;
@@ -86,6 +88,7 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
     amount = inp.amount;
   }
   const progressOnly = amount == null;
+  const infoHours = !worked && amount != null && inp.infoHours && inp.infoHours > 0 ? inp.infoHours : null;
   if (progressOnly && inp.percent == null && !inp.expectedEnd && inp.files.length === 0)
     throw new Error(`U úkolu „${task.title}“ zadej hodiny, částku, % hotovo nebo termín.`);
 
@@ -109,11 +112,11 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
         taskId: task.id,
         title: progressOnly ? `${task.title} – podklady` : task.title,
         description: inp.note || null,
-        kind: worked ? "work" : "expense",
+        kind: worked || infoHours ? "work" : "expense",
         category: task.project.defaultCategory ?? "other",
         currency: task.project.defaultCurrency ?? "CZK",
         amount: amount ?? 0,
-        hours: worked ? inp.hours : null,
+        hours: worked ? inp.hours : infoHours,
         rate: worked ? inp.rate : null,
         date: inp.date,
         vendorId,
@@ -159,7 +162,7 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
       patch.status = "in_progress";
       if (!task.actualStart) patch.actualStart = today;
     }
-  } else if (worked && (task.status === "todo" || task.status === "rozhodnout")) {
+  } else if ((worked || infoHours) && (task.status === "todo" || task.status === "rozhodnout")) {
     patch.status = "in_progress";
     if (!task.actualStart) patch.actualStart = today;
   }
@@ -205,6 +208,7 @@ export async function logTaskExpense(formData: FormData) {
     hours: num(formData.get("hours")),
     rate: num(formData.get("rate")),
     amount: num(formData.get("amount")),
+    infoHours: num(formData.get("amountHours")),
     percent: changedNum(formData.get("percent"), formData.get("pct_orig")),
     expectedEnd: changedDate(formData.get("expectedEnd"), formData.get("due_orig")),
     date: dateOrNull(formData.get("date")) ?? new Date(),
@@ -232,11 +236,12 @@ export async function logTasksExpenseBulk(formData: FormData) {
   for (const id of ids) {
     const hours = num(formData.get(`hours_${id}`));
     const amount = num(formData.get(`amount_${id}`));
+    const infoHours = num(formData.get(`amhours_${id}`));
     const percent = changedNum(formData.get(`percent_${id}`), formData.get(`pct_orig_${id}`));
     const expectedEnd = changedDate(formData.get(`end_${id}`), formData.get(`due_orig_${id}`));
     if (!hours && !amount && percent == null && !expectedEnd) continue; // řádek bez údajů přeskočit
     results.push(
-      await logOne(user, id, { ...common, hours, amount, percent, expectedEnd, files }),
+      await logOne(user, id, { ...common, hours, amount, infoHours, percent, expectedEnd, files }),
     );
   }
   if (results.length === 0) throw new Error("Vyplň aspoň u jednoho úkolu hodiny, částku, % nebo termín.");
@@ -244,17 +249,21 @@ export async function logTasksExpenseBulk(formData: FormData) {
   return { logged: results.length };
 }
 
-/** Rychlá změna % hotovo z Moje úkoly (bez vykázání) – 100 % = hotovo. */
+/** Rychlá změna průběhu (% hotovo, předpokládané dokončení) bez vykázání – 100 % = hotovo. */
 export async function setMyTaskProgress(formData: FormData) {
   const user = await requireUser();
-  const percent = num(formData.get("percent"));
-  if (percent == null) return;
+  // z dialogu průběhu chodí i původní hodnoty – uloží se jen změna
+  const percent = formData.has("pct_orig")
+    ? changedNum(formData.get("percent"), formData.get("pct_orig"))
+    : num(formData.get("percent"));
+  const expectedEnd = changedDate(formData.get("expectedEnd"), formData.get("due_orig"));
+  if (percent == null && !expectedEnd) return;
   const r = await logOne(user, String(formData.get("taskId") || ""), {
     hours: null,
     rate: null,
     amount: null,
-    percent,
-    expectedEnd: null,
+    percent: percent == null ? null : Math.max(0, Math.min(100, Math.round(percent))),
+    expectedEnd,
     date: new Date(),
     note: "",
     files: [],

@@ -3,15 +3,12 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { listProjectsForUser } from "@/server/access";
 import { getStatuses } from "@/server/statuses";
-import { BulkLogBar } from "@/components/tasks/bulk-log-bar";
-import { TaskStatusSelect } from "@/components/tasks/task-status-select";
-import { TaskProgressInput } from "@/components/tasks/task-progress-input";
-import { INV_ATTR, PICK_ATTR } from "@/lib/bulk-ids";
+import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
+import { TaskRow } from "@/components/tasks/task-row";
+import { INV_ATTR } from "@/lib/bulk-ids";
 import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
-import { LogTaskExpense } from "@/components/tasks/log-task-expense";
 import { EmptyState } from "@/components/ui/empty-state";
-import { TASK_DONE_STATUSES, priorityColor, priorityLabel } from "@/lib/constants";
-import { colorClasses } from "@/lib/status-colors";
+import { TASK_DONE_STATUSES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
 import { taskStatusLabel } from "@/lib/constants";
@@ -73,6 +70,8 @@ export default async function MyTasksPage() {
             kind: true,
             status: true,
             priority: true,
+            profession: true,
+            estimateDays: true,
             ready: true,
             dueDate: true,
             startDate: true,
@@ -179,70 +178,41 @@ export default async function MyTasksPage() {
   );
 
   function Row({ t }: { t: (typeof tasks)[number] }) {
-    const finished = isDone(t.status);
-    const overdue = !finished && !!t.dueDate && t.dueDate < todayStart;
-    const logged = t.expenses.reduce((a, e) => a + Number(e.amount), 0);
-    const hours = t.expenses.reduce((a, e) => a + Number(e.hours ?? 0), 0);
-    const col = colorClasses(statusColor.get(t.status) ?? "stone");
+    const rate = t.vendor?.hourlyRate != null ? Number(t.vendor.hourlyRate) : null;
+    const ctx = [t.subProject?.name, t.parent ? `Fáze: ${t.parent.title}` : null].filter(Boolean).join(" · ");
     return (
-      <li className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-stone-200 py-3.5">
-        {!finished ? (
-          <input
-            type="checkbox"
-            value={t.id}
-            {...{ [PICK_ATTR]: "" }}
-            aria-label={`Vybrat: ${t.title}`}
-            title="Vybrat pro vykázání na víc úkolů najednou"
-            className="mt-0.5 size-5 shrink-0 cursor-pointer accent-stone-900"
-          />
-        ) : (
-          <span className="mt-0.5 size-5 shrink-0" />
-        )}
-        <div className="min-w-0 flex-1 basis-52">
-          <p className={`text-sm font-medium ${finished ? "text-stone-400 line-through" : "text-stone-950"}`}>
-            {t.title}
-          </p>
-          <p className="kicker mt-0.5 flex flex-wrap items-center gap-x-2">
-            {t.subProject && <span>{t.subProject.name}</span>}
-            <span className={`border px-1.5 py-px text-[10px] ${col.chip}`}>
-              {statusLabel.get(t.status) ?? t.status}
-            </span>
-            {t.priority && (
-              <span className={`border px-1.5 py-px text-[10px] font-medium ${colorClasses(priorityColor(t.priority)).chip}`}>
-                {priorityLabel(t.priority)}
-              </span>
-            )}
-            {!finished && !t.ready && <span className="text-amber-700">čeká</span>}
-            {t.dueDate && (
-              <span className={overdue ? "text-red-600" : undefined}>do {formatDate(t.dueDate)}</span>
-            )}
-          </p>
-          {t.description && <p className="mt-1 max-w-xl text-sm text-stone-500">{t.description}</p>}
-          {logged > 0 && (
-            <p className="mt-1 text-xs text-stone-500">
-              Vykázáno <span className="font-mono text-stone-800">{formatCurrency(logged)}</span>
-              {hours > 0 ? ` · ${hours.toLocaleString("cs-CZ")} h` : ""}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 pl-8 sm:pl-0">
-          <TaskStatusSelect id={t.id} status={t.status} statuses={statuses.map((s) => ({ key: s.key, label: s.label }))} />
-          {!finished && <TaskProgressInput taskId={t.id} percent={t.percentDone} />}
-        </div>
-        {!finished && (
-          <div className="pl-8 sm:pl-0">
-            <LogTaskExpense
-              taskId={t.id}
-              taskTitle={t.title}
-              defaultRate={t.vendor?.hourlyRate != null ? Number(t.vendor.hourlyRate) : null}
-              percentDone={t.percentDone}
-              dueDate={t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null}
-            />
-          </div>
-        )}
-      </li>
+      <TaskRow
+        todayStart={todayStart}
+        statuses={statusList}
+        canSelect
+        canStatus
+        canLog
+        defaultRate={rate}
+        t={{
+          id: t.id,
+          title: t.title,
+          kind: t.kind,
+          status: t.status,
+          statusLabel: statusLabel.get(t.status) ?? taskStatusLabel(t.status),
+          statusColor: statusColor.get(t.status) ?? "stone",
+          done: isDone(t.status),
+          priority: t.priority,
+          profession: t.profession,
+          ready: t.ready,
+          dueDate: t.dueDate,
+          estimateDays: t.estimateDays,
+          percentDone: t.percentDone,
+          description: t.description,
+          context: ctx || undefined,
+          logged: {
+            amount: t.expenses.reduce((a, e) => a + Number(e.amount), 0),
+            hours: t.expenses.reduce((a, e) => a + Number(e.hours ?? 0), 0),
+          },
+        }}
+      />
     );
   }
+  const statusList = statuses.map((s) => ({ key: s.key, label: s.label }));
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -299,8 +269,9 @@ export default async function MyTasksPage() {
             </section>
           )}
 
-          <BulkLogBar
-            tasks={open.map((t) => ({
+          <BulkTaskBar
+            statuses={statusList}
+            logTasks={open.map((t) => ({
               id: t.id,
               title: t.title,
               percent: t.percentDone,
