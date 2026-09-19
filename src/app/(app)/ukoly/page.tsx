@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { listProjectsForUser } from "@/server/access";
+import { isManager, listProjectsForUser } from "@/server/access";
 import { getStatuses } from "@/server/statuses";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
@@ -60,15 +60,20 @@ export default async function MyTasksPage({
     }),
   ]);
 
-  const [tasks, statuses, accessible] = await Promise.all([
-    email
+  // Rozsah: mine = přidělené mně (výchozí), all = všechny úkoly v projektech, které spravuji
+  const accessible = await listProjectsForUser(user);
+  const managedIds = accessible.filter((a) => isManager(a.role)).map((a) => a.project.id);
+  const scopeAll = sp?.mscope === "all" && managedIds.length > 0;
+  const mineWhere = email
+    ? [{ vendor: { email: { equals: email, mode: "insensitive" as const } } }, { assigneeEmail: email }]
+    : [];
+
+  const [tasks, statuses] = await Promise.all([
+    email || scopeAll
       ? prisma.task.findMany({
-          where: {
-            OR: [
-              { vendor: { email: { equals: email, mode: "insensitive" } } },
-              { assigneeEmail: email },
-            ],
-          },
+          where: scopeAll
+            ? { OR: [{ projectId: { in: managedIds }, kind: { not: "phase" } }, ...mineWhere] }
+            : { OR: mineWhere },
           orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
           select: {
             id: true,
@@ -88,16 +93,17 @@ export default async function MyTasksPage({
             description: true,
             project: { select: { id: true, name: true } },
             subProject: { select: { name: true } },
-            vendor: { select: { hourlyRate: true, email: true } },
+            assigneeEmail: true,
+            vendor: { select: { hourlyRate: true, email: true, name: true } },
             expenses: {
-              where: { createdById: user.id },
+              // u vlastních úkolů moje výkazy, u cizích (rozsah Vše) všechny
+              where: scopeAll ? {} : { createdById: user.id },
               select: { amount: true, hours: true },
             },
           },
         })
       : Promise.resolve([]),
     getStatuses("task"),
-    listProjectsForUser(user),
   ]);
 
   const statusLabel = new Map(statuses.map((s) => [s.key, s.label]));
@@ -106,6 +112,43 @@ export default async function MyTasksPage({
   const isDone = (st: string) => TASK_DONE_STATUSES.includes(st);
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+
+  // Lidé (rozsah Vše): dodavatel/řešitel podle e-mailu, jméno z dodavatele nebo účtu
+  const low = (e: string | null | undefined) => e?.toLowerCase() ?? null;
+  const isMine = (t: (typeof tasks)[number]) => !!email && (low(t.assigneeEmail) === email || low(t.vendor?.email) === email);
+  const peopleMap = new Map<string, string | null>();
+  for (const t of tasks) {
+    if (t.vendor?.email) peopleMap.set(t.vendor.email.toLowerCase(), t.vendor.name);
+    if (t.assigneeEmail && !peopleMap.has(t.assigneeEmail.toLowerCase())) peopleMap.set(t.assigneeEmail.toLowerCase(), null);
+  }
+  const unnamed = [...peopleMap.entries()].filter(([, n]) => !n).map(([e]) => e);
+  if (unnamed.length)
+    for (const u of await prisma.user.findMany({ where: { email: { in: unnamed, mode: "insensitive" } }, select: { email: true, name: true } }))
+      if (u.email && u.name) peopleMap.set(u.email.toLowerCase(), u.name);
+  if (email) peopleMap.delete(email);
+  const people = [...peopleMap.entries()].map(([e, n]) => ({ email: e, name: n || e })).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  const nameOf = (e: string | null | undefined) => (e ? (e.toLowerCase() === email ? "já" : peopleMap.get(e.toLowerCase()) || e) : null);
+  const mper = scopeAll && typeof sp?.mper === "string" ? sp.mper : "";
+  const personMatch = (t: (typeof tasks)[number]) =>
+    !mper ||
+    (mper === "mine"
+      ? isMine(t)
+      : mper === "none"
+        ? !t.vendor && !t.assigneeEmail
+        : mper.startsWith("p:")
+          ? [low(t.assigneeEmail), low(t.vendor?.email)].includes(mper.slice(2))
+          : true);
+  const myHref = (over: Record<string, string | null>) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp ?? {})) if (typeof v === "string") u.set(k, v);
+    for (const [k, v] of Object.entries(over)) if (v == null) u.delete(k); else u.set(k, v);
+    const q = u.toString();
+    return q ? `/ukoly?${q}` : "/ukoly";
+  };
+  const chip = (active: boolean) =>
+    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
+      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
+    }`;
 
   // Filtr (prefix m): hledání, stav (výchozí neukončené), projekt, termín, řazení.
   const mstRaw = sp?.mst;
@@ -124,6 +167,7 @@ export default async function MyTasksPage({
         (customStatus ? !mstSel || mstSel.has(t.status) : !isDone(t.status)) &&
         (!mq || t.title.toLowerCase().includes(mq) || t.project.name.toLowerCase().includes(mq)) &&
         (!mproj || t.project.id === mproj) &&
+        personMatch(t) &&
         (!mfrom || (!!t.dueDate && t.dueDate >= mfrom)) &&
         (!mto || (!!t.dueDate && t.dueDate <= mto)),
     )
@@ -132,16 +176,16 @@ export default async function MyTasksPage({
         ? a.title.localeCompare(b.title, "cs") * mdir
         : ((a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)) * mdir,
     );
-  const filterActive = customStatus || !!mq || !!mproj || !!mfrom || !!mto;
+  const filterActive = customStatus || !!mq || !!mproj || !!mfrom || !!mto || !!mper;
   const statusCounts: Record<string, number> = {};
   for (const t of tasks) statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
   const projectOptions = [...new Map(tasks.map((t) => [t.project.id, t.project.name])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1], "cs"))
     .map(([value, label]) => ({ value, label }));
 
-  const open = tasks.filter((t) => !isDone(t.status));
+  const open = tasks.filter((t) => !isDone(t.status) && personMatch(t));
   // bez vlastního výběru stavu se hotové ukazují zvlášť dole (sbalené)
-  const done = customStatus ? [] : tasks.filter((t) => isDone(t.status));
+  const done = customStatus ? [] : tasks.filter((t) => isDone(t.status) && personMatch(t) && (!mproj || t.project.id === mproj));
 
   // Seskupit podle projektu - dodavatel dělá často pro víc zakázek.
   const byProject = new Map<string, { name: string; id: string; rows: typeof open }>();
@@ -192,6 +236,7 @@ export default async function MyTasksPage({
           percentDone: t.percentDone,
           description: t.description,
           context: ctx || undefined,
+          ...(scopeAll ? { vendorName: t.vendor?.name ?? null, assigneeEmail: t.assigneeEmail ? nameOf(t.assigneeEmail) : null } : {}),
           logged: {
             amount: t.expenses.reduce((a, e) => a + Number(e.amount), 0),
             hours: t.expenses.reduce((a, e) => a + Number(e.hours ?? 0), 0),
@@ -206,18 +251,65 @@ export default async function MyTasksPage({
     <div className="mx-auto max-w-4xl">
       <header className="mb-6 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <div>
-          <h1 className="display text-4xl text-stone-950">Moje úkoly</h1>
+          <h1 className="display text-4xl text-stone-950">{scopeAll ? "Úkoly v mých projektech" : "Moje úkoly"}</h1>
           <p className="kicker mt-1">
             {open.length} otevřených{done.length ? ` · ${done.length} hotových` : ""}
           </p>
         </div>
-        {loggedTotal > 0 && (
+        {!scopeAll && loggedTotal > 0 && (
           <div className="text-right">
             <p className="kicker">Vykázáno celkem</p>
             <p className="display mt-1 text-2xl text-stone-950">{formatCurrency(loggedTotal)}</p>
           </div>
         )}
       </header>
+
+      {(managedIds.length > 0 || tasks.length > 0) && (
+        <div className="mb-4 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
+          {managedIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="kicker mr-1 w-14">Úkoly</span>
+              <Link href={myHref({ mscope: null, mper: null })} className={chip(!scopeAll)}>
+                Přidělené mně
+              </Link>
+              <Link href={myHref({ mscope: "all" })} className={chip(scopeAll)}>
+                Všechny v mých projektech
+              </Link>
+            </div>
+          )}
+          {scopeAll && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="kicker mr-1 w-14">Kdo</span>
+              <Link href={myHref({ mper: null })} className={chip(!mper)}>
+                Všichni
+              </Link>
+              <Link href={myHref({ mper: "mine" })} className={chip(mper === "mine")}>
+                Já
+              </Link>
+              {people.map((x) => (
+                <Link key={x.email} href={myHref({ mper: `p:${x.email}` })} className={chip(mper === `p:${x.email}`)}>
+                  {x.name}
+                </Link>
+              ))}
+              <Link href={myHref({ mper: "none" })} className={chip(mper === "none")}>
+                Nepřidělené
+              </Link>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="kicker mr-1 w-14">Stav</span>
+            <Link href={myHref({ mst: null })} className={chip(!customStatus)}>
+              Otevřené
+            </Link>
+            <Link href={myHref({ mst: "done" })} className={chip(mstRaw === "done")}>
+              Hotové
+            </Link>
+            <Link href={myHref({ mst: "all" })} className={chip(mstRaw === "all")}>
+              Vše
+            </Link>
+          </div>
+        </div>
+      )}
 
       {tasks.length === 0 ? (
         <EmptyState
@@ -289,10 +381,15 @@ export default async function MyTasksPage({
           )}
           {(myExpenses.length > 0 || myInvoices.length > 0) && (
             <section className="mb-8 mt-12 border-t border-stone-300/80 pt-8">
-              <h2 className="display text-2xl text-stone-950">Výdaje a platby</h2>
+              <h2 className="display text-2xl text-stone-950">Moje vykázaná práce a vyúčtování</h2>
               <p className="mb-5 mt-1 text-xs text-stone-500">
-                Moje výkazy na přidělených úkolech. Zaškrtni nevyúčtované a vystav fakturu nebo žádost o úhradu – vlastník
-                projektu dostane oznámení a zaplatí přes QR. Fakturační údaje doplníš v{" "}
+                Jen to, co jsi sám vykázal na úkoly (hodiny, částky). Když pracuješ pro někoho jiného, zaškrtni nevyúčtované
+                výkazy a vystav fakturu nebo žádost o úhradu – vlastník projektu dostane oznámení a zaplatí přes QR. Výdaje
+                a výkazy ostatních ve tvých projektech najdeš v{" "}
+                <Link href="/payments" className="underline underline-offset-2 hover:text-stone-950">
+                  Platbách
+                </Link>
+                . Fakturační údaje doplníš v{" "}
                 <Link href="/settings" className="underline underline-offset-2 hover:text-stone-950">
                   Nastavení
                 </Link>
