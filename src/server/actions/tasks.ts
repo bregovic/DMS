@@ -775,7 +775,7 @@ export async function updateTaskPlan(formData: FormData) {
       // Odhad nákladů (do forecastu) – jen když ho formulář posílá.
       ...(formData.get("costForm") === "1"
         ? (() => {
-            const raw = String(formData.get("costEstimate") ?? "").replace(/s/g, "").replace(",", ".");
+            const raw = String(formData.get("costEstimate") ?? "").replace(/\s/g, "").replace(",", ".");
             const v = raw ? Number(raw) : null;
             return { costEstimate: v != null && !isNaN(v) && v >= 0 ? v : null };
           })()

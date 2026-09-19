@@ -40,6 +40,7 @@ export function PlanAi({
   vendorSelection = 0,
   costDraft = null,
   unestimated = 0,
+  openTasks = 0,
 }: {
   projectId: string;
   docs: { id: string; name: string }[];
@@ -51,6 +52,8 @@ export function PlanAi({
   costDraft?: Draft;
   /** Nehotové úkoly bez odhadu nákladů. */
   unestimated?: number;
+  /** Všechny nehotové úkoly (pro přepočet odhadů podle katalogu). */
+  openTasks?: number;
 }) {
   const router = useRouter();
   const [ask, setAsk] = useState(false);
@@ -60,7 +63,7 @@ export function PlanAi({
   const [msg, setMsg] = useState<string | null>(null);
   const running = draft?.status === "running" || costDraft?.status === "running";
   const planRunning = draft?.status === "running";
-  const [costAsk, setCostAsk] = useState(false);
+  const [costAsk, setCostAsk] = useState<false | "missing" | "all">(false);
   const [costs, setCosts] = useState<Costs | null>(null);
   // Odpovědi k otevřeným bodům návrhu plánu (index bodu → text).
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -226,16 +229,28 @@ export function PlanAi({
             <Coins className="size-3.5" /> Odhad nákladů k potvrzení
           </button>
         ) : (
-          unestimated > 0 && (
-            <button
-              type="button"
-              onClick={() => setCostAsk(true)}
-              className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
-              title="Doplní odhad nákladů úkolům, které ho nemají – promítne se do forecastu"
-            >
-              <Coins className="size-3.5" /> Odhadnout náklady · {unestimated}
-            </button>
-          )
+          <>
+            {unestimated > 0 && (
+              <button
+                type="button"
+                onClick={() => setCostAsk("missing")}
+                className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
+                title="Doplní odhad nákladů úkolům, které ho nemají – promítne se do forecastu"
+              >
+                <Coins className="size-3.5" /> Odhadnout náklady · {unestimated}
+              </button>
+            )}
+            {openTasks > unestimated && (
+              <button
+                type="button"
+                onClick={() => setCostAsk("all")}
+                className={`${chip} border-stone-300 text-stone-700 hover:border-stone-950`}
+                title="Nově odhadne náklady všech nehotových úkolů podle aktuálních cen katalogu – změny zkontroluješ před uložením"
+              >
+                <Coins className="size-3.5" /> Přepočítat podle katalogu
+              </button>
+            )}
+          </>
         )}
         {costDraft?.status === "error" && (
           <span className="text-xs text-red-600" title={costDraft.error ?? undefined}>
@@ -246,7 +261,11 @@ export function PlanAi({
       </div>
 
       {costAsk && (
-        <Dialog title="Odhad nákladů plánu" size="md" onClose={() => setCostAsk(false)}>
+        <Dialog
+          title={costAsk === "all" ? "Přepočet odhadů podle katalogu" : "Odhad nákladů plánu"}
+          size="md"
+          onClose={() => setCostAsk(false)}
+        >
           <form
             action={async (fd) => {
               setBusy(true);
@@ -262,9 +281,11 @@ export function PlanAi({
             className="space-y-3 p-5"
           >
             <input type="hidden" name="projectId" value={projectId} />
+            {costAsk === "all" && <input type="hidden" name="all" value="1" />}
             <p className="text-sm text-stone-600">
-              Odhadnu náklady {unestimated} úkolům bez odhadu (materiál + práce, s DPH). Odhady pak zkontroluješ
-              a upravíš – promítnou se do forecastu, dokud je nenahradí cena žádanky nebo nabídky.
+              {costAsk === "all"
+                ? `Nově odhadnu náklady všech ${openTasks} nehotových úkolů podle aktuálních cen katalogu (balíčky a úkony za MJ). Uvidíš původní a nový odhad a uložíš jen to, co chceš.`
+                : `Odhadnu náklady ${unestimated} úkolům bez odhadu (materiál + práce, s DPH) podle cen katalogu. Odhady pak zkontroluješ a upravíš – promítnou se do forecastu, dokud je nenahradí cena žádanky nebo nabídky.`}
             </p>
             <label className="block text-xs text-stone-500">
               Upřesnění (volitelné)
@@ -281,7 +302,7 @@ export function PlanAi({
                 Zrušit
               </Button>
               <Button type="submit" disabled={busy}>
-                {busy ? "Spouštím…" : "Odhadnout"}
+                {busy ? "Spouštím…" : costAsk === "all" ? "Přepočítat" : "Odhadnout"}
               </Button>
             </DialogFooter>
           </form>
@@ -308,8 +329,16 @@ export function PlanAi({
             <input type="hidden" name="id" value={costs.id} />
             <p className="text-sm text-stone-800">{costs.summary}</p>
             <p className="kicker">
-              Celkem {formatCurrency(costs.items.reduce((a, i) => a + (i.costEstimate ?? 0), 0))} · {costs.items.length} úkolů
+              Celkem {formatCurrency(costs.items.reduce((a, i) => a + (i.costEstimate ?? 0), 0))}
+              {costs.recalc && ` (dosud ${formatCurrency(costs.items.reduce((a, i) => a + (i.current ?? 0), 0))})`} ·{" "}
+              {costs.items.length} úkolů
             </p>
+            {costs.recalc && (
+              <p className="text-xs text-stone-500">
+                U každého úkolu je původní odhad a návrh podle katalogu. Když chceš původní ponechat, přepiš pole na
+                původní hodnotu nebo ho smaž (prázdné pole se neuloží).
+              </p>
+            )}
             {[...new Set(costs.items.map((i) => i.phase))].map((ph) => (
               <div key={ph} className="border border-stone-200">
                 <p className="border-b border-stone-100 px-3 py-2 text-sm font-medium text-stone-950">{ph}</p>
@@ -321,6 +350,18 @@ export function PlanAi({
                         {i.title}
                         {i.note && <span className="block text-[11px] text-stone-400">{i.note}</span>}
                       </span>
+                      {costs.recalc && (
+                        <span
+                          className={`w-24 text-right font-mono text-[11px] ${
+                            i.current != null && i.costEstimate != null && Math.abs(i.costEstimate - i.current) > i.current * 0.2
+                              ? "text-orange-700"
+                              : "text-stone-400"
+                          }`}
+                          title="Původní odhad"
+                        >
+                          {i.current != null ? formatCurrency(i.current) : "—"} →
+                        </span>
+                      )}
                       <input
                         name={`cost_${i.id}`}
                         inputMode="decimal"

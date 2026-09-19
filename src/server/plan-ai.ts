@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
 import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
+import { calcOperation } from "@/lib/process-calc";
 
 /** Plán z dokumentace potřebuje silnější model než vytěžení nabídky (AI_PLAN_MODEL). */
 const PLAN_MODEL = process.env.AI_PLAN_MODEL || "gpt-5";
@@ -284,7 +285,7 @@ export async function planAiProps(projectId: string) {
       },
     }),
   ]);
-  const [vendorSelection, costDraft, unestimated] = await Promise.all([
+  const [vendorSelection, costDraft, unestimated, estimated] = await Promise.all([
     vendorSelectionCandidates(projectId).then((c) => c.length),
     prisma.planDraft.findFirst({
       where: { projectId, kind: "costs", status: { in: ["running", "ready", "error"] } },
@@ -292,6 +293,7 @@ export async function planAiProps(projectId: string) {
       select: { id: true, status: true, error: true },
     }),
     costCandidates(projectId).then((c) => c.length),
+    costCandidates(projectId, true).then((c) => c.length),
   ]);
   return {
     projectId,
@@ -301,6 +303,7 @@ export async function planAiProps(projectId: string) {
     vendorSelection,
     costDraft,
     unestimated,
+    openTasks: estimated,
   };
 }
 
@@ -386,6 +389,8 @@ export async function createVendorSelectionTodos(projectId: string, userId: stri
 export type CostEstimateResult = {
   summary: string;
   items: { id: string; costEstimate: number | null; note: string | null }[];
+  /** Přepočet: původní odhady (id → Kč) v okamžiku spuštění. */
+  previous?: Record<string, number | null>;
 };
 const COST_SCHEMA = obj({
   summary: { type: "string" },
@@ -396,15 +401,26 @@ const COST_SCHEMA = obj({
 });
 const COST_INSTRUCTIONS = `Jsi rozpočtář stavby v Česku. U každého úkolu stavebního plánu odhadni náklady v Kč s DPH (materiál + práce, ceny ČR 2026).
 Vycházej z názvu, popisu, fáze, řemesla a délky (dny práce party). Úkol, který je jen administrativní nebo bez nákladů (rozhodnutí, kontrola, pauza), dej 0.
-Když opravdu nejde odhadnout, null. note: krátce z čeho odhad vychází (max ~10 slov).
+Když je k dispozici ceník z katalogu (ceny za MJ úkonů a balíčků s DPH), vycházej z něj: odhadni množství (m2, m, ks…) z názvu,
+popisu a projektu a vynásob cenou za MJ; u úkolu s původním odhadem ho zohledni, ale oprav podle ceníku.
+Když opravdu nejde odhadnout, null. note: krátce z čeho odhad vychází, např. „~40 m2 × balíček střecha 2 950 Kč“ (max ~12 slov).
 summary: 1–2 věty – celkový odhad a hlavní nejistoty. Vrať položku pro každé zadané id. Pokyn uživatele má přednost.`;
 
-/** Úkoly bez odhadu nákladů, které ještě nejsou hotové (a fáze bez úkolů). */
-export async function costCandidates(projectId: string) {
+/**
+ * Úkoly k odhadu nákladů, které ještě nejsou hotové (a fáze bez úkolů):
+ * bez odhadu, nebo při přepočtu (all) všechny.
+ */
+export async function costCandidates(projectId: string, all = false) {
   const tasks = await prisma.task.findMany({
-    where: { projectId, kind: { in: ["task", "phase"] }, costEstimate: null, status: { notIn: ["done", "cancelled"] } },
+    where: {
+      projectId,
+      kind: { in: ["task", "phase"] },
+      ...(all ? {} : { costEstimate: null }),
+      status: { notIn: ["done", "cancelled"] },
+    },
     select: {
       id: true,
+      costEstimate: true,
       kind: true,
       title: true,
       description: true,
@@ -420,14 +436,15 @@ export async function costCandidates(projectId: string) {
   return tasks.filter((t) => !(t.kind === "phase" && t._count.children > 0));
 }
 
-export async function createCostDraft(projectId: string, userId: string, prompt?: string | null) {
+export async function createCostDraft(projectId: string, userId: string, prompt?: string | null, all = false) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
-  const n = (await costCandidates(projectId)).length;
-  if (n === 0) throw new Error("Všechny nehotové úkoly už odhad nákladů mají.");
+  const n = (await costCandidates(projectId, all)).length;
+  if (n === 0) throw new Error(all ? "V plánu nejsou nehotové úkoly." : "Všechny nehotové úkoly už odhad nákladů mají.");
   const d = await prisma.planDraft.create({
-    data: { projectId, kind: "costs", documentIds: [], prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    // u odhadu nákladů znamená replaceExisting přepočet i úkolů, které odhad už mají
+    data: { projectId, kind: "costs", replaceExisting: all, documentIds: [], prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
     select: { id: true },
   });
   return d.id;
@@ -437,10 +454,11 @@ export async function runCostDraft(draftId: string) {
   try {
     const d = await prisma.planDraft.findUnique({
       where: { id: draftId },
-      select: { id: true, model: true, prompt: true, project: { select: { id: true, name: true, type: true, description: true } } },
+      select: { id: true, model: true, prompt: true, replaceExisting: true, project: { select: { id: true, name: true, type: true, description: true } } },
     });
     if (!d) return;
-    const cands = (await costCandidates(d.project.id)).slice(0, 250);
+    const cands = (await costCandidates(d.project.id, d.replaceExisting)).slice(0, 250);
+    const priceList = await catalogPriceList();
     const list = cands.map((t) => ({
       id: t.id,
       ukol: t.title,
@@ -449,6 +467,7 @@ export async function runCostDraft(draftId: string) {
       popis: t.description?.slice(0, 300) ?? null,
       dny: t.estimateDays,
       remeslo: t.profession,
+      ...(d.replaceExisting ? { puvodni_odhad: t.costEstimate != null ? Number(t.costEstimate) : null } : {}),
     }));
     const { data, costUsd } = await callModel<CostEstimateResult>(
       d.model,
@@ -460,7 +479,10 @@ export async function runCostDraft(draftId: string) {
             `Projekt: ${d.project.name} (${d.project.type})${d.project.description ? ` – ${d.project.description}` : ""}
 
 Úkoly:
-${JSON.stringify(list, null, 1)}` +
+${JSON.stringify(list, null, 1)}
+
+Ceník z katalogu (cena za 1 MJ s DPH, materiál + práce):
+${priceList}` +
             (d.prompt ? `
 
 Pokyn uživatele: ${d.prompt}` : ""),
@@ -472,6 +494,8 @@ Pokyn uživatele: ${d.prompt}` : ""),
     );
     const known = new Set(cands.map((c) => c.id));
     data.items = data.items.filter((i) => known.has(i.id));
+    if (d.replaceExisting)
+      data.previous = Object.fromEntries(cands.map((c) => [c.id, c.costEstimate != null ? Number(c.costEstimate) : null]));
     await prisma.planDraft.update({
       where: { id: d.id },
       data: { status: "ready", result: data as unknown as Prisma.InputJsonValue, costUsd },
@@ -484,4 +508,53 @@ Pokyn uživatele: ${d.prompt}` : ""),
       })
       .catch(() => {});
   }
+}
+
+/** Ceník z katalogu pro odhad nákladů: balíčky a úkony s cenou za 1 MJ (výchozí parametry). */
+export async function catalogPriceList() {
+  const ops = await prisma.operation.findMany({
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+    include: {
+      params: true,
+      materials: { include: { material: { select: { id: true, name: true, unit: true, unitPrice: true } } } },
+    },
+  });
+  const perUnit = new Map<string, number>();
+  for (const o of ops) {
+    const values: Record<string, number> = {};
+    for (const p of o.params) values[p.key] = Number(p.defaultValue ?? 1) || 1;
+    values.mnozstvi = 1;
+    const r = calcOperation(
+      {
+        unit: o.unit,
+        quantityFormula: o.quantityFormula,
+        laborFormula: o.laborFormula,
+        laborRate: o.laborRate != null ? Number(o.laborRate) : null,
+        params: o.params.map((p) => ({ key: p.key, defaultValue: p.defaultValue != null ? Number(p.defaultValue) : null })),
+        materials: o.materials.map((m) => ({
+          materialId: m.material.id,
+          name: m.material.name,
+          unit: m.material.unit,
+          unitPrice: Number(m.material.unitPrice),
+          quantityFormula: m.quantityFormula,
+          wastePct: m.wastePct != null ? Number(m.wastePct) : null,
+        })),
+      },
+      values,
+    );
+    perUnit.set(o.id, r.totalCost);
+  }
+  const pkgs = await prisma.package.findMany({ orderBy: { name: "asc" }, include: { items: true } });
+  const fmt = (n: number) => Math.round(n).toLocaleString("cs-CZ");
+  const lines = [
+    "Balíčky:",
+    ...pkgs.map(
+      (p) =>
+        `- ${p.name}: ${fmt(p.items.reduce((a, it) => a + (perUnit.get(it.operationId) ?? 0) * Number(it.qtyPerUnit), 0))} Kč/${p.unit}` +
+        (p.note ? ` (${p.note.slice(0, 120)})` : ""),
+    ),
+    "Úkony:",
+    ...ops.map((o) => `- ${o.name}: ${fmt(perUnit.get(o.id) ?? 0)} Kč/${o.unit}`),
+  ];
+  return lines.join("\n");
 }
