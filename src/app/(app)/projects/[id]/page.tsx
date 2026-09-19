@@ -26,6 +26,7 @@ import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-for
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
+import { ACTIVITY_PERIODS, TaskActivity } from "@/components/tasks/task-activity";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
@@ -176,7 +177,7 @@ export default async function ProjectDetailPage({
           orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
           include: {
             createdBy: { select: { name: true, email: true } },
-            vendor: { select: { name: true } },
+            vendor: { select: { name: true, email: true } },
             dependsOn: {
               include: {
                 dependsOn: { select: { id: true, title: true, status: true } },
@@ -468,8 +469,11 @@ export default async function ProjectDetailPage({
   const ttoRaw = typeof sp?.tto === "string" && sp.tto ? new Date(sp.tto) : null;
   if (ttoRaw) ttoRaw.setHours(23, 59, 59, 999);
   const tsort = sp?.tsort === "due" || sp?.tsort === "title" ? sp.tsort : "plan";
-  // Přidělení (parametr tas): mine | none | self | v:<dodavatel> | a:<e-mail řešitele>
+  // Přidělení (parametr tas): mine | none | self | p:<e-mail osoby> (řešitel nebo dodavatel s tím e-mailem);
+  // starší v:<dodavatel> | a:<e-mail> zůstávají funkční kvůli uloženým odkazům.
   const tas = typeof sp?.tas === "string" ? sp.tas : "";
+  const low = (e: string | null | undefined) => e?.toLowerCase() ?? null;
+  const personOf = (t: (typeof levelTasks)[number]) => [low(t.assigneeEmail), low(t.vendor?.email)].filter(Boolean) as string[];
   const assignMatch = (t: (typeof levelTasks)[number]) =>
     !tas ||
     (tas === "mine"
@@ -478,11 +482,13 @@ export default async function ProjectDetailPage({
         ? !t.vendorId && !t.assigneeEmail && !t.selfPerformed
         : tas === "self"
           ? t.selfPerformed
-          : tas.startsWith("v:")
-            ? t.vendorId === tas.slice(2)
-            : tas.startsWith("a:")
-              ? t.assigneeEmail === tas.slice(2)
-              : true);
+          : tas.startsWith("p:")
+            ? personOf(t).includes(tas.slice(2))
+            : tas.startsWith("v:")
+              ? t.vendorId === tas.slice(2)
+              : tas.startsWith("a:")
+                ? t.assigneeEmail === tas.slice(2)
+                : true);
   const tdir = sp?.tdir === "desc" ? -1 : 1;
   const taskStatusCounts: Record<string, number> = {};
   for (const t of planTasks) taskStatusCounts[t.status] = (taskStatusCounts[t.status] ?? 0) + 1;
@@ -493,17 +499,46 @@ export default async function ProjectDetailPage({
     (!tfrom || (!!t.dueDate && t.dueDate >= tfrom)) &&
     (!ttoRaw || (!!t.startDate ? t.startDate <= ttoRaw : !!t.dueDate && t.dueDate <= ttoRaw));
   const taskFilterActive = typeof tstRaw === "string" || !!tq || !!tfrom || !!ttoRaw || !!tas;
+  // Lidé v úkolech: řešitelé a dodavatelé (podle e-mailu) + kdo na úkoly vykazoval.
+  // Jméno z evidence dodavatelů, jinak z účtu, jinak e-mail.
+  const loggers = await prisma.expense.findMany({
+    where: { projectId: project.id, taskId: { not: null } },
+    distinct: ["createdById"],
+    select: { createdBy: { select: { email: true, name: true } } },
+  });
+  const peopleMap = new Map<string, string | null>();
+  for (const t of levelTasks) {
+    if (t.vendor?.email) peopleMap.set(t.vendor.email.toLowerCase(), t.vendor.name);
+    if (t.assigneeEmail && !peopleMap.has(t.assigneeEmail.toLowerCase())) peopleMap.set(t.assigneeEmail.toLowerCase(), null);
+  }
+  for (const l of loggers)
+    if (l.createdBy.email && !peopleMap.has(l.createdBy.email.toLowerCase())) peopleMap.set(l.createdBy.email.toLowerCase(), l.createdBy.name);
+  const unnamed = [...peopleMap.entries()].filter(([, n]) => !n).map(([e]) => e);
+  if (unnamed.length)
+    for (const u of await prisma.user.findMany({ where: { email: { in: unnamed, mode: "insensitive" } }, select: { email: true, name: true } }))
+      if (u.email && u.name) peopleMap.set(u.email.toLowerCase(), u.name);
+  if (myEmail) peopleMap.delete(myEmail.toLowerCase()); // já = „Já“
+  const people = [...peopleMap.entries()]
+    .map(([email, name]) => ({ email, name: name || email }))
+    .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  const personName = (key: string) =>
+    key === "mine" ? "Já" : key.startsWith("p:") ? (people.find((x) => x.email === key.slice(2))?.name ?? key.slice(2)) : null;
   const assignOptions = [
-    { value: "mine", label: "Přidělené mně" },
+    { value: "mine", label: "Já" },
+    ...people.map((x) => ({ value: `p:${x.email}`, label: x.name })),
     { value: "none", label: "Nepřidělené" },
     { value: "self", label: "Svépomocí" },
-    ...[...new Map(planTasks.filter((t) => t.vendor).map((t) => [t.vendorId!, t.vendor!.name])).entries()]
-      .sort((a, b) => a[1].localeCompare(b[1], "cs"))
-      .map(([id, name]) => ({ value: `v:${id}`, label: name })),
-    ...[...new Set(planTasks.map((t) => t.assigneeEmail).filter((e): e is string => !!e))]
-      .sort()
-      .map((e) => ({ value: `a:${e}`, label: e })),
   ];
+  // Pohled Aktivita (tview=akt): kdo co v období udělal
+  const tview = sp?.tview === "akt" ? "akt" : "list";
+  const tper = (["dnes", "vcera", "tyden", "mesic"] as const).find((x) => x === sp?.tper) ?? "dnes";
+  const taskHref = (over: Record<string, string | null>) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp ?? {})) if (typeof v === "string") u.set(k, v);
+    u.set("tab", "ukoly");
+    for (const [k, v] of Object.entries(over)) if (v == null) u.delete(k); else u.set(k, v);
+    return `/projects/${project.id}?${u.toString()}`;
+  };
   const taskSort = <T extends { title: string; dueDate: Date | null }>(xs: T[]) =>
     tsort === "plan"
       ? xs
@@ -1413,6 +1448,67 @@ export default async function ProjectDetailPage({
       {/* Úkoly */}
       {tab === "ukoly" && (
       <>
+        {/* Přehledová lišta: pohled, kdo, stav / období – vždy vidět, jedním klikem. */}
+        <div className="mt-6 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="kicker mr-1 w-14">Pohled</span>
+            <Link href={taskHref({ tview: null })} className={chipClass(tview === "list")}>
+              Seznam úkolů
+            </Link>
+            <Link href={taskHref({ tview: "akt" })} className={chipClass(tview === "akt")}>
+              Aktivita – kdo co udělal
+            </Link>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="kicker mr-1 w-14">Kdo</span>
+            <Link href={taskHref({ tas: null })} className={chipClass(!tas)}>
+              Všichni
+            </Link>
+            {assignOptions
+              .filter((o) => tview === "list" || (o.value !== "none" && o.value !== "self"))
+              .map((o) => (
+                <Link key={o.value} href={taskHref({ tas: o.value })} className={chipClass(tas === o.value)}>
+                  {o.label}
+                </Link>
+              ))}
+          </div>
+          {tview === "list" ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="kicker mr-1 w-14">Stav</span>
+              <Link href={taskHref({ tst: null })} className={chipClass(typeof tstRaw !== "string")}>
+                Otevřené
+              </Link>
+              <Link href={taskHref({ tst: "done" })} className={chipClass(tstRaw === "done")}>
+                Hotové
+              </Link>
+              <Link href={taskHref({ tst: "all" })} className={chipClass(tstRaw === "all")}>
+                Vše
+              </Link>
+              <span className="ml-auto text-[11px] text-stone-400">hledání, termíny a řazení ve Filtru u plánu</span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="kicker mr-1 w-14">Kdy</span>
+              {ACTIVITY_PERIODS.map((x) => (
+                <Link key={x.key} href={taskHref({ tper: x.key === "dnes" ? null : x.key })} className={chipClass(tper === x.key)}>
+                  {x.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+        {tview === "akt" ? (
+          <TaskActivity
+            projectId={project.id}
+            period={tper}
+            person={tas === "mine" ? "mine" : tas.startsWith("p:") ? tas.slice(2) : null}
+            personName={tas ? personName(tas) : null}
+            myUserId={user.id}
+            myEmail={myEmail ?? null}
+            statusLabel={(k) => taskStatusMap.get(k) ?? taskStatusLabel(k)}
+          />
+        ) : (
+        <>
         {/* Todo nad plánem: nadpis Plán patří k seznamu pod ním, ne k todo. */}
         <div className="mt-6">
           {(canAdd || todoTasks.length > 0) && (
@@ -1421,7 +1517,7 @@ export default async function ProjectDetailPage({
               subProjectId={sub ?? undefined}
               canAdd={canAdd}
               vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
-              items={todoTasks.map((t) => {
+              items={todoTasks.filter(assignMatch).map((t) => {
                 const canEditTodo = isManager || t.createdById === user.id;
                 return {
                   id: t.id,
@@ -1498,7 +1594,6 @@ export default async function ProjectDetailPage({
           <ListFilters
             prefix="t"
             placeholder="Hledat úkol…"
-            selects={[{ key: "as", label: "Přidělení – vše", options: assignOptions }]}
             sortOptions={[
               { value: "plan", label: "Pořadí plánu" },
               { value: "due", label: "Termín" },
@@ -1611,6 +1706,8 @@ export default async function ProjectDetailPage({
           </ul>
         )}
       </TabSection>
+        </>
+        )}
       </>
       )}
     </div>
