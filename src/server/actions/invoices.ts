@@ -43,6 +43,8 @@ async function createInvoicesInner(formData: FormData) {
   const ids = formData.getAll("expenseIds").map(String).filter(Boolean);
   if (!ids.length) throw new Error("Vyber výkazy k fakturaci.");
   const note = String(formData.get("note") || "").trim().slice(0, 500) || null;
+  // faktura, nebo žádost o úhradu (kdo nemá živnost / IČO)
+  const kind = formData.get("kind") === "request" ? "request" : "invoice";
 
   const me = await prisma.user.findUnique({
     where: { id: user.id },
@@ -114,6 +116,7 @@ async function createInvoicesInner(formData: FormData) {
     const inv = await prisma.invoice.create({
       data: {
         number,
+        kind,
         projectId,
         issuerId: user.id,
         recipientId: project.ownerId,
@@ -130,7 +133,7 @@ async function createInvoicesInner(formData: FormData) {
     await prisma.expense.updateMany({ where: { id: { in: list.map((e) => e.id) } }, data: { invoiceId: inv.id } });
     await notifyUsers([project.ownerId], {
       kind: "invoice_requested",
-      title: `Žádost o úhradu: faktura ${number} – ${formatCurrency(amount, [...currencies][0] ?? "CZK")}`,
+      title: `Žádost o úhradu: ${kind === "request" ? "" : "faktura "}${number} – ${formatCurrency(amount, [...currencies][0] ?? "CZK")}`,
       body: `${supplier.name} · ${project.name}`,
       href: `/faktury/${inv.id}`,
       projectId,
@@ -148,7 +151,7 @@ async function invoiceCtx(id: string) {
   const user = await requireUser();
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    select: { id: true, number: true, projectId: true, issuerId: true, recipientId: true, status: true, amount: true, currency: true },
+    select: { id: true, number: true, kind: true, projectId: true, issuerId: true, recipientId: true, status: true, amount: true, currency: true },
   });
   if (!inv) throw new Error("Faktura nenalezena.");
   const manager = inv.recipientId === user.id || isManager(await getProjectRole(inv.projectId, user));
@@ -167,7 +170,7 @@ export async function markInvoicePaid(formData: FormData) {
   if (inv.issuerId !== user.id)
     await notifyUsers([inv.issuerId], {
       kind: "invoice_paid",
-      title: `Faktura ${inv.number} byla uhrazena – ${formatCurrency(Number(inv.amount), inv.currency)}`,
+      title: `${inv.kind === "request" ? "Žádost o úhradu" : "Faktura"} ${inv.number} byla uhrazena – ${formatCurrency(Number(inv.amount), inv.currency)}`,
       href: `/faktury/${inv.id}`,
       projectId: inv.projectId,
       dedupeKey: `invoice-paid:${inv.id}`,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Printer } from "lucide-react";
 import { cancelInvoice, markInvoicePaid } from "@/server/actions/invoices";
 
@@ -11,12 +11,16 @@ import { cancelInvoice, markInvoicePaid } from "@/server/actions/invoices";
  */
 export function InvoiceActions({
   id,
-  number,
+  fileName,
+  autoPdf = false,
   canPay,
   canCancel,
 }: {
   id: string;
   number: string;
+  fileName: string;
+  /** Otevřeno odkazem „PDF“ – stáhnout hned. */
+  autoPdf?: boolean;
   canPay: boolean;
   canCancel: boolean;
 }) {
@@ -33,12 +37,20 @@ export function InvoiceActions({
       const w = 210;
       const h = (canvas.height * w) / canvas.width;
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, w, Math.min(h, 297));
-      pdf.save(`faktura-${number}.pdf`);
+      pdf.save(fileName);
     } catch {
       window.alert("PDF se nepodařilo vytvořit – použij Tisk → Uložit jako PDF.");
     }
     setBusy(false);
   }
+
+  const auto = useRef(false);
+  useEffect(() => {
+    if (!autoPdf || auto.current) return;
+    auto.current = true;
+    void download();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPdf]);
 
   const btn = "flex h-9 cursor-pointer items-center gap-1.5 border px-3 text-sm transition-colors disabled:opacity-50";
   return (

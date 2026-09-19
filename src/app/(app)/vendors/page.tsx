@@ -104,7 +104,9 @@ export default async function VendorsPage() {
           <p className="mb-3 text-xs text-stone-500">
             Kdy má který dodavatel práci – z úkolů ve tvých projektech, od minulého měsíce dál. Termíny se mění v plánování projektu.
           </p>
-          <GanttChart items={gantt} today={todayStart} readOnly />
+          <div className="border border-stone-200 bg-white p-3 shadow-soft sm:p-4">
+            <GanttChart items={gantt} today={todayStart} readOnly />
+          </div>
         </section>
       )}
 

@@ -43,6 +43,8 @@ export default async function ProjectPlanningPage({
   const access = (await getProjectAccess(id, user)) ?? (await getTaskOnlyAccess(id, user));
   if (!access) notFound();
   const taskOnly = access.role === "task";
+  // dodavatel / aktivní spolupracovník vidí v harmonogramu jen své přidělené úkoly
+  const restricted = taskOnly || access.role === "active";
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -145,7 +147,7 @@ export default async function ProjectPlanningPage({
   const phaseOptions = project.tasks
     .filter((t) => t.kind === "phase" && (!subId || (!!t.subProjectId && !!scope?.has(t.subProjectId))))
     .map((t) => ({ id: t.id, title: t.title }));
-  const myVendorIds = taskOnly || mine
+  const myVendorIds = restricted || mine
     ? new Set(
         (
           await prisma.vendor.findMany({
@@ -159,7 +161,7 @@ export default async function ProjectPlanningPage({
     scope,
     userId: user.id,
     email,
-    mine: mine || taskOnly,
+    mine: mine || restricted,
     vendorIds: myVendorIds,
     withSubprojectName: false, // v rámci projektu název složky neopakujeme
     strictScope: true,

@@ -10,7 +10,6 @@ import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
 import { taskStatusLabel } from "@/lib/constants";
 
 /**
@@ -42,7 +41,7 @@ export default async function MyTasksPage() {
         currency: true,
         hours: true,
         stage: true,
-        invoice: { select: { id: true, number: true, status: true } },
+        invoice: { select: { id: true, number: true, status: true, kind: true } },
         project: { select: { name: true } },
       },
     }),
@@ -50,7 +49,7 @@ export default async function MyTasksPage() {
       where: { issuerId: user.id },
       orderBy: { createdAt: "desc" },
       take: 30,
-      select: { id: true, number: true, status: true, amount: true, currency: true, dueDate: true, project: { select: { name: true } } },
+      select: { id: true, number: true, kind: true, status: true, amount: true, currency: true, dueDate: true, project: { select: { name: true } } },
     }),
   ]);
 
@@ -112,65 +111,14 @@ export default async function MyTasksPage() {
     byProject.set(t.project.id, g);
   }
 
-  /**
-   * Harmonogram pro dodavatele: fáze, ve kterých má úkoly, a uvnitř jen
-   * jeho úkoly. Do projektu přístup mít nemusí – graf je jen k nahlédnutí.
-   */
-  const ganttByProject = new Map<string, { name: string; items: GanttItem[] }>();
-  {
-    const phases = new Map<string, { projectId: string; item: GanttItem }>();
-    for (const t of tasks) {
-      if (t.kind === "todo" || !(t.startDate || t.dueDate)) continue;
-      const child = {
-        id: t.id,
-        title: t.title,
-        start: t.startDate,
-        end: t.dueDate,
-        done: isDone(t.status),
-        percentDone: t.percentDone,
-        statusLabel: statusLabel.get(t.status) ?? taskStatusLabel(t.status),
-        assigneeEmail: null,
-      };
-      const g = ganttByProject.get(t.project.id) ?? { name: t.project.name, items: [] };
-      ganttByProject.set(t.project.id, g);
-      if (t.parent) {
-        let ph = phases.get(t.parent.id);
-        if (!ph) {
-          ph = {
-            projectId: t.project.id,
-            item: {
-              id: t.parent.id,
-              name: t.parent.title,
-              start: t.parent.startDate,
-              end: t.parent.dueDate,
-              done: isDone(t.parent.status),
-              percentDone: t.parent.percentDone,
-              kind: "phase",
-              children: [],
-            },
-          };
-          phases.set(t.parent.id, ph);
-          g.items.push(ph.item);
-        }
-        ph.item.children!.push(child);
-      } else {
-        g.items.push({ ...child, name: t.title, kind: "task" });
-      }
-    }
-    for (const g of ganttByProject.values()) {
-      for (const it of g.items)
-        if (it.kind === "phase" && !it.start && !it.end) {
-          // fáze bez vlastního termínu → rozsah z mých úkolů
-          const ks = it.children!.map((c) => c.start ?? c.end).filter(Boolean) as Date[];
-          const ke = it.children!.map((c) => c.end ?? c.start).filter(Boolean) as Date[];
-          it.start = new Date(Math.min(...ks.map((d) => d.getTime())));
-          it.end = new Date(Math.max(...ke.map((d) => d.getTime())));
-        }
-      g.items = g.items.filter((it) => it.start || it.end);
-      g.items.sort((a, b) => (a.start ?? a.end)!.getTime() - (b.start ?? b.end)!.getTime());
-    }
+  const sums = { all: 0, open: 0, waiting: 0, paid: 0 };
+  for (const e of myExpenses) {
+    const a = Number(e.amount);
+    sums.all += a;
+    if (e.stage === "uhrazeno") sums.paid += a;
+    else if (e.invoice && e.invoice.status !== "cancelled") sums.waiting += a;
+    else sums.open += a;
   }
-  const gantts = [...ganttByProject.entries()].filter(([, g]) => g.items.length > 0);
 
   const loggedTotal = tasks.reduce(
     (s, t) => s + t.expenses.reduce((a, e) => a + Number(e.amount), 0),
@@ -257,18 +205,6 @@ export default async function MyTasksPage() {
             </section>
           ))}
 
-          {gantts.length > 0 && (
-            <section className="mb-8 mt-10">
-              <h2 className="kicker mb-3">Harmonogram · fáze, kde mám úkoly</h2>
-              {gantts.map(([pid, g]) => (
-                <div key={pid} className="mb-6">
-                  {gantts.length > 1 && <p className="mb-2 text-sm font-medium text-stone-900">{g.name}</p>}
-                  <GanttChart items={g.items} today={todayStart} readOnly />
-                </div>
-              ))}
-            </section>
-          )}
-
           <BulkTaskBar
             statuses={statusList}
             logTasks={open.map((t) => ({
@@ -283,80 +219,6 @@ export default async function MyTasksPage() {
             })()}
           />
 
-          {myExpenses.length > 0 && (
-            <section className="mb-8 mt-10">
-              <h2 className="kicker mb-1">Moje výkazy</h2>
-              <p className="mb-3 text-xs text-stone-500">
-                Zaškrtni nezaplacené výkazy a vystav fakturu – vlastník projektu dostane žádost o úhradu s QR platbou.
-                Fakturační údaje doplníš v Nastavení.
-              </p>
-              <ul>
-                {myExpenses.map((e) => {
-                  const paid = e.stage === "uhrazeno";
-                  const invoiced = !!e.invoice && e.invoice.status !== "cancelled";
-                  return (
-                    <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                      {!paid && !invoiced ? (
-                        <input
-                          type="checkbox"
-                          value={e.id}
-                          {...{ [INV_ATTR]: "" }}
-                          aria-label={`Vybrat výkaz ${e.title}`}
-                          className="size-5 shrink-0 cursor-pointer accent-stone-900"
-                        />
-                      ) : (
-                        <span className="size-5 shrink-0" />
-                      )}
-                      <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.date)}</span>
-                      <span className="min-w-0 flex-1 basis-40 truncate text-stone-900" title={e.title}>
-                        {e.title}
-                        <span className="text-xs text-stone-400"> · {e.project.name}</span>
-                      </span>
-                      <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
-                      <span className="w-40 text-right text-xs">
-                        {paid ? (
-                          <span className="text-emerald-700">uhrazeno</span>
-                        ) : invoiced ? (
-                          <Link href={`/faktury/${e.invoice!.id}`} className="text-orange-700 underline-offset-2 hover:underline">
-                            faktura {e.invoice!.number}
-                          </Link>
-                        ) : (
-                          <span className="text-stone-400">k fakturaci</span>
-                        )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <InvoiceCreateBar
-                amounts={Object.fromEntries(myExpenses.map((e) => [e.id, Number(e.amount)]))}
-              />
-              {myInvoices.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="kicker mb-2">Moje faktury</h3>
-                  <ul className="text-sm">
-                    {myInvoices.map((i) => (
-                      <li key={i.id} className="flex flex-wrap items-center gap-3 border-b border-stone-100 py-2">
-                        <Link href={`/faktury/${i.id}`} className="font-medium text-stone-950 underline-offset-2 hover:underline">
-                          {i.number}
-                        </Link>
-                        <span className="text-xs text-stone-500">{i.project.name}</span>
-                        <span className="ml-auto font-mono">{formatCurrency(Number(i.amount), i.currency)}</span>
-                        <span
-                          className={`w-24 text-right text-xs ${
-                            i.status === "paid" ? "text-emerald-700" : i.status === "cancelled" ? "text-stone-400" : "text-orange-700"
-                          }`}
-                        >
-                          {i.status === "paid" ? "uhrazena" : i.status === "cancelled" ? "stornována" : `splatná ${formatDate(i.dueDate)}`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </section>
-          )}
-
           {done.length > 0 && (
             <details className="mt-4">
               <summary className="kicker cursor-pointer select-none py-2">Hotové · {done.length}</summary>
@@ -366,6 +228,113 @@ export default async function MyTasksPage() {
                 ))}
               </ul>
             </details>
+          )}
+          {(myExpenses.length > 0 || myInvoices.length > 0) && (
+            <section className="mb-8 mt-12 border-t border-stone-300/80 pt-8">
+              <h2 className="display text-2xl text-stone-950">Výdaje a platby</h2>
+              <p className="mb-5 mt-1 text-xs text-stone-500">
+                Moje výkazy na přidělených úkolech. Zaškrtni nevyúčtované a vystav fakturu nebo žádost o úhradu – vlastník
+                projektu dostane oznámení a zaplatí přes QR. Fakturační údaje doplníš v{" "}
+                <Link href="/settings" className="underline underline-offset-2 hover:text-stone-950">
+                  Nastavení
+                </Link>
+                .
+              </p>
+
+              <div className="mb-6 grid grid-cols-2 gap-px border border-stone-200 bg-stone-200 sm:grid-cols-4">
+                {[
+                  { l: "Vykázáno", v: sums.all, c: "text-stone-950" },
+                  { l: "K vyúčtování", v: sums.open, c: "text-stone-950" },
+                  { l: "Čeká na úhradu", v: sums.waiting, c: "text-orange-700" },
+                  { l: "Uhrazeno", v: sums.paid, c: "text-emerald-700" },
+                ].map((x) => (
+                  <div key={x.l} className="bg-white px-4 py-3">
+                    <p className="kicker">{x.l}</p>
+                    <p className={`mt-1 font-mono text-lg ${x.c}`}>{formatCurrency(x.v)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {myInvoices.length > 0 && (
+                <div className="mb-8">
+                  <h3 className="kicker mb-2">Faktury a žádosti o úhradu</h3>
+                  <ul className="text-sm">
+                    {myInvoices.map((i) => (
+                      <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5">
+                        <Link href={`/faktury/${i.id}`} className="font-medium text-stone-950 underline-offset-2 hover:underline">
+                          {i.kind === "request" ? "Žádost" : "Faktura"} {i.number}
+                        </Link>
+                        <span className="min-w-0 flex-1 truncate text-xs text-stone-500">{i.project.name}</span>
+                        <span className="font-mono">{formatCurrency(Number(i.amount), i.currency)}</span>
+                        <span
+                          className={`w-28 text-right text-xs ${
+                            i.status === "paid" ? "text-emerald-700" : i.status === "cancelled" ? "text-stone-400" : "text-orange-700"
+                          }`}
+                        >
+                          {i.status === "paid" ? "uhrazeno" : i.status === "cancelled" ? "stornováno" : `splatné ${formatDate(i.dueDate)}`}
+                        </span>
+                        <span className="flex w-full justify-end gap-3 text-xs sm:w-auto">
+                          <Link href={`/faktury/${i.id}`} className="text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline">
+                            {i.status === "requested" ? "Zobrazit · QR" : "Zobrazit"}
+                          </Link>
+                          <Link href={`/faktury/${i.id}?pdf=1`} className="text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline">
+                            PDF
+                          </Link>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {myExpenses.length > 0 && (
+                <>
+                  <h3 className="kicker mb-2">Moje výkazy</h3>
+                  <ul>
+                    {myExpenses.map((e) => {
+                      const paid = e.stage === "uhrazeno";
+                      const invoiced = !!e.invoice && e.invoice.status !== "cancelled";
+                      return (
+                        <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                          {!paid && !invoiced ? (
+                            <input
+                              type="checkbox"
+                              value={e.id}
+                              {...{ [INV_ATTR]: "" }}
+                              aria-label={`Vybrat výkaz ${e.title}`}
+                              className="size-4 shrink-0 cursor-pointer accent-stone-900"
+                            />
+                          ) : (
+                            <span className="size-4 shrink-0" />
+                          )}
+                          <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.date)}</span>
+                          <span className="min-w-0 flex-1 basis-40 truncate text-stone-900" title={e.title}>
+                            {e.title}
+                            <span className="text-xs text-stone-400"> · {e.project.name}</span>
+                          </span>
+                          {e.hours != null && Number(e.hours) > 0 && (
+                            <span className="text-xs text-stone-500">{Number(e.hours).toLocaleString("cs-CZ")} h</span>
+                          )}
+                          <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
+                          <span className="w-32 text-right text-xs">
+                            {paid ? (
+                              <span className="text-emerald-700">uhrazeno</span>
+                            ) : invoiced ? (
+                              <Link href={`/faktury/${e.invoice!.id}`} className="text-orange-700 underline-offset-2 hover:underline">
+                                {e.invoice!.kind === "request" ? "žádost" : "faktura"} {e.invoice!.number}
+                              </Link>
+                            ) : (
+                              <span className="text-stone-400">k vyúčtování</span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <InvoiceCreateBar amounts={Object.fromEntries(myExpenses.map((e) => [e.id, Number(e.amount)]))} />
+                </>
+              )}
+            </section>
           )}
         </>
       )}

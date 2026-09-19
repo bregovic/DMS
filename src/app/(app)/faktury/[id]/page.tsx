@@ -29,8 +29,15 @@ function Party({ title, p }: { title: string; p: InvoiceParty }) {
 }
 
 /** Faktura / žádost o úhradu – A4 s QR platbou; tisk nebo stažení PDF. */
-export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoicePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pdf?: string }>;
+}) {
   const { id } = await params;
+  const autoPdf = (await searchParams).pdf === "1";
   const user = await requireUser();
   const inv = await prisma.invoice.findUnique({
     where: { id },
@@ -47,13 +54,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const manager = inv.recipientId === user.id || isManager(await getProjectRole(inv.projectId, user));
   if (!issuer && !manager) notFound();
 
+  const isRequest = inv.kind === "request";
+  const docName = isRequest ? "Žádost o úhradu" : "Faktura";
   const supplier = inv.supplier as unknown as InvoiceParty;
   const customer = inv.customer as unknown as InvoiceParty;
   const iban = resolveIban(supplier.account ?? null);
   const qr =
     iban && inv.status === "requested"
       ? await QRCode.toDataURL(
-          buildSpd({ iban, amount: Number(inv.amount), currency: inv.currency, vs: inv.vs, msg: `Faktura ${inv.number}` }),
+          buildSpd({ iban, amount: Number(inv.amount), currency: inv.currency, vs: inv.vs, msg: `${docName} ${inv.number}` }),
           { margin: 1, width: 220 },
         )
       : null;
@@ -68,6 +77,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         <InvoiceActions
           id={inv.id}
           number={inv.number}
+          fileName={`${isRequest ? "zadost-o-uhradu" : "faktura"}-${inv.number}.pdf`}
+          autoPdf={autoPdf}
           canPay={manager && inv.status === "requested"}
           canCancel={issuer && inv.status === "requested"}
         />
@@ -81,7 +92,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         >
           <div className="flex items-start justify-between border-b-2 border-stone-950 pb-5">
             <div>
-              <p className="text-3xl font-semibold tracking-tight text-stone-950">Faktura</p>
+              <p className="text-3xl font-semibold tracking-tight text-stone-950">{docName}</p>
               <p className="mt-1 text-stone-500">č. {inv.number}</p>
             </div>
             <span className={`border px-2 py-1 text-xs font-semibold uppercase tracking-wide ${st.cls}`}>{st.label}</span>
@@ -89,7 +100,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
           <div className="mt-6 grid grid-cols-2 gap-8">
             <Party title="Dodavatel" p={supplier} />
-            <Party title="Odběratel" p={customer} />
+            <Party title={isRequest ? "Plátce" : "Odběratel"} p={customer} />
           </div>
 
           <div className="mt-6 grid grid-cols-4 gap-4 border-y border-stone-200 py-3 text-xs">
@@ -142,7 +153,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             <div className="w-64 border-t-2 border-stone-950 pt-2 text-right">
               <p className="text-xs text-stone-500">Celkem k úhradě</p>
               <p className="text-2xl font-semibold text-stone-950">{formatCurrency(Number(inv.amount), inv.currency)}</p>
-              {!supplier.vatPayer && <p className="text-[11px] text-stone-500">Dodavatel není plátcem DPH.</p>}
+              {isRequest ? (
+                <p className="text-[11px] text-stone-500">Nejde o daňový doklad.</p>
+              ) : (
+                !supplier.vatPayer && <p className="text-[11px] text-stone-500">Dodavatel není plátcem DPH.</p>
+              )}
             </div>
           </div>
 

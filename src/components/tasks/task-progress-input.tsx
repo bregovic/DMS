@@ -79,20 +79,38 @@ export function TaskProgressInput({
               <p className="kicker mt-1">{v >= 100 ? "hotovo" : v === 0 ? "nezačato" : "rozpracováno"}</p>
             </div>
 
-            <div className="relative h-10">
-              <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 overflow-hidden bg-stone-200">
-                <div className={`h-full transition-[width] ${barCls(v)}`} style={{ width: `${v}%` }} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setV((x) => Math.max(0, x - 5))}
+                className="h-11 w-12 shrink-0 cursor-pointer border border-stone-300 text-lg hover:border-stone-950"
+                aria-label="Ubrat 5 %"
+              >
+                −
+              </button>
+              <div className="relative h-10 flex-1">
+                <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 overflow-hidden bg-stone-200">
+                  <div className={`h-full transition-[width] ${barCls(v)}`} style={{ width: `${v}%` }} />
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={v}
+                  onChange={(e) => setV(Number(e.target.value))}
+                  aria-label="Hotovo %"
+                  className="progress-range absolute inset-0 h-10 w-full cursor-pointer appearance-none bg-transparent"
+                />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={v}
-                onChange={(e) => setV(Number(e.target.value))}
-                aria-label="Hotovo %"
-                className="progress-range absolute inset-0 h-10 w-full cursor-pointer appearance-none bg-transparent"
-              />
+              <button
+                type="button"
+                onClick={() => setV((x) => Math.min(100, x + 5))}
+                className="h-11 w-12 shrink-0 cursor-pointer border border-stone-300 text-lg hover:border-stone-950"
+                aria-label="Přidat 5 %"
+              >
+                +
+              </button>
             </div>
 
             <div className="grid grid-cols-5 gap-2">
@@ -110,33 +128,15 @@ export function TaskProgressInput({
               ))}
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setV((x) => Math.max(0, x - 5))}
-                className="h-11 w-14 cursor-pointer border border-stone-300 text-lg hover:border-stone-950"
-                aria-label="Ubrat 5 %"
-              >
-                −
-              </button>
-              <label className="flex-1 text-xs text-stone-600">
-                Předpokládané dokončení
-                <input
-                  type="date"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="mt-1 flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 text-base text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:h-10 sm:text-sm"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => setV((x) => Math.min(100, x + 5))}
-                className="h-11 w-14 cursor-pointer border border-stone-300 text-lg hover:border-stone-950"
-                aria-label="Přidat 5 %"
-              >
-                +
-              </button>
-            </div>
+            <label className="block text-xs text-stone-600">
+              Předpokládané dokončení
+              <input
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="mt-1 flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 text-base text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:h-10 sm:text-sm"
+              />
+            </label>
             <p className="text-[11px] text-stone-400">
               100 % označí úkol jako hotový. Změna průběhu nebo termínu přepočítá navazující plán.
             </p>

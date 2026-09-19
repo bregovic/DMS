@@ -743,6 +743,7 @@ model Notification {
 model Invoice {
   id          String    @id @default(cuid())
   number      String // např. 2026-0001 (řada vystavovatele)
+  kind        String    @default("invoice") // invoice = faktura | request = žádost o úhradu (bez živnosti)
   projectId   String
   issuerId    String // dodavatel (vystavil)
   recipientId String // vlastník projektu (platí)

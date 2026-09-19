@@ -91,7 +91,7 @@ export default async function PaymentsPage({
   const invoiceRequests = await prisma.invoice.findMany({
     where: { status: "requested", OR: [{ recipientId: user.id }, { project: { ownerId: user.id } }] },
     orderBy: { dueDate: "asc" },
-    select: { id: true, number: true, amount: true, currency: true, dueDate: true, supplier: true, project: { select: { name: true } } },
+    select: { kind: true, id: true, number: true, amount: true, currency: true, dueDate: true, supplier: true, project: { select: { name: true } } },
   });
 
   return (
@@ -106,7 +106,7 @@ export default async function PaymentsPage({
               return (
                 <li key={i.id} className="flex flex-wrap items-center gap-3 border-b border-orange-100 py-2 last:border-0">
                   <Link href={`/faktury/${i.id}`} className="font-medium text-stone-950 underline-offset-2 hover:underline">
-                    Faktura {i.number}
+                    {i.kind === "request" ? "Žádost o úhradu" : "Faktura"} {i.number}
                   </Link>
                   <span className="text-xs text-stone-600">
                     {sup?.name ?? "dodavatel"} · {i.project.name}
