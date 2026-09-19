@@ -87,8 +87,43 @@ export default async function PaymentsPage({
 
   const statusFilterActive = Boolean(vendorId || status || q || from || to);
 
+  // Žádosti o úhradu (faktury dodavatelů za vykázanou práci) – moje projekty.
+  const invoiceRequests = await prisma.invoice.findMany({
+    where: { status: "requested", OR: [{ recipientId: user.id }, { project: { ownerId: user.id } }] },
+    orderBy: { dueDate: "asc" },
+    select: { id: true, number: true, amount: true, currency: true, dueDate: true, supplier: true, project: { select: { name: true } } },
+  });
+
   return (
     <div className="mx-auto max-w-7xl">
+      {invoiceRequests.length > 0 && (
+        <section className="mb-8 border border-orange-200 bg-orange-50/60 p-4">
+          <h2 className="kicker mb-2 !text-orange-800">Žádosti o úhradu · {invoiceRequests.length}</h2>
+          <ul className="text-sm">
+            {invoiceRequests.map((i) => {
+              const sup = i.supplier as { name?: string } | null;
+              const late = i.dueDate < new Date();
+              return (
+                <li key={i.id} className="flex flex-wrap items-center gap-3 border-b border-orange-100 py-2 last:border-0">
+                  <Link href={`/faktury/${i.id}`} className="font-medium text-stone-950 underline-offset-2 hover:underline">
+                    Faktura {i.number}
+                  </Link>
+                  <span className="text-xs text-stone-600">
+                    {sup?.name ?? "dodavatel"} · {i.project.name}
+                  </span>
+                  <span className="ml-auto font-mono text-stone-950">{formatCurrency(Number(i.amount), i.currency)}</span>
+                  <span className={`text-xs ${late ? "font-medium text-red-600" : "text-stone-500"}`}>
+                    splatná {formatDate(i.dueDate)}
+                  </span>
+                  <Link href={`/faktury/${i.id}`} className="border border-stone-950 bg-stone-950 px-2 py-1 text-xs text-white">
+                    Zaplatit (QR)
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       <header className="mb-6 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <div>
           <h1 className="display text-4xl text-stone-950">Platby</h1>

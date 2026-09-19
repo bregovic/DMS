@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { notifyTaskAssigned } from "@/server/notify";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { deleteWithFiles, requestFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
@@ -317,5 +318,6 @@ async function createPlanTasksFromOffer(offerId: string, userId: string) {
     }
     await tx.offer.update({ where: { id: offer.id }, data: { tasksCreatedAt: new Date() } });
   }, { timeout: 60_000, maxWait: 10_000 }); // hodně zápisů – výchozí 5 s nestačí
+  await notifyTaskAssigned(ids, userId);
   return ids.length;
 }

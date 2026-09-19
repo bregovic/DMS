@@ -7,6 +7,7 @@ import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/acc
 import { REQUEST_HANDLED_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 import { calcOperation, type CalcOperation } from "@/lib/process-calc";
 import { scheduleProject } from "@/server/schedule";
+import { notifyTaskAssigned } from "@/server/notify";
 
 function toDate(v: FormDataEntryValue | null): Date | null {
   const s = String(v || "").trim();
@@ -117,7 +118,7 @@ export async function createTask(formData: FormData) {
   }
   const readyRaw = formData.get("ready");
 
-  await prisma.task.create({
+  const created = await prisma.task.create({
     data: {
       projectId,
       subProjectId,
@@ -141,6 +142,7 @@ export async function createTask(formData: FormData) {
 
   // Nový dílčí úkol pod fází → rovnou přepočítat rozvrh (zařadí ho podle délky).
   if (parentId) await scheduleProject(projectId, subProjectId);
+  await notifyTaskAssigned([created.id], user.id);
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/planning");
@@ -179,7 +181,7 @@ async function taskCtx(id: string) {
 
 export async function updateTask(formData: FormData) {
   const id = String(formData.get("id"));
-  const { task, isOwner, isCreator } = await taskCtx(id);
+  const { user, task, isOwner, isCreator } = await taskCtx(id);
   if (!isOwner && !isCreator) throw new Error("Tento úkol nemůžeš upravit.");
 
   const title = String(formData.get("title") || "").trim();
@@ -226,6 +228,7 @@ export async function updateTask(formData: FormData) {
     await saveDeps(task.id, task.projectId, formData.getAll("dependsOnId"), true);
   }
   await cascadeReschedule(task.projectId, task.id);
+  await notifyTaskAssigned([task.id], user.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
@@ -790,6 +793,7 @@ export async function updateTaskPlan(formData: FormData) {
   // Přepočítat rozvrh celé složky: uzamčené/hotové bloky drží data, ostatní se
   // (i samostatné úkoly) naplánují dle dodavatele a navazující se posunou.
   await scheduleProject(task.projectId, task.subProjectId);
+  await notifyTaskAssigned([task.id], user.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
 }
@@ -874,7 +878,7 @@ export async function setTaskStatus(formData: FormData) {
  */
 export async function updateTodo(formData: FormData) {
   const id = String(formData.get("id"));
-  const { task, isOwner, isCreator, isAssignee } = await taskCtx(id);
+  const { user, task, isOwner, isCreator, isAssignee } = await taskCtx(id);
   if (!isOwner && !isCreator && !isAssignee) {
     throw new Error("Tento úkol nemůžeš upravit.");
   }
@@ -910,6 +914,7 @@ export async function updateTodo(formData: FormData) {
   }
 
   await prisma.task.update({ where: { id: task.id }, data });
+  if (data.vendorId) await notifyTaskAssigned([task.id], user.id);
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/ukoly");
 }
@@ -977,6 +982,7 @@ export async function bulkUpdateTasks(formData: FormData) {
     ),
   );
 
+  if (vendorPatch?.vendorId) await notifyTaskAssigned(allowed.map((t) => t.id), user.id);
   // Změna stavu mění skutečnost → přepočítat plán dotčených složek.
   if (status)
     for (const sub of new Set(allowed.filter((t) => t.kind !== "todo").map((t) => t.subProjectId)))

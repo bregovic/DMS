@@ -6,7 +6,8 @@ import { getStatuses } from "@/server/statuses";
 import { BulkLogBar } from "@/components/tasks/bulk-log-bar";
 import { TaskStatusSelect } from "@/components/tasks/task-status-select";
 import { TaskProgressInput } from "@/components/tasks/task-progress-input";
-import { PICK_ATTR } from "@/lib/bulk-ids";
+import { INV_ATTR, PICK_ATTR } from "@/lib/bulk-ids";
+import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { LogTaskExpense } from "@/components/tasks/log-task-expense";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TASK_DONE_STATUSES, priorityColor, priorityLabel } from "@/lib/constants";
@@ -29,6 +30,32 @@ import { taskStatusLabel } from "@/lib/constants";
 export default async function MyTasksPage() {
   const user = await requireUser();
   const email = user.email?.toLowerCase() ?? "";
+
+  // Moje výkazy (k fakturaci) a moje faktury.
+  const [myExpenses, myInvoices] = await Promise.all([
+    prisma.expense.findMany({
+      where: { createdById: user.id, amount: { gt: 0 }, taskId: { not: null } },
+      orderBy: { date: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        amount: true,
+        currency: true,
+        hours: true,
+        stage: true,
+        invoice: { select: { id: true, number: true, status: true } },
+        project: { select: { name: true } },
+      },
+    }),
+    prisma.invoice.findMany({
+      where: { issuerId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: { id: true, number: true, status: true, amount: true, currency: true, dueDate: true, project: { select: { name: true } } },
+    }),
+  ]);
 
   const [tasks, statuses, accessible] = await Promise.all([
     email
@@ -284,6 +311,80 @@ export default async function MyTasksPage() {
               return v != null ? Number(v) : null;
             })()}
           />
+
+          {myExpenses.length > 0 && (
+            <section className="mb-8 mt-10">
+              <h2 className="kicker mb-1">Moje výkazy</h2>
+              <p className="mb-3 text-xs text-stone-500">
+                Zaškrtni nezaplacené výkazy a vystav fakturu – vlastník projektu dostane žádost o úhradu s QR platbou.
+                Fakturační údaje doplníš v Nastavení.
+              </p>
+              <ul>
+                {myExpenses.map((e) => {
+                  const paid = e.stage === "uhrazeno";
+                  const invoiced = !!e.invoice && e.invoice.status !== "cancelled";
+                  return (
+                    <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                      {!paid && !invoiced ? (
+                        <input
+                          type="checkbox"
+                          value={e.id}
+                          {...{ [INV_ATTR]: "" }}
+                          aria-label={`Vybrat výkaz ${e.title}`}
+                          className="size-5 shrink-0 cursor-pointer accent-stone-900"
+                        />
+                      ) : (
+                        <span className="size-5 shrink-0" />
+                      )}
+                      <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.date)}</span>
+                      <span className="min-w-0 flex-1 basis-40 truncate text-stone-900" title={e.title}>
+                        {e.title}
+                        <span className="text-xs text-stone-400"> · {e.project.name}</span>
+                      </span>
+                      <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
+                      <span className="w-40 text-right text-xs">
+                        {paid ? (
+                          <span className="text-emerald-700">uhrazeno</span>
+                        ) : invoiced ? (
+                          <Link href={`/faktury/${e.invoice!.id}`} className="text-orange-700 underline-offset-2 hover:underline">
+                            faktura {e.invoice!.number}
+                          </Link>
+                        ) : (
+                          <span className="text-stone-400">k fakturaci</span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <InvoiceCreateBar
+                amounts={Object.fromEntries(myExpenses.map((e) => [e.id, Number(e.amount)]))}
+              />
+              {myInvoices.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="kicker mb-2">Moje faktury</h3>
+                  <ul className="text-sm">
+                    {myInvoices.map((i) => (
+                      <li key={i.id} className="flex flex-wrap items-center gap-3 border-b border-stone-100 py-2">
+                        <Link href={`/faktury/${i.id}`} className="font-medium text-stone-950 underline-offset-2 hover:underline">
+                          {i.number}
+                        </Link>
+                        <span className="text-xs text-stone-500">{i.project.name}</span>
+                        <span className="ml-auto font-mono">{formatCurrency(Number(i.amount), i.currency)}</span>
+                        <span
+                          className={`w-24 text-right text-xs ${
+                            i.status === "paid" ? "text-emerald-700" : i.status === "cancelled" ? "text-stone-400" : "text-orange-700"
+                          }`}
+                        >
+                          {i.status === "paid" ? "uhrazena" : i.status === "cancelled" ? "stornována" : `splatná ${formatDate(i.dueDate)}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+          )}
 
           {done.length > 0 && (
             <details className="mt-4">

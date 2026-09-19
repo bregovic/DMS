@@ -5,6 +5,7 @@ import { InstallButton } from "@/components/app/install-button";
 import { CodelistManager } from "@/components/account/codelist-manager";
 import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
 import { aiUsage } from "@/server/extraction";
+import { BillingForm } from "@/components/account/billing-form";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -20,7 +21,15 @@ export default async function SettingsPage() {
   ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: user.id },
-        select: { passwordHash: true },
+        select: {
+          passwordHash: true,
+          billingName: true,
+          billingIco: true,
+          billingDic: true,
+          billingAddress: true,
+          billingAccount: true,
+          vatPayer: true,
+        },
       }),
       prisma.projectType.findMany({
         orderBy: { label: "asc" },
@@ -89,6 +98,23 @@ export default async function SettingsPage() {
           </p>
         )}
         <ChangePasswordForm hasPassword={hasPassword} />
+      </section>
+
+      <section className="mt-12">
+        <h2 className="kicker mb-2">Fakturační údaje</h2>
+        <p className="mb-4 max-w-xl text-sm text-stone-500">
+          Použijí se na faktuře, když z Moje úkoly požádáš o úhradu vykázané práce.
+        </p>
+        <BillingForm
+          b={{
+            billingName: dbUser?.billingName ?? null,
+            billingIco: dbUser?.billingIco ?? null,
+            billingDic: dbUser?.billingDic ?? null,
+            billingAddress: dbUser?.billingAddress ?? null,
+            billingAccount: dbUser?.billingAccount ?? null,
+            vatPayer: dbUser?.vatPayer ?? false,
+          }}
+        />
       </section>
 
       <AiUsageSection />

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { notifyExpenseAdded } from "@/server/notify";
 import { deleteWithFiles } from "@/server/document-files";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 import { storage } from "@/lib/storage";
@@ -163,6 +164,7 @@ export async function createExpense(formData: FormData) {
     });
   }
 
+  await notifyExpenseAdded([expense.id], user.id);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/reports");

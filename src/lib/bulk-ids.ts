@@ -5,3 +5,4 @@
  */
 export const BULK_FORM_ID = "bulk-tasks";
 export const PICK_ATTR = "data-pick-task";
+export const INV_ATTR = "data-inv-exp";

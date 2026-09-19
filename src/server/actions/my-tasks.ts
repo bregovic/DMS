@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { notifyExpenseAdded } from "@/server/notify";
 import { storage } from "@/lib/storage";
 import { canWrite, getProjectAccess } from "@/server/access";
 import { scheduleProject } from "@/server/schedule";
@@ -122,6 +123,7 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
       select: { id: true },
     });
     expenseId = e.id;
+    if (!progressOnly) await notifyExpenseAdded([e.id], user.id);
   }
 
   // Přílohy (fotky z práce, účtenky) k vykázání.

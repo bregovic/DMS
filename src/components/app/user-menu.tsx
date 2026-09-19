@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { LogOut, Settings } from "lucide-react";
 import { signOutAction } from "@/server/actions/auth";
+import { NotificationBell } from "@/components/app/notification-bell";
 
 export function UserMenu({
   name,
   email,
+  unread = 0,
 }: {
   name?: string | null;
   email?: string | null;
+  unread?: number;
 }) {
   const initial = (name ?? email ?? "?").charAt(0).toUpperCase();
   return (
@@ -23,10 +26,11 @@ export function UserMenu({
         </p>
         <p className="text-xs text-stone-500 leading-tight">{email}</p>
       </div>
+      <NotificationBell initial={unread} />
       <Link
         href="/settings"
         title="Nastavení"
-        className="ml-1 flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
+        className="flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
       >
         <Settings className="size-4" />
       </Link>

@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/app/sidebar";
 import { UserMenu } from "@/components/app/user-menu";
 import { MobileNav } from "@/components/app/mobile-nav";
 import { MobileTabBar } from "@/components/app/mobile-tabbar";
+import { unreadCount } from "@/server/notify";
 
 export default async function AppLayout({
   children,
@@ -11,11 +12,12 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+  const unread = await unreadCount(user.id).catch(() => 0);
 
   return (
     <div className="flex min-h-screen bg-[#f4f3f0]">
       {/* Sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-stone-200 bg-white px-4 py-6 shadow-[8px_0_28px_-24px_rgba(41,37,36,0.45)] md:flex">
+      <aside className="hidden print:!hidden w-56 shrink-0 flex-col border-r border-stone-200 bg-white px-4 py-6 shadow-[8px_0_28px_-24px_rgba(41,37,36,0.45)] md:flex">
         <Link href="/dashboard" className="mb-10 block px-2">
           <span className="display text-2xl tracking-tight text-stone-950">
             DMS
@@ -29,7 +31,7 @@ export default async function AppLayout({
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-stone-300/80 px-4 sm:px-8">
+        <header className="flex h-16 print:!hidden items-center justify-between border-b border-stone-300/80 px-4 sm:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <MobileNav />
             <Link href="/dashboard">
@@ -37,7 +39,7 @@ export default async function AppLayout({
             </Link>
           </div>
           <div className="flex-1" />
-          <UserMenu name={user.name} email={user.email} />
+          <UserMenu name={user.name} email={user.email} unread={unread} />
         </header>
         <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 sm:px-8 sm:pt-8 md:pb-8 lg:px-12">
           {children}

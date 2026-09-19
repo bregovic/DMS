@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 
@@ -41,4 +42,22 @@ export async function changePassword(
   });
 
   return { ok: true };
+}
+
+/** Fakturační údaje (pro faktury za vykázanou práci). */
+export async function updateBilling(formData: FormData) {
+  const user = await requireUser();
+  const t = (k: string) => String(formData.get(k) || "").trim().slice(0, 300) || null;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      billingName: t("billingName"),
+      billingIco: t("billingIco"),
+      billingDic: t("billingDic"),
+      billingAddress: t("billingAddress"),
+      billingAccount: t("billingAccount"),
+      vatPayer: formData.get("vatPayer") === "1",
+    },
+  });
+  revalidatePath("/settings");
 }

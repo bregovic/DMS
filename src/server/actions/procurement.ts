@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { notifyExpenseAdded } from "@/server/notify";
 import { getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
 
 type SUser = { id: string; email?: string | null };
@@ -179,7 +180,7 @@ export async function createExpenseForTask(formData: FormData) {
   const user = await requireUser();
   const task = await loadTaskForPlan(String(formData.get("taskId")), user);
   const title = String(formData.get("title") || "").trim() || task.title;
-  await prisma.expense.create({
+  const created = await prisma.expense.create({
     data: {
       projectId: task.projectId,
       title,
@@ -190,6 +191,7 @@ export async function createExpenseForTask(formData: FormData) {
       createdById: user.id,
     },
   });
+  await notifyExpenseAdded([created.id], user.id);
   done(task.projectId);
 }
 

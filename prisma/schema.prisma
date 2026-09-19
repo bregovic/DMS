@@ -22,6 +22,15 @@ model User {
   image         String?
   passwordHash  String? // pro přihlášení e-mailem/heslem (Credentials)
   createdAt     DateTime  @default(now())
+  // Fakturační údaje (faktura za vykázanou práci)
+  billingName    String?
+  billingIco     String?
+  billingDic     String?
+  billingAddress String?
+  billingAccount String? // číslo účtu nebo IBAN
+  vatPayer       Boolean   @default(false)
+  remindersAt    DateTime? // kdy se naposledy generovaly připomínky
+  notifications  Notification[]
 
   accounts          Account[]
   sessions          Session[]
@@ -259,6 +268,7 @@ model Project {
   tasks       Task[]
 
   planDrafts  PlanDraft[]
+  invoices    Invoice[]
   @@index([ownerId])
 }
 
@@ -414,6 +424,8 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  invoiceId  String? // faktura (žádost o úhradu), na které je výkaz
+  invoice    Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy  User        @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
@@ -706,4 +718,50 @@ model AiUsageLog {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Oznámení (zvoneček): přidělené úkoly, výdaje od ostatních, připomínky, úhrady.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String // task_assigned | expense_added | reminder | invoice_requested | invoice_paid
+  title     String
+  body      String?
+  href      String?
+  projectId String?
+  dedupeKey String? // připomínky se stejným klíčem se nezakládají znovu
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt])
+}
+
+// Faktura / žádost o úhradu vykázané práce (dodavatel → vlastník projektu).
+model Invoice {
+  id          String    @id @default(cuid())
+  number      String // např. 2026-0001 (řada vystavovatele)
+  projectId   String
+  issuerId    String // dodavatel (vystavil)
+  recipientId String // vlastník projektu (platí)
+  status      String    @default("requested") // requested | paid | cancelled
+  issueDate   DateTime  @default(now())
+  dueDate     DateTime
+  amount      Decimal   @db.Decimal(12, 2)
+  currency    String    @default("CZK")
+  vs          String // variabilní symbol
+  supplier    Json // snímek fakturačních údajů dodavatele
+  customer    Json // snímek údajů odběratele
+  note        String?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@unique([issuerId, number])
+  @@index([projectId])
+  @@index([recipientId, status])
 }
