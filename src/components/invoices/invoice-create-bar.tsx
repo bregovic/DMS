@@ -62,6 +62,7 @@ export function InvoiceCreateBar({ amounts }: { amounts: Record<string, number> 
               try {
                 for (const id of sel) fd.append("expenseIds", id);
                 const r = await createInvoices(fd);
+                if (r.error) throw new Error(r.error);
                 clear();
                 setOpen(false);
                 if (r.ids[0]) router.push(`/faktury/${r.ids[0]}`);

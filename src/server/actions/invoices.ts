@@ -29,7 +29,16 @@ export type InvoiceParty = {
  * pozdější změna profilu nezměnila vystavenou fakturu. Vlastník projektu
  * dostane oznámení, zaplatí přes QR a označí fakturu jako uhrazenou.
  */
-export async function createInvoices(formData: FormData) {
+export async function createInvoices(formData: FormData): Promise<{ ids: string[]; error?: string }> {
+  try {
+    return await createInvoicesInner(formData);
+  } catch (e) {
+    // chyby server akcí se v produkci maskují – text vracíme jako hodnotu
+    return { ids: [], error: e instanceof Error ? e.message : "Fakturu se nepodařilo vystavit." };
+  }
+}
+
+async function createInvoicesInner(formData: FormData) {
   const user = await requireUser();
   const ids = formData.getAll("expenseIds").map(String).filter(Boolean);
   if (!ids.length) throw new Error("Vyber výkazy k fakturaci.");
