@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { encryptSecret } from "@/lib/secret-box";
 
 export type PasswordState = { error?: string; ok?: boolean } | undefined;
 
@@ -71,6 +72,14 @@ export async function updateBilling(formData: FormData) {
       dataBoxId: t("dataBoxId"),
       taxOfficeCode: t("taxOfficeCode"),
       taxOfficeDataBox: t("taxOfficeDataBox"),
+      isdsLogin: t("isdsLogin"),
+      isdsTest: formData.get("isdsTest") === "on" || formData.get("isdsTest") === "1",
+      // heslo se přepisuje jen když ho uživatel zadal; křížkem jde smazat
+      ...(formData.get("isdsPasswordClear") === "1"
+        ? { isdsPassword: null }
+        : t("isdsPassword")
+          ? { isdsPassword: encryptSecret(String(formData.get("isdsPassword"))) }
+          : {}),
       taxOfficeBranch: t("taxOfficeBranch"),
     },
   });

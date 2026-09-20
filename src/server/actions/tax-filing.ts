@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { buildDp3 } from "@/server/dp3-xml";
 import { buildKhXml } from "@/server/kh-xml";
 import { isdsConfigured, isdsMode, sendDataMessage } from "@/server/isds";
+import { decryptSecret } from "@/lib/secret-box";
 
 /**
  * Podání přiznání k DPH a kontrolního hlášení datovou schránkou.
@@ -59,8 +60,9 @@ export async function previewFiling(kind: Kind, period: string, year: number, pr
   const user = await requireUser();
   const me = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { taxOfficeDataBox: true, billingDic: true, billingName: true },
+    select: { taxOfficeDataBox: true, billingDic: true, billingName: true, isdsLogin: true, isdsPassword: true, isdsTest: true },
   });
+  const cred = { login: me?.isdsLogin, password: decryptSecret(me?.isdsPassword), test: me?.isdsTest ?? false };
   const sent = await prisma.taxFiling.findFirst({
     where: { userId: user.id, kind, year, period, projectId },
     orderBy: { sentAt: "desc" },
@@ -73,8 +75,8 @@ export async function previewFiling(kind: Kind, period: string, year: number, pr
       periodLabel: periodLabel(period, year),
       recipient: me?.taxOfficeDataBox ?? null,
       dic: me?.billingDic ?? null,
-      configured: isdsConfigured(),
-      mode: isdsMode(),
+      configured: isdsConfigured(cred),
+      mode: isdsMode(cred),
       missing,
       lines,
       sent: sent ? { messageId: sent.messageId, sentAt: sent.sentAt.toISOString() } : null,
@@ -89,12 +91,14 @@ export async function sendFiling(kind: Kind, period: string, year: number, proje
   const user = await requireUser();
   const me = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { taxOfficeDataBox: true },
+    select: { taxOfficeDataBox: true, isdsLogin: true, isdsPassword: true, isdsTest: true },
   });
+  const cred = { login: me?.isdsLogin, password: decryptSecret(me?.isdsPassword), test: me?.isdsTest ?? false };
   const recipient = (me?.taxOfficeDataBox ?? "").trim();
   if (!recipient)
     return { error: "Doplň ID datové schránky finančního úřadu v Nastavení → Fakturace a daně." };
-  if (!isdsConfigured()) return { error: "Datová schránka není nastavená (ISDS_LOGIN a ISDS_PASSWORD)." };
+  if (!isdsConfigured(cred))
+    return { error: "Doplň přihlášení do datové schránky v Nastavení → Fakturace a daně." };
 
   let built;
   try {
@@ -108,6 +112,7 @@ export async function sendFiling(kind: Kind, period: string, year: number, proje
     annotation: `${LABEL[kind]} za ${periodLabel(period, year)}`,
     fileName: `${kind === "dp3" ? "priznani-dph" : "kontrolni-hlaseni"}-${year}-${period}.xml`,
     xml: built.xml,
+    credentials: cred,
   });
   if ("error" in res) return { error: res.error };
 

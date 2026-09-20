@@ -25,6 +25,10 @@ export type BillingValues = {
   dataBoxId: string | null;
   taxOfficeCode: string | null;
   taxOfficeDataBox: string | null;
+  isdsLogin: string | null;
+  /** jen informace, že heslo je uložené – nikdy se neposílá zpátky */
+  isdsPasswordSet: boolean;
+  isdsTest: boolean;
   taxOfficeBranch: string | null;
 };
 
@@ -57,6 +61,8 @@ export function BillingForm({ b }: { b: BillingValues }) {
     dataBoxId: b.dataBoxId ?? "",
     taxOfficeCode: b.taxOfficeCode ?? "",
     taxOfficeDataBox: b.taxOfficeDataBox ?? "",
+    isdsLogin: b.isdsLogin ?? "",
+    isdsPassword: "",
     taxOfficeBranch: b.taxOfficeBranch ?? "",
   });
   const set = (k: string, x: string) => {
@@ -293,6 +299,47 @@ export function BillingForm({ b }: { b: BillingValues }) {
             schránky úřadu ukáže EPO při ukládání podání – slouží k odeslání přiznání a hlášení přímo z aplikace.
           </p>
         </FormGrid>
+        <FormGrid cols={3}>
+          <label className={lab}>
+            Přihlášení do datové schránky
+            <input
+              name="isdsLogin"
+              value={v.isdsLogin ?? ""}
+              onChange={(e) => set("isdsLogin", e.target.value)}
+              autoComplete="off"
+              placeholder="uživatelské jméno"
+              className={`${field} mt-1`}
+            />
+          </label>
+          <label className={lab}>
+            Heslo {b.isdsPasswordSet && <span className="text-emerald-700">· uloženo</span>}
+            <input
+              name="isdsPassword"
+              type="password"
+              value={v.isdsPassword ?? ""}
+              onChange={(e) => set("isdsPassword", e.target.value)}
+              autoComplete="new-password"
+              placeholder={b.isdsPasswordSet ? "beze změny" : "heslo do datovky"}
+              className={`${field} mt-1`}
+            />
+          </label>
+          <div className="flex flex-col justify-end gap-1.5 pb-1">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-600">
+              <input type="checkbox" name="isdsTest" defaultChecked={b.isdsTest} className="size-4 accent-stone-900" />
+              Posílat do veřejného testu (czebox)
+            </label>
+            {b.isdsPasswordSet && (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-500">
+                <input type="checkbox" name="isdsPasswordClear" value="1" className="size-4 accent-stone-900" />
+                Smazat uložené heslo
+              </label>
+            )}
+          </div>
+        </FormGrid>
+        <p className="text-[11px] text-stone-400">
+          Heslo se ukládá šifrovaně a už se nikdy nezobrazí. Slouží jen k odeslání podání do datové schránky
+          finančního úřadu; ve schránce musí být povolené přihlašování aplikací heslem.
+        </p>
       </FormSection>
 
       <div className="flex items-center gap-3">

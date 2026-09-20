@@ -9,10 +9,14 @@ import { Button } from "@/components/ui/button";
 
 type Preview = Awaited<ReturnType<typeof previewFiling>>;
 
+const EPO_URL = "https://adisspr.mfcr.cz/pmd/epo";
+
 /**
- * Podání datovou schránkou: nejdřív se ukáže, co odejde (čísla podání, komu,
- * co chybí), odeslat jde až kliknutím. Podání je nevratné, takže se vždy
- * potvrzuje ručně.
+ * Podání na finanční správu. Nejdřív se ukáže, co odejde (čísla podání, komu,
+ * co chybí); pak jsou dvě cesty:
+ *  - odeslat rovnou datovou schránkou (přihlášení je v nastavení),
+ *  - stáhnout XML a otevřít EPO, kde se přihlásíš sám a soubor načteš.
+ * Nikdy se neodesílá bez potvrzení.
  */
 export function FilingDialog({
   kind,
@@ -46,6 +50,7 @@ export function FilingDialog({
 
   const info = data && !("error" in data) ? data : null;
   const ready = !!info && info.configured && !!info.recipient;
+  const xmlUrl = `/api/export/${kind === "dp3" ? "dp3" : "kh"}?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`;
 
   return (
     <>
@@ -106,8 +111,9 @@ export function FilingDialog({
                   </p>
                 )}
                 {!info.configured && (
-                  <p className="text-xs text-red-600">
-                    Datová schránka zatím není propojená – doplň přihlašovací údaje (ISDS_LOGIN, ISDS_PASSWORD).
+                  <p className="text-xs text-amber-700">
+                    Datová schránka není propojená – doplň přihlášení v Nastavení → Fakturace a daně. Podat můžeš i tak:
+                    stáhni XML a načti ho v EPO.
                   </p>
                 )}
                 {done && <p className="text-emerald-700">Odesláno. Číslo datové zprávy: {done}</p>}
@@ -119,6 +125,15 @@ export function FilingDialog({
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               {done ? "Zavřít" : "Zrušit"}
             </Button>
+            {!done && (
+              <a
+                href={xmlUrl}
+                onClick={() => setTimeout(() => window.open(EPO_URL, "_blank", "noopener"), 300)}
+                className="inline-flex h-10 cursor-pointer items-center border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950"
+              >
+                Stáhnout XML a otevřít EPO
+              </a>
+            )}
             {!done && (
               <Button
                 type="button"
@@ -136,7 +151,7 @@ export function FilingDialog({
                   }
                 }}
               >
-                {busy ? "Odesílám…" : "Odeslat podání"}
+                {busy ? "Odesílám…" : "Odeslat datovkou"}
               </Button>
             )}
           </DialogFooter>

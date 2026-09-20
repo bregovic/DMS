@@ -28,6 +28,9 @@ export default async function BillingSettingsPage() {
       dataBoxId: true,
       taxOfficeCode: true,
       taxOfficeDataBox: true,
+      isdsLogin: true,
+      isdsPassword: true,
+      isdsTest: true,
       taxOfficeBranch: true,
     },
   });
@@ -59,6 +62,9 @@ export default async function BillingSettingsPage() {
             dataBoxId: b?.dataBoxId ?? null,
             taxOfficeCode: b?.taxOfficeCode ?? null,
             taxOfficeDataBox: b?.taxOfficeDataBox ?? null,
+            isdsLogin: b?.isdsLogin ?? null,
+            isdsPasswordSet: !!b?.isdsPassword,
+            isdsTest: b?.isdsTest ?? false,
             taxOfficeBranch: b?.taxOfficeBranch ?? null,
           }}
         />

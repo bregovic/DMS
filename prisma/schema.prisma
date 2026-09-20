@@ -43,6 +43,11 @@ model User {
   dataBoxId       String? // ID datové schránky
   /** ID datové schránky finančního úřadu (7 znaků) – kam se posílají podání. */
   taxOfficeDataBox String?
+  /** Přihlášení do vlastní datové schránky pro odesílání podání (heslo šifrovaně). */
+  isdsLogin        String?
+  isdsPassword     String?
+  /** Posílat přes veřejný test datových schránek (czebox) místo ostrého provozu. */
+  isdsTest         Boolean @default(false)
   taxOfficeCode   String? // kód finančního úřadu (c_ufo)
   taxOfficeBranch String? // územní pracoviště (c_pracufo)
   remindersAt    DateTime? // kdy se naposledy generovaly připomínky

@@ -6,9 +6,10 @@
  * do datové schránky příslušného finančního úřadu. Nic se nepodepisuje –
  * podáním je samotná datová zpráva.
  *
- * Přihlašovací údaje ke schránce se berou z proměnných prostředí, nikdy
- * z databáze: ISDS_LOGIN, ISDS_PASSWORD a volitelně ISDS_BASE
- * (https://ws1.czebox.cz = veřejný test, jinak ostrý provoz).
+ * Přihlašovací údaje ke schránce zadává uživatel v Nastavení → Fakturace
+ * a daně (heslo se ukládá šifrovaně); když tam nejsou, použijí se proměnné
+ * prostředí ISDS_LOGIN a ISDS_PASSWORD. Veřejný test (czebox) se zapíná
+ * přepínačem u účtu, případně proměnnou ISDS_BASE.
  *
  * Rozhraní: SOAP 1.1, operace CreateMessage, endpoint <base>/DS/dz,
  * jmenný prostor http://isds.czechpoint.cz/v20.
@@ -22,13 +23,29 @@ export type IsdsResult = { messageId: string } | { error: string };
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export function isdsConfigured(): boolean {
-  return !!process.env.ISDS_LOGIN && !!process.env.ISDS_PASSWORD;
+export type IsdsCredentials = { login?: string | null; password?: string | null; test?: boolean };
+
+function creds(c?: IsdsCredentials) {
+  return {
+    login: c?.login || process.env.ISDS_LOGIN || "",
+    password: c?.password || process.env.ISDS_PASSWORD || "",
+  };
+}
+
+export function isdsConfigured(c?: IsdsCredentials): boolean {
+  const { login, password } = creds(c);
+  return !!login && !!password;
 }
 
 /** Je nastavený veřejný test (czebox), nebo ostrý provoz? */
-export function isdsMode(): "test" | "ostrý" {
+export function isdsMode(c?: IsdsCredentials): "test" | "ostrý" {
+  if (c?.test) return "test";
   return (process.env.ISDS_BASE ?? DEFAULT_BASE).includes("czebox") ? "test" : "ostrý";
+}
+
+function baseUrl(c?: IsdsCredentials) {
+  if (c?.test) return "https://ws1.czebox.cz";
+  return process.env.ISDS_BASE ?? DEFAULT_BASE;
 }
 
 /**
@@ -40,10 +57,11 @@ export async function sendDataMessage(opts: {
   annotation: string;
   fileName: string;
   xml: string;
+  credentials?: IsdsCredentials;
 }): Promise<IsdsResult> {
-  const login = process.env.ISDS_LOGIN;
-  const password = process.env.ISDS_PASSWORD;
-  if (!login || !password) return { error: "Datová schránka není nastavená (chybí ISDS_LOGIN a ISDS_PASSWORD)." };
+  const { login, password } = creds(opts.credentials);
+  if (!login || !password)
+    return { error: "Datová schránka není nastavená – doplň přihlášení v Nastavení → Fakturace a daně." };
   const recipient = opts.recipient.trim();
   if (recipient.length !== 7) return { error: "ID datové schránky finančního úřadu musí mít 7 znaků." };
 
@@ -65,7 +83,7 @@ export async function sendDataMessage(opts: {
   </soap:Body>
 </soap:Envelope>`;
 
-  const url = `${process.env.ISDS_BASE ?? DEFAULT_BASE}/DS/dz`;
+  const url = `${baseUrl(opts.credentials)}/DS/dz`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -83,7 +101,7 @@ export async function sendDataMessage(opts: {
   }
 
   const text = await res.text();
-  if (res.status === 401) return { error: "Datová schránka odmítla přihlášení – zkontroluj ISDS_LOGIN a ISDS_PASSWORD." };
+  if (res.status === 401) return { error: "Datová schránka odmítla přihlášení – zkontroluj jméno a heslo v nastavení." };
   const code = /<[^>]*dmStatusCode[^>]*>([^<]*)</.exec(text)?.[1]?.trim();
   const message = /<[^>]*dmStatusMessage[^>]*>([^<]*)</.exec(text)?.[1]?.trim();
   const id = /<[^>]*dmID[^>]*>([^<]*)</.exec(text)?.[1]?.trim();
