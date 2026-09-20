@@ -39,13 +39,34 @@ export async function GET(
     ico?: string;
     obchodniJmeno?: string;
     dic?: string;
-    sidlo?: { textovaAdresa?: string };
+    pravniForma?: string;
+    sidlo?: {
+      textovaAdresa?: string;
+      nazevUlice?: string;
+      nazevObce?: string;
+      nazevCastiObce?: string;
+      cisloDomovni?: number;
+      cisloOrientacni?: number;
+      cisloOrientacniPismeno?: string;
+      psc?: number;
+      nazevStatu?: string;
+    };
   };
 
+  const s = data.sidlo ?? {};
   return Response.json({
     ico: data.ico ?? clean,
     name: data.obchodniJmeno ?? null,
     dic: data.dic ?? null,
-    address: data.sidlo?.textovaAdresa ?? null,
+    address: s.textovaAdresa ?? null,
+    // rozepsaná adresa pro daňová podání
+    street: s.nazevUlice ?? s.nazevCastiObce ?? null,
+    houseNo: s.cisloDomovni != null ? String(s.cisloDomovni) : null,
+    orientNo: s.cisloOrientacni != null ? `${s.cisloOrientacni}${s.cisloOrientacniPismeno ?? ""}` : null,
+    city: s.nazevObce ?? null,
+    zip: s.psc != null ? String(s.psc) : null,
+    country: s.nazevStatu ?? "ČESKÁ REPUBLIKA",
+    // právní forma 100–199 jsou fyzické osoby, ostatní právnické
+    subjectType: data.pravniForma && Number(data.pravniForma) < 200 ? "FO" : "PO",
   });
 }

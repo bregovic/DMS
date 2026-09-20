@@ -76,3 +76,10 @@ export async function updateBilling(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/settings/fakturace");
 }
+
+/** Zveřejněné bankovní účty a spolehlivost plátce z registru DPH. */
+export async function lookupVatAccounts(dic: string) {
+  await requireUser();
+  const { vatRegistry } = await import("@/server/vat-registry");
+  return vatRegistry(dic);
+}

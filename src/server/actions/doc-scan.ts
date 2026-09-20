@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { canWrite, getProjectRole } from "@/server/access";
+import { canWrite, getProjectRole, getTaskOnlyAccess } from "@/server/access";
+import { storage } from "@/lib/storage";
 import { createDocScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { notifyExpenseAdded } from "@/server/notify";
 import { EXPENSE_PAID_STAGE } from "@/lib/constants";
@@ -199,4 +200,91 @@ export async function vendorsForScan(projectId: string) {
     orderBy: { name: "asc" },
     select: { id: true, name: true, ico: true },
   });
+}
+
+/**
+ * Naskenovaný doklad od dodavatele: kdo smí do projektu zapisovat, a taky
+ * dodavatel, který v projektu má jen přidělené úkoly. Soubor se uloží jako
+ * příloha a rovnou se přečte; výdaj z něj založí správce po kontrole.
+ */
+export async function uploadReceipt(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber nebo vyfoť soubor.");
+  if (file.size > 14 * 1024 * 1024) throw new Error("Soubor je větší než 14 MB.");
+
+  const role = await getProjectRole(projectId, user);
+  const taskOnly = role ? null : await getTaskOnlyAccess(projectId, user);
+  if (!canWrite(role) && !taskOnly) throw new Error("K tomuhle projektu nemáš přístup.");
+
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  if (!project) throw new Error("Projekt nenalezen.");
+  const docType = formData.get("type") === "invoice" ? "invoice" : "receipt";
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const key = await storage.save(buffer, file.name, `${project.ownerId}/${projectId}/${docType}`);
+  const doc = await prisma.document.create({
+    data: {
+      projectId,
+      fileName: key,
+      originalName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      type: docType,
+      uploadedById: user.id,
+      note: String(formData.get("note") || "").slice(0, 300) || null,
+    },
+    select: { id: true },
+  });
+  const scanId = await createDocScan(projectId, doc.id, user.id);
+  after(() => runDocScan(scanId));
+  revalidatePath("/ukoly");
+  revalidatePath("/doklady");
+  revalidatePath(`/projects/${projectId}`);
+  return { scanId };
+}
+
+/** Projekty, kam smím poslat doklad (mám přístup nebo tam mám úkoly). */
+export async function projectsForReceipts() {
+  const user = await requireUser();
+  const { listProjectsForUser } = await import("@/server/access");
+  const access = await listProjectsForUser(user);
+  return access
+    .filter((a) => canWrite(a.role) || a.role === "task")
+    .map((a) => ({ id: a.project.id, name: a.project.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+}
+
+/** Moje odeslané doklady a jejich stav. */
+export async function myReceipts() {
+  const user = await requireUser();
+  const scans = await prisma.docScan.findMany({
+    where: { createdById: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      result: true,
+      expenseId: true,
+      projectId: true,
+      document: { select: { originalName: true } },
+    },
+  });
+  const names = new Map(
+    (
+      await prisma.project.findMany({ where: { id: { in: scans.map((s) => s.projectId) } }, select: { id: true, name: true } })
+    ).map((p) => [p.id, p.name]),
+  );
+  return scans.map((s) => ({
+    id: s.id,
+    status: s.status,
+    createdAt: s.createdAt,
+    fileName: s.document.originalName,
+    project: names.get(s.projectId) ?? "",
+    supplier: (s.result as { supplier?: { name?: string } } | null)?.supplier?.name ?? null,
+    total: (s.result as { total?: number } | null)?.total ?? null,
+    done: !!s.expenseId,
+  }));
 }

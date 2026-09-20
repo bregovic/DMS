@@ -9,6 +9,8 @@ import { INV_ATTR } from "@/lib/bulk-ids";
 import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListFilters } from "@/components/ui/list-filters";
+import { ReceiptScan } from "@/components/expenses/receipt-scan";
+import { myReceipts, projectsForReceipts } from "@/server/actions/doc-scan";
 import { parseStatusFilter } from "@/lib/list-filter";
 import { TASK_DONE_STATUSES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -234,6 +236,8 @@ export default async function MyTasksPage({
     );
   }
   const statusList = statuses.map((s) => ({ key: s.key, label: s.label }));
+  // Doklady: kam smím poslat a co už jsem poslal (dodavatel i správce)
+  const [receiptProjects, receipts] = await Promise.all([projectsForReceipts(), myReceipts()]);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -251,6 +255,8 @@ export default async function MyTasksPage({
           </div>
         )}
       </header>
+
+      <ReceiptScan projects={receiptProjects} initial={receipts} />
 
       {(tasks.length > 0 || managedIds.length > 0) && (
       <ListFilters
