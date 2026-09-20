@@ -67,9 +67,7 @@ export function DocInbox({
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="kicker">Doklady projektu</h3>
         <p className="text-[11px] text-stone-400">
-          {canScan
-            ? "Nahrávej průběžně účtenky i faktury; přečíst je můžeš jednotlivě, nebo všechny najednou."
-            : "Vyfoť účtenku nebo nahraj fakturu – zkontroluje se ostrost a doklad se pošle majiteli projektu ke zpracování."}
+          {canScan ? "Nahraj průběžně, přečti jednotlivě nebo hromadně." : "Doklady zpracuje majitel projektu."}
         </p>
       </div>
 
@@ -83,7 +81,7 @@ export function DocInbox({
           defaultType="receipt"
           label="Nahrát doklad"
           title="Nahrát účtenku nebo fakturu"
-          hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a zkontroluje ostrost."
+          hint="Přetáhni soubory sem nebo je vyber. Fotky se ořežou a narovnají."
           variant="primary"
         />
         <ReceiptScan compact projects={[{ id: projectId, name: projectName, autoRead: false }]} initial={[]} />
@@ -104,7 +102,7 @@ export function DocInbox({
                 }
               });
             }}
-            className="flex h-11 cursor-pointer items-center gap-2 border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 disabled:opacity-60"
+            className="flex h-10 cursor-pointer items-center gap-2 border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 disabled:opacity-60"
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <FileStack className="size-4" />}
             Přečíst vše ({unread.length})

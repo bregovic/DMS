@@ -8,6 +8,8 @@ import { setExpensePaid } from "@/server/actions/expenses";
 import { getStatuses } from "@/server/statuses";
 import { EXPENSE_PAID_STAGE, EXPENSE_STATUSES, isExpensePaid } from "@/lib/constants";
 import { ListFilters } from "@/components/ui/list-filters";
+import { PaymentsBulkBar } from "@/components/expenses/payments-bulk-bar";
+import { PAY_FORM_ID } from "@/lib/bulk-ids";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Prisma } from "@/generated/prisma/client";
@@ -186,13 +188,22 @@ export default async function PaymentsPage({
           }
         />
       ) : (
-        <ul className="border-t border-stone-300/80">
+        <>
+        <PaymentsBulkBar statuses={expenseStatuses.map((s) => ({ key: s.key, label: s.label }))} />
+        <ul id="payment-list" className="border-t border-stone-300/80">
           {expenses.map((e) => (
             <li
               key={e.id}
               className="flex items-baseline justify-between gap-3 border-b border-stone-200 py-3.5"
             >
-              <div className="min-w-0">
+              <input
+                type="checkbox"
+                form={PAY_FORM_ID}
+                value={e.id}
+                aria-label={`Vybrat ${e.title}`}
+                className="mt-1 size-4 shrink-0 cursor-pointer accent-stone-900"
+              />
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-stone-950">
                   {e.title}
                 </p>
@@ -241,6 +252,7 @@ export default async function PaymentsPage({
             </li>
           ))}
         </ul>
+        </>
       )}
     </div>
   );

@@ -3,7 +3,7 @@
 import QRCode from "qrcode";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getProjectAccess } from "@/server/access";
+import { getProjectAccess, managedProjectIds } from "@/server/access";
 import { buildSpd, resolveIban } from "@/lib/payment";
 import { isExpensePaid } from "@/lib/constants";
 
@@ -26,18 +26,24 @@ export type QrAggregateResult =
 /** Sdruží vybrané NEUHRAZENÉ výdaje projektu do QR plateb. Seskupuje podle
  *  bankovního účtu dodavatele (IBAN) a měny – jeden QR na účet+měnu. */
 export async function aggregateExpensesQr(
-  projectId: string,
+  /** null = napříč projekty (modul Platby) */
+  projectId: string | null,
   ids: string[],
 ): Promise<QrAggregateResult> {
   const user = await requireUser();
-  const access = await getProjectAccess(projectId, user);
-  if (!access) return { error: "Nemáte přístup k tomuto projektu." };
+  let scope: string[] | null = null;
+  if (projectId) {
+    const access = await getProjectAccess(projectId, user);
+    if (!access) return { error: "Nemáte přístup k tomuto projektu." };
+  } else {
+    scope = await managedProjectIds(user);
+  }
 
   const idList = [...new Set(ids)].filter(Boolean);
   if (idList.length === 0) return { error: "Nebyly vybrány žádné výdaje." };
 
   const expenses = await prisma.expense.findMany({
-    where: { id: { in: idList }, projectId },
+    where: { id: { in: idList }, ...(projectId ? { projectId } : { projectId: { in: scope! } }) },
     include: {
       vendor: { select: { name: true, bankAccount: true } },
     },

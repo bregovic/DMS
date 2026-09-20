@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { notifyExpenseAdded } from "@/server/notify";
 import { deleteWithFiles } from "@/server/document-files";
-import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite } from "@/server/access";
+import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
 
@@ -292,12 +292,19 @@ export async function bulkUpdateExpenses(formData: FormData) {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  if (!isManager(await getProjectRole(projectId, user))) {
+  // Modul Platby pracuje napříč projekty – bez projectId se omezíme na ty,
+  // které spravuju, a mazat hromadně tam nejde.
+  const cross = !projectId;
+  if (cross) {
+    if (op === "delete") throw new Error("Hromadné mazání jde jen v projektu.");
+  } else if (!isManager(await getProjectRole(projectId, user))) {
     throw new Error("Hromadnou změnu může provést jen vlastník projektu.");
   }
   if (ids.length === 0) return;
 
-  const where = { id: { in: ids }, projectId };
+  const where = cross
+    ? { id: { in: ids }, projectId: { in: await managedProjectIds(user) } }
+    : { id: { in: ids }, projectId };
   if (op === "delete") {
     // Přílohy i z úložiště (R2) – jen výdajů TOHOTO projektu (dřív se
     // přílohy hledaly jen podle id a šlo tak smazat přílohy cizího výdaje).
@@ -318,7 +325,7 @@ export async function bulkUpdateExpenses(formData: FormData) {
     throw new Error("Neznámá operace.");
   }
 
-  revalidatePath(`/projects/${projectId}`);
+  if (projectId) revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/reports");
   revalidatePath("/payments");

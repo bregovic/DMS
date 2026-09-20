@@ -16,6 +16,7 @@ export function QrAggregateModal({
   ids,
   onClose,
 }: {
+  /** prázdné = výdaje z více projektů (modul Platby) */
   projectId: string;
   ids: string[];
   onClose: () => void;
@@ -32,7 +33,7 @@ export function QrAggregateModal({
     let alive = true;
     (async () => {
       try {
-        const res = await aggregateExpensesQr(projectId, ids);
+        const res = await aggregateExpensesQr(projectId || null, ids);
         if (!alive) return;
         if ("error" in res) {
           setError(res.error);

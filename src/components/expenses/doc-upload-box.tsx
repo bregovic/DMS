@@ -37,7 +37,7 @@ export function DocUploadBox({ projects }: { projects: { id: string; name: strin
         defaultType="receipt"
         label="Nahrát doklad"
         title="Nahrát účtenku nebo fakturu"
-        hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a přečte."
+        hint="Přetáhni soubory sem nebo je vyber. Fotky se ořežou a narovnají."
         variant="primary"
       />
     </div>

@@ -94,15 +94,8 @@ export function ReceiptScan({
         fd.set("file", await prepareUpload(it.file, { doc: true, crop: it.crop !== false }));
         await uploadReceipt(fd);
       }
-      setMsg(
-        autoRead
-          ? items.length > 1
-            ? `Odesláno ${items.length} dokladů, čtu je…`
-            : "Odesláno, čtu doklad…"
-          : items.length > 1
-            ? `Odesláno ${items.length} dokladů. Zpracuje je majitel projektu.`
-            : "Odesláno. Zpracuje ho majitel projektu – hotovo, nic dalšího nevyplňuj.",
-      );
+      const kolik = items.length > 1 ? `${items.length} dokladů` : "Doklad";
+      setMsg(autoRead ? `${kolik} odeslán, čtu…` : `${kolik} odeslán ke zpracování.`);
       setPending(null);
       setMine(await myReceipts());
     } catch (e) {
@@ -137,7 +130,9 @@ export function ReceiptScan({
           type="button"
           disabled={busy}
           onClick={() => camRef.current?.click()}
-          className={`flex h-11 cursor-pointer items-center justify-center gap-2 border border-stone-950 bg-stone-950 px-4 text-sm text-white transition-colors hover:bg-stone-800 disabled:opacity-60 sm:flex-none ${compact ? "" : "flex-1"}`}
+          className={`flex cursor-pointer items-center justify-center gap-2 border border-stone-950 bg-stone-950 px-4 text-sm text-white transition-colors hover:bg-stone-800 disabled:opacity-60 sm:flex-none ${
+            compact ? "h-10" : "h-11 flex-1"
+          }`}
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
           {busy ? "Odesílám…" : "Vyfotit účtenku"}
@@ -154,11 +149,11 @@ export function ReceiptScan({
         <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pick(e.target.files)} />
         <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => pick(e.target.files)} />
       </div>
-      <p className={`mt-2 text-[11px] text-stone-400 ${compact ? "hidden sm:block" : ""}`}>
-        {autoRead
-          ? "Vyfoť účtenku nebo vyber PDF faktury. Systém z ní přečte dodavatele, částku, DPH i položky a pošle ji ke kontrole."
-          : "Stačí vyfotit – zkontroluje se jen, že fotka není rozmazaná, a doklad se pošle majiteli projektu. Ten si ho zpracuje sám, ty už nic nevyplňuješ."}
-      </p>
+      {!compact && (
+        <p className="mt-2 text-[11px] text-stone-400">
+          {autoRead ? "Doklad se přečte a připraví ke kontrole." : "Doklad se pošle majiteli projektu ke zpracování."}
+        </p>
+      )}
 
       {pending && (
         <div className="mt-3 border border-stone-200 p-3">

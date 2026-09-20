@@ -265,8 +265,7 @@ export default async function DocsPage({
       <div className="mt-6">
         <DocUploadBox projects={projects} />
         <p className="mt-2 text-[11px] text-stone-400">
-          Účtenku i fakturu systém přečte: dodavatele podle IČO z ARESu, číslo dokladu, DUZP, základ a DPH po sazbách
-          a položky. Doklad, který jsi vystavil ty (podle IČO v Nastavení), se založí jako příjem.
+          Z dokladu se přečte dodavatel (ARES), číslo, DUZP, DPH i položky. Vlastní faktura se založí jako příjem.
         </p>
       </div>
 
@@ -294,8 +293,7 @@ export default async function DocsPage({
             ))}
           </ul>
           <p className="mt-1.5 text-[11px] text-stone-400">
-            Poslal je dodavatel z telefonu. Přečtení spustíš ty – dodavatel nic dalšího vyplňovat nemusí. Když má někdo
-            číst doklady sám, povol mu to v projektu → Nastavení → Přístup.
+            Přečtení spouštíš ty. Komu chceš čtení povolit, nastav v projektu → Nastavení → Přístup.
           </p>
         </section>
       )}
