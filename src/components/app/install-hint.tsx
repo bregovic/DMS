@@ -56,7 +56,7 @@ export function InstallHint() {
         className="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 border border-stone-300 py-2.5 text-xs text-stone-600 transition-colors hover:border-stone-950 hover:text-stone-950"
       >
         <Download className="size-3.5" />
-        Nainstalovat do telefonu – rychlejší přístup a fotky účtenek
+        Nainstalovat aplikaci do telefonu
       </button>
     );
 
