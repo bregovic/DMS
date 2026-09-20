@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { ModalBackdrop } from "@/components/app/modal-backdrop";
 
@@ -26,6 +27,8 @@ const WIDTH = {
  * - Esc zavře, pod dialogem se neroluje stránka
  * - klik mimo zavře jen tehdy, když stisk i puštění myši byly mimo
  *   (tažení při označování textu dialog nezavře) – viz ModalBackdrop
+ * - vykresluje se portálem do <body>: dialog otevřený z jiného dialogu tak
+ *   leží nad ním celý včetně ztmavení, ne uvnitř jeho obsahu
  */
 /**
  * Otevřené dialogy odspodu nahoru. Esc zavírá jen ten nejvrchnější –
@@ -48,6 +51,9 @@ export function Dialog({
   children: React.ReactNode;
 }) {
   const titleId = useId();
+  // portál až po připojení v prohlížeči (na serveru document není)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   // onClose bývá nová funkce při každém vykreslení (() => setOpen(false)) –
   // přes ref se posluchač Esc a zámek rolování nastaví jen jednou.
   const closeRef = useRef(onClose);
@@ -71,7 +77,9 @@ export function Dialog({
     };
   }, [titleId]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <ModalBackdrop
       onClose={onClose}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-stone-950/30 sm:p-4 sm:py-12"
@@ -100,7 +108,8 @@ export function Dialog({
         </div>
         {children}
       </div>
-    </ModalBackdrop>
+    </ModalBackdrop>,
+    document.body,
   );
 }
 
