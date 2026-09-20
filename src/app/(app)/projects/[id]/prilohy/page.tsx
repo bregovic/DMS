@@ -7,7 +7,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess, isManager } from "@/server/access";
 import { getDocumentTypes } from "@/server/document-types";
-import { UploadForm } from "@/components/documents/upload-form";
+import { UploadDialog } from "@/components/documents/upload-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteDocument } from "@/server/actions/documents";
 import { FileText } from "lucide-react";
@@ -99,7 +99,13 @@ export default async function AttachmentsPage({
       {!sub && (
         <section className="mb-10">
           <h2 className="kicker mb-3">Dokumentace projektu · {projectDocs.length}</h2>
-          {canUpload && <UploadForm projectId={id} types={docTypes} />}
+          {canUpload && (
+            <UploadDialog
+              projectId={id}
+              types={docTypes}
+              hint="Přetáhni sem soubory nebo je vyber – dokumentace, plánky, fotky, smlouvy."
+            />
+          )}
           {canUpload && <TextNoteForm projectId={id} />}
           {projectDocs.length > 0 && (
             <ul className="mt-3">

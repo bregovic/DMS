@@ -59,11 +59,32 @@ export async function getDocScan(id: string) {
     (!!myIco && (norm(ico) === myIco || norm(dic) === myIco)) || (!!myDic && norm(dic) === myDic);
   const issued = !!result && mine(result.supplier?.ico, result.supplier?.dic);
   const received = !!result && mine(result.customer?.ico, result.customer?.dic);
+
+  // Stejný doklad už v evidenci? (číslo + IČO protistrany)
+  const dupNumber = result?.number?.trim() || null;
+  const dupIco = (issued ? result?.customer?.ico : result?.supplier?.ico)?.replace(/\D/g, "") || null;
+  let duplicate: { kind: "expense" | "income"; title: string; date: Date; amount: number; project: string } | null = null;
+  if (dupNumber) {
+    if (issued) {
+      const hit = await prisma.income.findFirst({
+        where: { project: { ownerId: user.id }, docNumber: dupNumber, ...(dupIco ? { customerIco: dupIco } : {}) },
+        select: { title: true, date: true, amount: true, project: { select: { name: true } } },
+      });
+      if (hit) duplicate = { kind: "income", title: hit.title, date: hit.date, amount: Number(hit.amount), project: hit.project.name };
+    } else {
+      const hit = await prisma.expense.findFirst({
+        where: { project: { ownerId: user.id }, docNumber: dupNumber, ...(dupIco ? { supplierIco: dupIco } : {}) },
+        select: { title: true, date: true, amount: true, project: { select: { name: true } } },
+      });
+      if (hit) duplicate = { kind: "expense", title: hit.title, date: hit.date, amount: Number(hit.amount), project: hit.project.name };
+    }
+  }
   return {
     ...scan,
     result,
     // vystavený = já jsem dodavatel; přijatý = já jsem odběratel (nebo neurčeno)
     direction: issued && !received ? ("issued" as const) : ("received" as const),
+    duplicate,
     myBilling: { ico: me?.billingIco ?? null, dic: me?.billingDic ?? null, name: me?.billingName ?? null },
   };
 }
@@ -145,6 +166,23 @@ export async function applyDocScan(formData: FormData) {
   const paid = formData.get("paid") === "1";
   const subProjectId = String(formData.get("subProjectId") || "") || null;
   const issued = formData.get("direction") === "issued";
+  const force = formData.get("force") === "1";
+
+  // Pojistka proti dvojímu zaúčtování stejného dokladu
+  const dupNum = String(formData.get("docNumber") || "").trim();
+  if (dupNum && !force) {
+    const dupIcoRaw = String(formData.get(issued ? "customerIco" : "supplierIco") || "").replace(/\D/g, "");
+    const exists = issued
+      ? await prisma.income.findFirst({
+          where: { project: { ownerId: project.ownerId }, docNumber: dupNum, ...(dupIcoRaw ? { customerIco: dupIcoRaw } : {}) },
+          select: { id: true },
+        })
+      : await prisma.expense.findFirst({
+          where: { project: { ownerId: project.ownerId }, docNumber: dupNum, ...(dupIcoRaw ? { supplierIco: dupIcoRaw } : {}) },
+          select: { id: true },
+        });
+    if (exists) throw new Error(`Doklad č. ${dupNum} od téhle protistrany už v evidenci je. Když ho chceš přesto založit, potvrď to v dialogu.`);
+  }
 
   // Vystavený doklad = příjem a uskutečněné plnění (do DPH na výstupu)
   if (issued) {

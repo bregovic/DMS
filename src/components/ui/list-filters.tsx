@@ -53,6 +53,7 @@ export function ListFilters({
   const sp = useSearchParams();
   const k = (s: string) => `${prefix}${s}`;
   const [open, setOpen] = useState(false);
+  const [stOpen, setStOpen] = useState(false);
 
   const [q, setQ] = useState(sp.get(k("q")) ?? "");
   const from = sp.get(k("from")) ?? "";
@@ -150,6 +151,16 @@ export function ListFilters({
     curQ || from || to || sp.get(k("sort")) || sp.get(k("dir")) || stRaw !== null ||
     selects.some((s) => sp.get(k(s.key)));
 
+  const statusSummary = !statuses
+    ? ""
+    : isDefaultSt
+      ? "Neukončené"
+      : stSelected === null
+        ? "Vše"
+        : closedStatuses.length && sameSet(stSelected, closedStatuses)
+          ? "Ukončené"
+          : statuses.filter((x) => stSelected.has(x.key)).map((x) => x.label).join(", ") || "žádný stav";
+
   const inputClass =
     "h-8 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950";
   const chip = (on: boolean) =>
@@ -240,54 +251,82 @@ export function ListFilters({
       </div>
 
       {(selects.some((s) => s.chips) || (statuses && statuses.length > 0 && defaultStatuses.length > 0)) && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 flex flex-wrap items-end gap-3">
           {selects
             .filter((s) => s.chips)
             .map((s) => {
               const cur = sp.get(k(s.key)) ?? "";
-              const opts = [
-                ...(s.allLabel === null ? [] : [{ value: "", label: s.allLabel ?? "Vše" }]),
-                ...s.options,
-              ];
               return (
-                <div key={s.key} className="flex flex-wrap items-center gap-1.5" role="group" aria-label={s.label}>
-                  <span className="kicker mr-1 w-12 shrink-0">{s.label}</span>
-                  {opts.map((o) => (
-                    <button
-                      key={o.value || "_all"}
-                      type="button"
-                      onClick={() => setParam({ [k(s.key)]: o.value || null })}
-                      aria-pressed={cur === o.value}
-                      className={chip(cur === o.value)}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
+                <label key={s.key} className="text-[11px] uppercase tracking-wide text-stone-400">
+                  {s.label}
+                  <select
+                    value={cur}
+                    onChange={(e) => setParam({ [k(s.key)]: e.target.value || null })}
+                    className={`${inputClass} mt-1 block h-9 min-w-36 text-sm`}
+                  >
+                    {s.allLabel !== null && <option value="">{s.allLabel ?? "Vše"}</option>}
+                    {s.options.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               );
             })}
+
           {statuses && statuses.length > 0 && defaultStatuses.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stav">
-              <span className="kicker mr-1 w-12 shrink-0">Stav</span>
-              <button type="button" onClick={() => setParam({ [k("st")]: null })} className={chip(isDefaultSt)}>
-                Neukončené
+            <div className="relative text-[11px] uppercase tracking-wide text-stone-400">
+              Stav
+              <button
+                type="button"
+                onClick={() => setStOpen((v) => !v)}
+                aria-expanded={stOpen}
+                className={`${inputClass} mt-1 flex h-9 min-w-40 items-center justify-between gap-2 text-sm normal-case tracking-normal`}
+              >
+                <span className="truncate text-stone-700">{statusSummary}</span>
+                <ChevronDown className={`size-3.5 shrink-0 transition-transform ${stOpen ? "rotate-180" : ""}`} />
               </button>
-              {closedStatuses.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setStatuses(new Set(closedStatuses))}
-                  className={chip(!isDefaultSt && !!stSelected && sameSet(stSelected, closedStatuses))}
-                >
-                  Ukončené
-                </button>
-              )}
-              <button type="button" onClick={() => setStatuses(null)} className={chip(!isDefaultSt && stSelected === null)}>
-                Vše
-              </button>
-              {!isDefaultSt && !!stSelected && !sameSet(stSelected, closedStatuses) && (
-                <span className="text-xs text-stone-500">
-                  + vybrané: {statuses.filter((x) => stSelected.has(x.key)).map((x) => x.label).join(", ")}
-                </span>
+              {stOpen && (
+                <div className="absolute left-0 z-30 mt-1 w-64 border border-stone-300 bg-white p-2 shadow-lift">
+                  <div className="flex gap-1 border-b border-stone-100 pb-2">
+                    <button type="button" onClick={() => { setParam({ [k("st")]: null }); setStOpen(false); }} className={chip(isDefaultSt)}>
+                      Neukončené
+                    </button>
+                    {closedStatuses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setStatuses(new Set(closedStatuses)); setStOpen(false); }}
+                        className={chip(!isDefaultSt && !!stSelected && sameSet(stSelected, closedStatuses))}
+                      >
+                        Ukončené
+                      </button>
+                    )}
+                    <button type="button" onClick={() => { setStatuses(null); setStOpen(false); }} className={chip(!isDefaultSt && stSelected === null)}>
+                      Vše
+                    </button>
+                  </div>
+                  <ul className="max-h-60 overflow-y-auto pt-2">
+                    {statuses.map((x) => {
+                      const on = !!stSelected?.has(x.key);
+                      return (
+                        <li key={x.key}>
+                          <label className="flex cursor-pointer items-center gap-2 px-1 py-1 text-sm normal-case tracking-normal text-stone-700 hover:bg-stone-50">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => (isDefaultSt ? setStatuses(new Set([x.key])) : toggleStatus(x.key))}
+                              className="size-4 accent-stone-900"
+                            />
+                            {x.color !== undefined && <span className={`size-2 rounded-full ${colorClasses(x.color ?? "stone").dot}`} />}
+                            <span className="flex-1">{x.label}</span>
+                            {x.count !== undefined && <span className="text-xs text-stone-400">{x.count}</span>}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </div>
           )}
@@ -355,36 +394,6 @@ export function ListFilters({
             ))}
           </div>
 
-          {statuses && statuses.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtr podle stavu">
-              <span className="kicker mr-1">Stavy</span>
-              {defaultStatuses.length === 0 && (
-                <button type="button" onClick={() => setStatuses(null)} className={chip(stSelected === null)}>
-                  Vše
-                </button>
-              )}
-              {statuses.map((s) => {
-                const on = !!stSelected?.has(s.key) && !isDefaultSt;
-                return (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => (isDefaultSt ? setStatuses(new Set([s.key])) : toggleStatus(s.key))}
-                    aria-pressed={on}
-                    className={chip(on)}
-                  >
-                    {s.color !== undefined && (
-                      <span className={`size-2 rounded-full ${colorClasses(s.color ?? "stone").dot}`} />
-                    )}
-                    {s.label}
-                    {s.count !== undefined && (
-                      <span className={on ? "text-stone-300" : "text-stone-400"}>{s.count}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
     </div>

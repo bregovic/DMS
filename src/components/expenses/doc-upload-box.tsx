@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UploadForm } from "@/components/documents/upload-form";
+import { UploadDialog } from "@/components/documents/upload-dialog";
 
 /**
  * Nahrání dokladu mimo projekt (modul Doklady): nejdřív se vybere projekt,
@@ -27,7 +27,7 @@ export function DocUploadBox({ projects }: { projects: { id: string; name: strin
           ))}
         </select>
       </div>
-      <UploadForm
+      <UploadDialog
         key={projectId}
         projectId={projectId}
         types={[
@@ -35,7 +35,10 @@ export function DocUploadBox({ projects }: { projects: { id: string; name: strin
           { value: "invoice", label: "Faktura" },
         ]}
         defaultType="receipt"
-        compact
+        label="Nahrát doklad"
+        title="Nahrát účtenku nebo fakturu"
+        hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a přečte."
+        variant="primary"
       />
     </div>
   );

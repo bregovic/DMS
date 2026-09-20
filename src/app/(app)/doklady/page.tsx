@@ -7,6 +7,7 @@ import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
+import { DocPreview } from "@/components/documents/doc-preview";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { isExpensePaid } from "@/lib/constants";
@@ -31,6 +32,7 @@ type Row = {
   vat: number | null;
   status: string;
   href: string;
+  doc?: { id: string; name: string; mimeType: string } | null;
 };
 
 const KIND_LABEL: Record<Row["kind"], string> = {
@@ -54,7 +56,7 @@ function range(period: string, year: number): [Date, Date] | null {
 export default async function DocsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; year?: string; period?: string; smer?: string; typ?: string }>;
+  searchParams: Promise<{ project?: string; year?: string; period?: string; smer?: string; typ?: string; q?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
@@ -64,6 +66,7 @@ export default async function DocsPage({
   const projectId = sp?.project || "";
   const smer = sp?.smer === "in" || sp?.smer === "out" ? sp.smer : "";
   const typ = sp?.typ ?? "";
+  const q = (sp?.q ?? "").trim().toLowerCase();
   const win = range(period, year);
   const inWin = (d: Date) => !win || (d >= win[0] && d < win[1]);
 
@@ -97,7 +100,7 @@ export default async function DocsPage({
         stage: true,
         projectId: true,
         vendor: { select: { name: true } },
-        documents: { select: { type: true }, take: 1 },
+        documents: { select: { id: true, type: true, originalName: true, mimeType: true }, take: 1 },
       },
     }),
     prisma.income.findMany({
@@ -115,6 +118,7 @@ export default async function DocsPage({
         vatAmount: true,
         customerName: true,
         projectId: true,
+        documentId: true,
       },
     }),
     prisma.invoice.findMany({
@@ -157,6 +161,9 @@ export default async function DocsPage({
       vat: e.vatAmount != null ? Number(e.vatAmount) : null,
       status: isExpensePaid(e.stage) ? "uhrazeno" : "k úhradě",
       href: `/projects/${e.projectId}?tab=vydaje`,
+      doc: e.documents[0]
+        ? { id: e.documents[0].id, name: e.documents[0].originalName, mimeType: e.documents[0].mimeType }
+        : null,
     });
   }
   for (const i of incomes) {
@@ -176,6 +183,7 @@ export default async function DocsPage({
       vat: i.vatAmount != null ? Number(i.vatAmount) : null,
       status: "přijato",
       href: `/projects/${i.projectId}?tab=prijmy`,
+      doc: i.documentId ? { id: i.documentId, name: `${i.docNumber ?? i.title}`, mimeType: "" } : null,
     });
   }
   for (const inv of invoices) {
@@ -199,7 +207,15 @@ export default async function DocsPage({
     });
   }
   const shown = rows
-    .filter((r) => (!smer || r.direction === smer) && (!typ || r.kind === typ))
+    .filter(
+      (r) =>
+        (!smer || r.direction === smer) &&
+        (!typ || r.kind === typ) &&
+        (!q ||
+          (r.docNumber ?? "").toLowerCase().includes(q) ||
+          (r.party ?? "").toLowerCase().includes(q) ||
+          r.projectName.toLowerCase().includes(q)),
+    )
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   const sum = (dir: "in" | "out") => shown.filter((r) => r.direction === dir).reduce((a, r) => a + r.amount, 0);
 
@@ -207,7 +223,7 @@ export default async function DocsPage({
     .filter((y, i, a) => a.indexOf(y) === i)
     .sort((a, b) => b - a);
   const qs = (over: Record<string, string>) => {
-    const u = new URLSearchParams({ ...(projectId ? { project: projectId } : {}), period, year: String(year), ...(smer ? { smer } : {}), ...(typ ? { typ } : {}), ...over });
+    const u = new URLSearchParams({ ...(projectId ? { project: projectId } : {}), period, year: String(year), ...(smer ? { smer } : {}), ...(typ ? { typ } : {}), ...(q ? { q } : {}), ...over });
     for (const [k, v] of [...u.entries()]) if (!v) u.delete(k);
     return `/doklady?${u.toString()}`;
   };
@@ -287,6 +303,27 @@ export default async function DocsPage({
             </Link>
           ))}
         </div>
+        <form method="get" action="/doklady" className="flex flex-wrap items-center gap-2">
+          {projectId && <input type="hidden" name="project" value={projectId} />}
+          <input type="hidden" name="period" value={period} />
+          <input type="hidden" name="year" value={String(year)} />
+          {smer && <input type="hidden" name="smer" value={smer} />}
+          {typ && <input type="hidden" name="typ" value={typ} />}
+          <input
+            name="q"
+            defaultValue={sp?.q ?? ""}
+            placeholder="Hledat číslo dokladu nebo protistranu…"
+            className="h-9 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:w-80"
+          />
+          <button type="submit" className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950">
+            Hledat
+          </button>
+          {q && (
+            <Link href={qs({ q: "" })} className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline">
+              zrušit hledání
+            </Link>
+          )}
+        </form>
         <p className="text-xs text-stone-500">
           {shown.length} dokladů · přijaté <span className="font-mono">{formatCurrency(sum("in"))}</span> · vystavené{" "}
           <span className="font-mono">{formatCurrency(sum("out"))}</span>
@@ -312,6 +349,7 @@ export default async function DocsPage({
                   <th className="py-2 text-right font-medium">Částka</th>
                   <th className="py-2 text-right font-medium">DPH</th>
                   <th className="py-2 text-right font-medium">Stav</th>
+                  <th className="py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -332,6 +370,15 @@ export default async function DocsPage({
                     <td className="py-1.5 text-right font-mono text-stone-500">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
                     <td className={`py-1.5 text-right text-xs ${r.status === "uhrazeno" || r.status === "přijato" ? "text-emerald-700" : r.status === "stornováno" ? "text-stone-400" : "text-orange-700"}`}>
                       {r.status}
+                    </td>
+                    <td className="py-1.5 pl-2 text-right">
+                      {r.doc ? (
+                        <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
+                      ) : (
+                        <Link href={r.href} className="text-xs text-stone-400 underline-offset-2 hover:text-stone-950 hover:underline">
+                          otevřít
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
+import { buildDp3 } from "@/server/dp3-xml";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 /**
@@ -120,13 +121,25 @@ export default async function VatPage({
       outRate.set(r.rate, g);
     }
   }
-  const outVat = [...outRate.values()].reduce((a, r) => a + r.vat, 0);
+
   const a4 = issued.filter((i) => Number(i.amount) >= KH_LIMIT && i.customerDic);
   const a5 = issued.filter((i) => !(Number(i.amount) >= KH_LIMIT && i.customerDic));
   const a5Sum = a5.reduce(
     (a, i) => ({ base: a.base + Number(i.vatBase ?? 0), vat: a.vat + Number(i.vatAmount ?? 0) }),
     { base: 0, vat: 0 },
   );
+
+  // řádky přiznání k DPH (měsíc / čtvrtletí)
+  const dp3 =
+    period === "rok"
+      ? null
+      : (
+          await buildDp3(
+            user.id,
+            period.startsWith("q") ? { year, quarter: Number(period.slice(1)) } : { year, month: Number(period.replace("m", "")) },
+            projectId || null,
+          )
+        ).summary;
 
   const taxed = expenses.filter((e) => e.deductible && (e.vatAmount != null || e.vatBase != null));
   const skipped = expenses.filter((e) => !e.deductible && (e.vatAmount != null || e.vatBase != null));
@@ -191,8 +204,16 @@ export default async function VatPage({
           </Link>
           {period !== "rok" && (
             <Link
-              href={`/api/export/kh?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+              href={`/api/export/dp3?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
               className="flex h-9 items-center border border-stone-950 bg-stone-950 px-3 text-sm text-white transition-colors hover:bg-stone-800"
+            >
+              XML přiznání k DPH
+            </Link>
+          )}
+          {period !== "rok" && (
+            <Link
+              href={`/api/export/kh?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+              className="flex h-9 items-center border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
             >
               XML kontrolního hlášení
             </Link>
@@ -278,17 +299,59 @@ export default async function VatPage({
             </p>
           </section>
 
-          {issued.length > 0 && (
+          {dp3 && (
             <section className="mb-8 border border-stone-300 bg-stone-50 p-3">
-              <h2 className="kicker mb-1">Odhad vlastní daně</h2>
-              <p className="text-sm text-stone-800">
-                Daň na výstupu <span className="font-mono">{formatCurrency(outVat)}</span> − odpočet{" "}
-                <span className="font-mono">{formatCurrency(totalVat)}</span> ={" "}
-                <b className="font-mono">{formatCurrency(outVat - totalVat)}</b>
-              </p>
-              <p className="mt-1 text-[11px] text-stone-400">
-                Orientační rozdíl z dokladů v období. Nezahrnuje zálohy, opravy, přenesenou daňovou povinnost ani plnění
-                mimo tuhle evidenci.
+              <h2 className="kicker mb-2">Přiznání k DPH – řádky</h2>
+              <table className="w-full text-sm">
+                <tbody>
+                  {[
+                    { r: "1", l: "Dodání zboží a služeb, základní sazba 21 %", base: dp3.out21.base, vat: dp3.out21.vat },
+                    { r: "2", l: "Dodání zboží a služeb, snížená sazba 12 %", base: dp3.out12.base, vat: dp3.out12.vat },
+                    { r: "40", l: "Přijatá plnění, základní sazba – nárok na odpočet", base: dp3.in21.base, vat: dp3.in21.vat },
+                    { r: "41", l: "Přijatá plnění, snížená sazba – nárok na odpočet", base: dp3.in12.base, vat: dp3.in12.vat },
+                  ].map((x) => (
+                    <tr key={x.r} className="border-b border-stone-200">
+                      <td className="w-10 py-1.5 text-stone-400">{x.r}</td>
+                      <td className="py-1.5 text-stone-700">{x.l}</td>
+                      <td className="py-1.5 text-right font-mono text-stone-600">{formatCurrency(x.base)}</td>
+                      <td className="w-28 py-1.5 text-right font-mono text-stone-950">{formatCurrency(x.vat)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-stone-200">
+                    <td className="py-1.5 text-stone-400">62</td>
+                    <td className="py-1.5 text-stone-700" colSpan={2}>
+                      Daň na výstupu
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-stone-950">{formatCurrency(dp3.taxOut)}</td>
+                  </tr>
+                  <tr className="border-b border-stone-200">
+                    <td className="py-1.5 text-stone-400">63</td>
+                    <td className="py-1.5 text-stone-700" colSpan={2}>
+                      Odpočet daně
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-stone-950">{formatCurrency(dp3.deduction)}</td>
+                  </tr>
+                  <tr className="font-medium">
+                    <td className="py-2 text-stone-400">{dp3.result >= 0 ? "64" : "66"}</td>
+                    <td className="py-2 text-stone-900" colSpan={2}>
+                      {dp3.result >= 0 ? "Vlastní daň (k zaplacení)" : "Nadměrný odpočet (vrátí se)"}
+                    </td>
+                    <td className={`py-2 text-right font-mono ${dp3.result >= 0 ? "text-stone-950" : "text-emerald-700"}`}>
+                      {formatCurrency(Math.abs(dp3.result))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              {dp3.missing.length > 0 && (
+                <ul className="mt-2 space-y-0.5 text-[11px] text-amber-800">
+                  {dp3.missing.map((m) => (
+                    <li key={m}>⚠ {m}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-[11px] text-stone-400">
+                Spočítáno z dokladů v evidenci. Nezahrnuje zálohy, opravy, přenesenou daňovou povinnost, dovoz, vývoz ani
+                osvobozená plnění – ty na portálu doplň ručně. Jde o podklad, ne o podání.
               </p>
             </section>
           )}

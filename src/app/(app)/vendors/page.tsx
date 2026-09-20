@@ -8,19 +8,13 @@ import { NewVendorForm } from "@/components/vendors/new-vendor-form";
 import { EditVendorForm } from "@/components/vendors/edit-vendor-form";
 import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
 import { deleteVendor } from "@/server/actions/vendors";
-import { TASK_DONE_STATUSES, taskStatusLabel, vendorCategoryLabel } from "@/lib/constants";
-import { getStatuses } from "@/server/statuses";
-import { GanttChart, type GanttItem } from "@/components/planning/gantt-chart";
+import { vendorCategoryLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function VendorsPage() {
   const user = await requireUser();
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const since = new Date(todayStart.getTime() - 30 * 86400000);
-
-  const [vendors, totals, vTasks, statuses] = await Promise.all([
+  const [vendors, totals] = await Promise.all([
     prisma.vendor.findMany({
       where: { ownerId: user.id },
       orderBy: { name: "asc" },
@@ -31,65 +25,9 @@ export default async function VendorsPage() {
       where: { project: { ownerId: user.id } },
       _sum: { amount: true },
     }),
-    // Harmonogram dodavatelů: naplánované úkoly (ne todo) od minulého měsíce dál
-    prisma.task.findMany({
-      where: {
-        vendor: { ownerId: user.id },
-        kind: { not: "todo" },
-        project: { ownerId: user.id },
-        OR: [{ dueDate: { gte: since } }, { dueDate: null, startDate: { gte: since } }],
-      },
-      orderBy: { startDate: { sort: "asc", nulls: "last" } },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        startDate: true,
-        dueDate: true,
-        percentDone: true,
-        vendorId: true,
-        project: { select: { name: true } },
-        subProject: { select: { name: true } },
-      },
-    }),
-    getStatuses("task"),
   ]);
 
-  const statusLabel = new Map(statuses.map((s) => [s.key, s.label]));
-  const isDone = (st: string) => TASK_DONE_STATUSES.includes(st);
-  const multiProject = new Set(vTasks.map((t) => t.project.name)).size > 1;
-  const gantt: GanttItem[] = [];
-  for (const v of vendors) {
-    const kids = vTasks.filter((t) => t.vendorId === v.id && (t.startDate || t.dueDate));
-    if (!kids.length) continue;
-    const starts = kids.map((t) => (t.startDate ?? t.dueDate)!.getTime());
-    const ends = kids.map((t) => (t.dueDate ?? t.startDate)!.getTime());
-    const allDone = kids.every((t) => isDone(t.status));
-    gantt.push({
-      id: `vendor-${v.id}`,
-      name: v.name,
-      kind: "phase",
-      start: new Date(Math.min(...starts)),
-      end: new Date(Math.max(...ends)),
-      done: allDone,
-      percentDone: Math.round(kids.reduce((a, t) => a + (isDone(t.status) ? 100 : t.percentDone), 0) / kids.length),
-      children: kids.map((t) => ({
-        id: t.id,
-        title: [multiProject ? t.project.name : null, t.subProject?.name, t.title].filter(Boolean).join(" · "),
-        start: t.startDate,
-        end: t.dueDate,
-        done: isDone(t.status),
-        percentDone: t.percentDone,
-        statusLabel: statusLabel.get(t.status) ?? taskStatusLabel(t.status),
-        assigneeEmail: null,
-      })),
-    });
-  }
-  gantt.sort((a, b) => a.start!.getTime() - b.start!.getTime());
-
-  const totalByVendor = new Map(
-    totals.map((t) => [t.vendorId, Number(t._sum.amount ?? 0)]),
-  );
+  const totalByVendor = new Map(totals.map((t) => [t.vendorId, Number(t._sum.amount ?? 0)]));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -97,18 +35,6 @@ export default async function VendorsPage() {
         <h1 className="display text-4xl text-stone-950">Dodavatelé</h1>
         <NewVendorForm />
       </header>
-
-      {gantt.length > 0 && (
-        <section className="mb-10">
-          <h2 className="kicker mb-1">Harmonogram dodavatelů</h2>
-          <p className="mb-3 text-xs text-stone-500">
-            Kdy má který dodavatel práci – z úkolů ve tvých projektech, od minulého měsíce dál. Termíny se mění v plánování projektu.
-          </p>
-          <div className="border border-stone-200 bg-white p-3 shadow-soft sm:p-4">
-            <GanttChart items={gantt} today={todayStart} readOnly />
-          </div>
-        </section>
-      )}
 
       {vendors.length === 0 ? (
         <EmptyState

@@ -27,6 +27,7 @@ import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
+import { DocPreview } from "@/components/documents/doc-preview";
 import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { INV_ATTR } from "@/lib/bulk-ids";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
@@ -39,7 +40,7 @@ import { parseStatusFilter } from "@/lib/list-filter";
 import { extractable } from "@/server/extraction";
 import { RememberProject } from "@/components/projects/remember-project";
 import { TodoList } from "@/components/tasks/todo-list";
-import { UploadForm } from "@/components/documents/upload-form";
+import { UploadDialog } from "@/components/documents/upload-dialog";
 import {
   ProjectTabs,
   TabSection,
@@ -62,6 +63,7 @@ import {
   isExpensePaid,
   expenseStage,
 } from "@/lib/constants";
+import { incomeCategoryLabel } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
@@ -110,7 +112,7 @@ export default async function ProjectDetailPage({
             vendor: { select: { id: true, name: true, bankAccount: true } },
             createdBy: { select: { name: true, email: true } },
             documents: {
-              select: { id: true, originalName: true },
+              select: { id: true, originalName: true, mimeType: true },
               orderBy: { createdAt: "asc" },
             },
           },
@@ -1077,14 +1079,17 @@ export default async function ProjectDetailPage({
                 Nahraj účtenku nebo fakturu – systém přečte dodavatele, částky, DPH i položky a připraví výdaj ke kontrole.
               </p>
             </div>
-            <UploadForm
+            <UploadDialog
               projectId={project.id}
               types={[
                 { value: "receipt", label: "Účtenka" },
                 { value: "invoice", label: "Faktura" },
               ]}
               defaultType="receipt"
-              compact
+              label="Nahrát doklad"
+              title="Nahrát účtenku nebo fakturu"
+              hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a přečte."
+              variant="primary"
             />
             <AutoRefresh when={docScans.some((s) => s.status === "running")} />
             {docScans.length > 0 && (
@@ -1294,7 +1299,13 @@ export default async function ProjectDetailPage({
           {tab === "dokumenty" && sub === null && (
           <TabSection title={<h2 className="kicker">Dokumenty · {project.documents.length}</h2>}>
           <section>
-            {isManager && <UploadForm projectId={project.id} types={docTypes} />}
+            {isManager && (
+              <UploadDialog
+                projectId={project.id}
+                types={docTypes}
+                hint="Přetáhni sem soubory nebo je vyber – plánky, smlouvy, revize, fotky."
+              />
+            )}
 
             {docTypesPresent.length > 1 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1659,6 +1670,13 @@ export default async function ProjectDetailPage({
                     <span className="w-24 text-right font-mono text-xs text-stone-500">
                       {e.vatAmount != null ? `DPH ${formatCurrency(Number(e.vatAmount), e.currency)}` : ""}
                     </span>
+                    {e.documents[0] && (
+                      <DocPreview
+                        documentId={e.documents[0].id}
+                        name={e.documents[0].originalName}
+                        mimeType={e.documents[0].mimeType}
+                      />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1682,7 +1700,11 @@ export default async function ProjectDetailPage({
                     <span className="w-28 shrink-0 text-xs text-stone-400">{i.docNumber ?? ""}</span>
                     <span className="min-w-0 flex-1 basis-40 truncate text-stone-900">
                       {i.title}
-                      {i.customerName && <span className="text-xs text-stone-400"> · {i.customerName}</span>}
+                      <span className="text-xs text-stone-400">
+                        {" · "}
+                        {incomeCategoryLabel(i.category)}
+                        {i.customerName ? ` · ${i.customerName}` : ""}
+                      </span>
                     </span>
                     <span className="font-mono text-emerald-700">{formatCurrency(Number(i.amount), i.currency)}</span>
                     <span className="w-24 text-right font-mono text-xs text-stone-500">

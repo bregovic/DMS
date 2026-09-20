@@ -114,6 +114,7 @@ export function DocScanReview({
   }, [open, scan?.status]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const [force, setForce] = useState(false);
   const rowsTotal = rows.reduce((a, r) => a + r.base + r.vat, 0);
 
   async function apply() {
@@ -124,6 +125,7 @@ export function DocScanReview({
       fd.set("scanId", scan!.id);
       for (const [k, v] of Object.entries(form)) fd.set(k, v);
       fd.set("vatRows", JSON.stringify(rows));
+      if (force) fd.set("force", "1");
       fd.set("items", JSON.stringify(items));
       await applyDocScan(fd);
       setOpen(false);
@@ -167,6 +169,20 @@ export function DocScanReview({
       ) : (
         <>
           <div className="space-y-5 p-5">
+            {scan.duplicate && (
+              <div className="border border-amber-400 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="font-medium">Tenhle doklad už v evidenci vypadá jako založený.</p>
+                <p className="mt-0.5">
+                  {scan.duplicate.kind === "income" ? "Příjem" : "Výdaj"} „{scan.duplicate.title}" ·{" "}
+                  {new Date(scan.duplicate.date).toLocaleDateString("cs-CZ")} ·{" "}
+                  {Math.round(scan.duplicate.amount).toLocaleString("cs-CZ")} Kč · {scan.duplicate.project}
+                </p>
+                <label className="mt-2 flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} className="size-4 accent-stone-900" />
+                  Vím o tom, založit i tak
+                </label>
+              </div>
+            )}
             {!!scan.result?.warnings?.length && (
               <ul className="border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                 {scan.result.warnings.map((w, i) => (
@@ -425,7 +441,7 @@ export function DocScanReview({
             >
               Zahodit návrh
             </Button>
-            <Button type="button" onClick={apply} disabled={busy}>
+            <Button type="button" onClick={apply} disabled={busy || (!!scan.duplicate && !force)}>
               {busy ? "Zakládám…" : form.direction === "issued" ? "Založit příjem" : "Založit výdaj"}
             </Button>
           </DialogFooter>
