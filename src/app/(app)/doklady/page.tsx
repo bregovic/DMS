@@ -5,6 +5,7 @@ import { FinanceNav } from "@/components/invoices/finance-nav";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { EmptyState } from "@/components/ui/empty-state";
+import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ export default async function DocsPage() {
         <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
       </header>
       <FinanceNav />
+      <AutoRefresh when={scans.some((s) => s.status === "running")} />
 
       <div className="mt-6">
         <DocUploadBox projects={projects} />

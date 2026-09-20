@@ -27,6 +27,7 @@ import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
+import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { projectPriceSummary } from "@/server/price-check";
 import { ACTIVITY_PERIODS, TaskActivity } from "@/components/tasks/task-activity";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
@@ -1074,6 +1075,7 @@ export default async function ProjectDetailPage({
               defaultType="receipt"
               compact
             />
+            <AutoRefresh when={docScans.some((s) => s.status === "running")} />
             {docScans.length > 0 && (
               <ul className="mt-3 border-t border-stone-200">
                 {docScans.map((sc) => {

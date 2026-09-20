@@ -118,10 +118,42 @@ export async function runDocScan(scanId: string) {
       SCHEMA,
       { effort: "low", maxOutput: 20_000 },
     );
-    await prisma.docScan.update({
+    const result = normalize(data);
+    const scanRow = await prisma.docScan.update({
       where: { id: scanId },
-      data: { status: "ready", result: normalize(data) as unknown as Prisma.InputJsonValue, costUsd },
+      data: { status: "ready", result: result as unknown as Prisma.InputJsonValue, costUsd },
+      select: { documentId: true, projectId: true, createdById: true },
     });
+
+    // typ přílohy podle toho, co doklad opravdu je (účtenka × faktura)
+    const docType =
+      result.docType === "invoice" || result.docType === "proforma" || result.docType === "credit_note"
+        ? "invoice"
+        : result.docType === "receipt"
+          ? "receipt"
+          : null;
+    if (docType) await prisma.document.update({ where: { id: scanRow.documentId }, data: { type: docType } });
+
+    // správci projektu: doklad je přečtený a čeká na zaúčtování
+    const project = await prisma.project.findUnique({
+      where: { id: scanRow.projectId },
+      select: { name: true, ownerId: true, memberships: { where: { role: "member" }, select: { email: true } } },
+    });
+    if (project) {
+      const emails = project.memberships.map((m) => m.email);
+      const members = emails.length
+        ? await prisma.user.findMany({ where: { email: { in: emails, mode: "insensitive" } }, select: { id: true } })
+        : [];
+      const { notifyUsers } = await import("@/server/notify");
+      await notifyUsers([project.ownerId, ...members.map((m) => m.id)], {
+        kind: "doc_scan_ready",
+        title: `Doklad ke kontrole: ${result.supplier?.name ?? "doklad"}${result.total != null ? ` – ${Math.round(result.total).toLocaleString("cs-CZ")} Kč` : ""}`,
+        body: project.name,
+        href: "/doklady",
+        projectId: scanRow.projectId,
+        dedupeKey: `docscan:${scanId}`,
+      });
+    }
   } catch (err) {
     await prisma.docScan
       .update({
