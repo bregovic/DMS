@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
+import { currencyCode } from "@/lib/utils";
 import { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -134,7 +135,7 @@ export async function runDocScan(scanId: string) {
 /** Doplní chybějící součty a pohlídá, že rozpis DPH sedí na celek. */
 export function normalize(d: ScanResult): ScanResult {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
-  d.currency = (d.currency || "CZK").toUpperCase().slice(0, 3);
+  d.currency = currencyCode(d.currency);
   d.supplier.ico = d.supplier.ico?.replace(/\D/g, "").slice(0, 8) || null;
   d.supplier.dic = d.supplier.dic?.replace(/\s/g, "").toUpperCase() || null;
   d.vatBreakdown = (d.vatBreakdown ?? [])
