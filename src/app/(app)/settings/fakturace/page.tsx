@@ -27,6 +27,7 @@ export default async function BillingSettingsPage() {
       phone: true,
       dataBoxId: true,
       taxOfficeCode: true,
+      taxOfficeDataBox: true,
       taxOfficeBranch: true,
     },
   });
@@ -57,6 +58,7 @@ export default async function BillingSettingsPage() {
             phone: b?.phone ?? null,
             dataBoxId: b?.dataBoxId ?? null,
             taxOfficeCode: b?.taxOfficeCode ?? null,
+            taxOfficeDataBox: b?.taxOfficeDataBox ?? null,
             taxOfficeBranch: b?.taxOfficeBranch ?? null,
           }}
         />

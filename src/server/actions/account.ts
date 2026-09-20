@@ -70,6 +70,7 @@ export async function updateBilling(formData: FormData) {
       phone: t("phone"),
       dataBoxId: t("dataBoxId"),
       taxOfficeCode: t("taxOfficeCode"),
+      taxOfficeDataBox: t("taxOfficeDataBox"),
       taxOfficeBranch: t("taxOfficeBranch"),
     },
   });

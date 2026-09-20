@@ -41,6 +41,8 @@ model User {
   country         String?   @default("ČESKÁ REPUBLIKA")
   phone           String?
   dataBoxId       String? // ID datové schránky
+  /** ID datové schránky finančního úřadu (7 znaků) – kam se posílají podání. */
+  taxOfficeDataBox String?
   taxOfficeCode   String? // kód finančního úřadu (c_ufo)
   taxOfficeBranch String? // územní pracoviště (c_pracufo)
   remindersAt    DateTime? // kdy se naposledy generovaly připomínky
@@ -61,6 +63,7 @@ model User {
   operations        Operation[]  @relation("OperationOwner")
   catalogWishes     CatalogWish[] @relation("CatalogWishOwner")
   packages          Package[]    @relation("PackageOwner")
+  taxFilings        TaxFiling[]  @relation("TaxFilingUser")
 }
 
 model Account {
@@ -853,4 +856,22 @@ model Invoice {
   @@unique([issuerId, number])
   @@index([projectId])
   @@index([recipientId, status])
+}
+
+/** Odeslané podání na finanční správu (datovou schránkou). */
+model TaxFiling {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String // dp3 = přiznání k DPH | kh = kontrolní hlášení
+  year      Int
+  period    String // m9 | q3
+  projectId String? // podání jen za jeden projekt (jinak vše, co spravuju)
+  recipient String // ID datové schránky FÚ
+  messageId String // číslo datové zprávy z ISDS
+  summary   String? // čísla, která odešla (pro pozdější kontrolu)
+  sentAt    DateTime @default(now())
+
+  user User @relation("TaxFilingUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, year, period])
 }

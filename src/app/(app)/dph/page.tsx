@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
+import { FilingDialog } from "@/components/invoices/filing-dialog";
 import { buildDp3 } from "@/server/dp3-xml";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { amountCzk, rateMissing, vatRowsCzk, vatTotalsCzk } from "@/lib/vat";
@@ -185,6 +186,12 @@ export default async function VatPage({
     if (miss.length) problems.push({ id: e.id, title: e.title, what: miss.join(", ") });
   }
 
+  const filings = await prisma.taxFiling.findMany({
+    where: { userId: user.id, year, period },
+    orderBy: { sentAt: "desc" },
+    select: { id: true, kind: true, messageId: true, sentAt: true, summary: true },
+  });
+
   const years = [now.getUTCFullYear() + 1, now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2, year].filter((y, i, a) => a.indexOf(y) === i).sort((a, b) => b - a);
 
   return (
@@ -217,6 +224,12 @@ export default async function VatPage({
             >
               XML kontrolního hlášení
             </Link>
+          )}
+          {period !== "rok" && (
+            <>
+              <FilingDialog kind="dp3" period={period} year={year} projectId={projectId || null} label="Podat přiznání" />
+              <FilingDialog kind="kh" period={period} year={year} projectId={projectId || null} label="Podat hlášení" />
+            </>
           )}
         </div>
       </div>
@@ -356,7 +369,23 @@ export default async function VatPage({
             </section>
           )}
 
-          {problems.length > 0 && (
+          {filings.length > 0 && (
+        <section className="mt-6 border border-emerald-200 bg-emerald-50/50 p-3">
+          <h2 className="kicker mb-1">Odesláno datovou schránkou</h2>
+          <ul className="text-sm text-stone-700">
+            {filings.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-emerald-100 py-1 last:border-0">
+                <span className="font-medium">{f.kind === "dp3" ? "Přiznání k DPH" : "Kontrolní hlášení"}</span>
+                <span className="text-xs text-stone-500">{f.sentAt.toLocaleString("cs-CZ")}</span>
+                <span className="text-xs text-stone-500">zpráva č. {f.messageId}</span>
+                {f.summary && <span className="text-xs text-stone-400">{f.summary}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {problems.length > 0 && (
             <section className="mb-8 border border-amber-300 bg-amber-50 p-3">
               <h2 className="kicker mb-2 !text-amber-900">Před podáním doplnit · {problems.length}</h2>
               <ul className="space-y-1 text-xs text-amber-900">

@@ -24,6 +24,7 @@ export type BillingValues = {
   phone: string | null;
   dataBoxId: string | null;
   taxOfficeCode: string | null;
+  taxOfficeDataBox: string | null;
   taxOfficeBranch: string | null;
 };
 
@@ -55,6 +56,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
     phone: b.phone ?? "",
     dataBoxId: b.dataBoxId ?? "",
     taxOfficeCode: b.taxOfficeCode ?? "",
+    taxOfficeDataBox: b.taxOfficeDataBox ?? "",
     taxOfficeBranch: b.taxOfficeBranch ?? "",
   });
   const set = (k: string, x: string) => {
@@ -273,8 +275,22 @@ export function BillingForm({ b }: { b: BillingValues }) {
             Územní pracoviště
             <input name="taxOfficeBranch" value={v.taxOfficeBranch ?? ""} onChange={(e) => set("taxOfficeBranch", e.target.value)} placeholder="např. 2001" inputMode="numeric" className={`${field} mt-1`} />
           </label>
-          <p className="self-end pb-1 text-[11px] text-stone-400">
-            Kódy najdeš na portálu MOJE daně u svého úřadu; bez nich soubor kontrolního hlášení neprojde.
+          <label className={lab}>
+            Datová schránka FÚ
+            <input
+              name="taxOfficeDataBox"
+              value={v.taxOfficeDataBox ?? ""}
+              onChange={(e) => set("taxOfficeDataBox", e.target.value)}
+              placeholder="7 znaků"
+              maxLength={7}
+              className={`${field} mt-1`}
+            />
+          </label>
+        </FormGrid>
+        <FormGrid cols={2}>
+          <p className="text-[11px] text-stone-400">
+            Kódy najdeš na portálu MOJE daně u svého úřadu; bez nich soubor kontrolního hlášení neprojde. ID datové
+            schránky úřadu ukáže EPO při ukládání podání – slouží k odeslání přiznání a hlášení přímo z aplikace.
           </p>
         </FormGrid>
       </FormSection>
