@@ -10,7 +10,7 @@ const tabs = [
   { href: "/projects", label: "Projekty", Icon: Folder },
   // Pro dodavatele je to na telefonu hlavní vstup (#29, #31).
   { href: "/ukoly", label: "Úkoly", Icon: ListChecks },
-  { href: "/payments", label: "Platby", Icon: Wallet },
+  { href: "/doklady", label: "Doklady", Icon: Wallet },
 ];
 
 export function MobileTabBar() {
