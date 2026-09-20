@@ -84,11 +84,13 @@ export function Dialog({
       onClose={onClose}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-stone-950/30 sm:p-4 sm:py-12"
     >
+      {/* patička počítá se zapuštěním do obsahu s p-5; když visí přímo
+          v dialogu, záporné okraje se zruší, ať nepřečnívá přes okraj */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`flex min-h-full w-full flex-col bg-white shadow-lift sm:min-h-0 sm:border sm:border-stone-300 ${WIDTH[size]}`}
+        className={`flex min-h-full w-full flex-col bg-white shadow-lift sm:min-h-0 sm:border sm:border-stone-300 ${WIDTH[size]} [&>[data-dialog-footer]]:m-0`}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-stone-200 bg-white px-5 py-4">
           <h3 id={titleId} className="kicker">
@@ -115,12 +117,16 @@ export function Dialog({
 
 /**
  * Tlačítka dialogu přilepená dole – Uložit je vidět vždy, i u dlouhého
- * formuláře na telefonu. Patří jako poslední prvek do formuláře
- * s odsazením p-5 (záporné okraje ho roztáhnou přes celou šířku).
+ * formuláře na telefonu. Patří jako poslední prvek do formuláře s odsazením
+ * p-5 (záporné okraje ho roztáhnou přes celou šířku); je-li vložená přímo do
+ * dialogu, okraje se zruší v Dialogu samotném.
  */
 export function DialogFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-5 -mb-5 flex items-center justify-end gap-2 border-t border-stone-200 bg-white px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div
+      data-dialog-footer=""
+      className="sticky bottom-0 z-10 -mx-5 -mb-5 flex items-center justify-end gap-2 border-t border-stone-200 bg-white px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
       {children}
     </div>
   );
