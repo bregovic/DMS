@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { RegisterForm } from "@/components/auth/auth-forms";
+import { InstallHint } from "@/components/app/install-hint";
 
 export default async function RegisterPage() {
   const session = await auth();
@@ -13,6 +14,7 @@ export default async function RegisterPage() {
         <p className="mt-1 text-sm text-stone-500">Začni spravovat své projekty</p>
       </div>
       <RegisterForm />
+      <InstallHint />
     </div>
   );
 }
