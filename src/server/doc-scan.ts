@@ -107,6 +107,7 @@ export async function runDocScan(scanId: string) {
       });
       return;
     }
+    await assertBudget(); // limity zpracování až tady, ať je případná chyba vidět u dokladu
     const buf = await storage.read(doc.fileName);
     const { data, costUsd } = await callModel<ScanResult>(
       scan.model,
@@ -165,7 +166,6 @@ export function normalize(d: ScanResult): ScanResult {
 
 /** Založí návrh a rovnou ho spustí (volá se po nahrání účtenky/faktury). */
 export async function createDocScan(projectId: string, documentId: string, userId: string) {
-  await assertBudget(userId);
   const scan = await prisma.docScan.upsert({
     where: { documentId },
     update: { status: "running", result: Prisma.JsonNull, error: null, model: AI_MODEL, createdById: userId },
