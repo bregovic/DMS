@@ -32,11 +32,11 @@ export async function compressImage(file: File): Promise<File> {
  * `doc: true` = fotka dokladu: vyčistí se (šedá, kontrast, doostření) a je
  * výrazně menší; když by to nepomohlo, použije se běžná komprese.
  */
-export async function prepareUpload(file: File, opts?: { doc?: boolean }): Promise<File> {
+export async function prepareUpload(file: File, opts?: { doc?: boolean; crop?: boolean }): Promise<File> {
   let out = file;
   if (opts?.doc) {
-    const { cleanDocumentPhoto } = await import("@/lib/image-clean");
-    out = await cleanDocumentPhoto(file);
+    const { processDocumentPhoto } = await import("@/lib/image-clean");
+    out = (await processDocumentPhoto(file, { crop: opts.crop !== false })).file;
   }
   if (out === file) out = await compressImage(file);
   if (out.size > MAX_UPLOAD) {
