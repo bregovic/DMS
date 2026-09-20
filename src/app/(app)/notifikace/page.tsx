@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 const ICON: Record<string, typeof Bell> = {
   task_assigned: ClipboardList,
   expense_added: Receipt,
+  doc_uploaded: Receipt,
+  doc_scan_ready: Receipt,
   reminder: AlertTriangle,
   invoice_requested: Wallet,
   invoice_paid: Wallet,

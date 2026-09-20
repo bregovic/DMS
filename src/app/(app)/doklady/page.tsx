@@ -77,12 +77,32 @@ export default async function DocsPage({
   const ids = projects.map((p) => p.id);
   const scope = projectId ? [projectId] : ids;
 
-  const [scans, expenses, incomes, invoices] = await Promise.all([
+  const [scans, pendingDocs, expenses, incomes, invoices] = await Promise.all([
     prisma.docScan.findMany({
       where: { projectId: { in: scope }, status: { in: ["running", "ready", "error"] } },
       orderBy: { createdAt: "desc" },
       take: 50,
       select: { id: true, projectId: true, status: true, result: true, document: { select: { id: true, originalName: true } } },
+    }),
+    // doklady, které poslal někdo jiný (dodavatel) a ještě nejsou přečtené
+    prisma.document.findMany({
+      where: {
+        projectId: { in: scope },
+        type: { in: ["receipt", "invoice"] },
+        expenseId: null,
+        uploadedById: { not: user.id },
+        scan: { is: null },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        createdAt: true,
+        projectId: true,
+        uploadedBy: { select: { name: true, email: true } },
+      },
     }),
     prisma.expense.findMany({
       where: { projectId: { in: scope }, docNumber: { not: null } },
@@ -247,6 +267,36 @@ export default async function DocsPage({
           a položky. Doklad, který jsi vystavil ty (podle IČO v Nastavení), se založí jako příjem.
         </p>
       </div>
+
+      {pendingDocs.length > 0 && (
+        <section className="mt-6">
+          <h2 className="kicker mb-2">Nové od spolupracovníků · {pendingDocs.length}</h2>
+          <ul className="border-t border-stone-200">
+            {pendingDocs.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={d.originalName}>
+                  {d.originalName}
+                  <span className="text-xs text-stone-500"> · {d.uploadedBy.name ?? d.uploadedBy.email}</span>
+                </span>
+                <span className="text-xs text-stone-500">{projName.get(d.projectId)}</span>
+                <span className="text-xs text-stone-400">{formatDate(d.createdAt)}</span>
+                <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
+                <DocScanReview
+                  scanId={null}
+                  documentId={d.id}
+                  projectId={d.projectId}
+                  categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                  label="Přečíst doklad"
+                />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-stone-400">
+            Poslal je dodavatel z telefonu. Přečtení spustíš ty – dodavatel nic dalšího vyplňovat nemusí. Když má někdo
+            číst doklady sám, povol mu to v projektu → Nastavení → Přístup.
+          </p>
+        </section>
+      )}
 
       {scans.length > 0 && (
         <section className="mt-6">

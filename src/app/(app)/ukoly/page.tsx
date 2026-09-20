@@ -256,7 +256,9 @@ export default async function MyTasksPage({
         )}
       </header>
 
-      <ReceiptScan projects={receiptProjects} initial={receipts} />
+      {/* Doklady se nahrávají v projektu (záložka Výdaje); tady zůstávají jen pro ty,
+          kdo mají přístup výhradně k úkolům a projekt si otevřít nemůžou. */}
+      <ReceiptScan projects={receiptProjects.filter((p) => p.taskOnly)} initial={receipts} />
 
       {(tasks.length > 0 || managedIds.length > 0) && (
       <ListFilters

@@ -3,27 +3,43 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Loader2, Paperclip } from "lucide-react";
 import { myReceipts, uploadReceipt } from "@/server/actions/doc-scan";
-import { processDocumentPhoto } from "@/lib/image-clean";
+import { processDocumentPhoto, type PhotoQuality } from "@/lib/image-clean";
 import { prepareUpload } from "@/lib/client-upload";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type Project = { id: string; name: string };
+type Project = { id: string; name: string; autoRead: boolean };
 type Mine = Awaited<ReturnType<typeof myReceipts>>;
 
 const STATUS: Record<string, { label: string; cls: string }> = {
+  uploaded: { label: "odesláno ke zpracování", cls: "text-stone-500" },
   running: { label: "čtu doklad…", cls: "text-stone-500" },
   ready: { label: "přečteno, čeká na zaúčtování", cls: "text-orange-700" },
   applied: { label: "zaúčtováno", cls: "text-emerald-700" },
   dismissed: { label: "zahozeno", cls: "text-stone-400" },
-  error: { label: "nepodařilo se přečíst", cls: "text-red-600" },
+  error: { label: "zpracuje majitel projektu", cls: "text-stone-500" },
+};
+
+const QUALITY_STYLE: Record<PhotoQuality["level"], string> = {
+  ok: "text-emerald-700",
+  borderline: "text-amber-700",
+  bad: "text-red-600",
 };
 
 /**
- * Doklad od dodavatele: vyfotí účtenku telefonem (nebo vybere PDF), systém
- * ji přečte a správci projektu se objeví mezi doklady ke kontrole.
- * Dodavatel nic dalšího nevyplňuje – jen vybere projekt.
+ * Doklad od dodavatele: vyfotí účtenku telefonem (nebo vybere PDF) a je hotovo.
+ * Fotka se ořízne, zkontroluje se, že není rozmazaná, a pošle se do projektu –
+ * dál ji zpracuje majitel projektu. Nic dalšího dodavatel nevyplňuje.
  */
-export function ReceiptScan({ projects, initial }: { projects: Project[]; initial: Mine }) {
+export function ReceiptScan({
+  projects,
+  initial,
+  compact = false,
+}: {
+  projects: Project[];
+  initial: Mine;
+  /** V projektu: jen tlačítka a náhled, seznam dokladů je hned pod tím. */
+  compact?: boolean;
+}) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -31,8 +47,16 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
   const [mine, setMine] = useState<Mine>(initial);
   const camRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  // co se chystá odeslat – u fotky napřed náhled (ořez papíru a vyčištění)
-  const [pending, setPending] = useState<{ original: File; ready: File; preview: string | null; cropped: boolean } | null>(null);
+  // co se chystá odeslat – u fotky napřed náhled (ořez papíru a kontrola ostrosti)
+  const [pending, setPending] = useState<{
+    original: File;
+    ready: File;
+    preview: string | null;
+    cropped: boolean;
+    quality: PhotoQuality | null;
+  } | null>(null);
+
+  const autoRead = projects.find((p) => p.id === projectId)?.autoRead ?? false;
 
   // dokud se něco čte, koukni po pár vteřinách, jestli je hotovo
   useEffect(() => {
@@ -41,7 +65,7 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
     return () => clearInterval(t);
   }, [mine]);
 
-  /** Jedna fotka → náhled s ořezem; víc souborů nebo PDF jde rovnou. */
+  /** Jedna fotka → náhled s ořezem a kontrolou; víc souborů nebo PDF jde rovnou. */
   async function pick(files: FileList | null) {
     const list = [...(files ?? [])];
     if (!list.length || !projectId) return;
@@ -53,7 +77,7 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
       setMsg(null);
       const r = await processDocumentPhoto(list[0], { crop: true });
       setBusy(false);
-      setPending({ original: list[0], ready: r.file, preview: r.preview, cropped: r.cropped });
+      setPending({ original: list[0], ready: r.file, preview: r.preview, cropped: r.cropped, quality: r.quality });
       return;
     }
     await send(list.map((f) => ({ file: f })));
@@ -70,7 +94,15 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
         fd.set("file", await prepareUpload(it.file, { doc: true, crop: it.crop !== false }));
         await uploadReceipt(fd);
       }
-      setMsg(items.length > 1 ? `Odesláno ${items.length} dokladů, čtu je…` : "Odesláno, čtu doklad…");
+      setMsg(
+        autoRead
+          ? items.length > 1
+            ? `Odesláno ${items.length} dokladů, čtu je…`
+            : "Odesláno, čtu doklad…"
+          : items.length > 1
+            ? `Odesláno ${items.length} dokladů. Zpracuje je majitel projektu.`
+            : "Odesláno. Zpracuje ho majitel projektu – hotovo, nic dalšího nevyplňuj.",
+      );
       setPending(null);
       setMine(await myReceipts());
     } catch (e) {
@@ -81,10 +113,12 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
 
   if (!projects.length) return null;
 
+  const bad = pending?.quality?.level === "bad";
+
   return (
-    <section className="mb-6 border border-stone-200 bg-white p-3 shadow-soft">
+    <section className={compact ? "" : "mb-6 border border-stone-200 bg-white p-3 shadow-soft"}>
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="kicker mr-1">Účtenka / faktura</h2>
+        {!compact && <h2 className="kicker mr-1">Účtenka / faktura</h2>}
         {projects.length > 1 && (
           <select
             value={projectId}
@@ -103,7 +137,7 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
           type="button"
           disabled={busy}
           onClick={() => camRef.current?.click()}
-          className="flex h-11 flex-1 cursor-pointer items-center justify-center gap-2 border border-stone-950 bg-stone-950 px-4 text-sm text-white transition-colors hover:bg-stone-800 disabled:opacity-60 sm:flex-none"
+          className={`flex h-11 cursor-pointer items-center justify-center gap-2 border border-stone-950 bg-stone-950 px-4 text-sm text-white transition-colors hover:bg-stone-800 disabled:opacity-60 sm:flex-none ${compact ? "" : "flex-1"}`}
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
           {busy ? "Odesílám…" : "Vyfotit účtenku"}
@@ -111,18 +145,21 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
         <button
           type="button"
           disabled={busy}
+          hidden={compact}
           onClick={() => fileRef.current?.click()}
-          className="flex h-11 cursor-pointer items-center gap-2 border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 disabled:opacity-60"
+          className="flex h-11 cursor-pointer items-center gap-2 border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 disabled:opacity-60 [&[hidden]]:hidden"
         >
           <Paperclip className="size-4" /> Vybrat soubor
         </button>
         <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pick(e.target.files)} />
         <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => pick(e.target.files)} />
       </div>
-      <p className="mt-2 text-[11px] text-stone-400">
-        Vyfoť účtenku nebo vyber PDF faktury. Systém z ní přečte dodavatele, částku, DPH i položky a pošle ji majiteli
-        projektu ke kontrole – nic dalšího vyplňovat nemusíš.
+      <p className={`mt-2 text-[11px] text-stone-400 ${compact ? "hidden sm:block" : ""}`}>
+        {autoRead
+          ? "Vyfoť účtenku nebo vyber PDF faktury. Systém z ní přečte dodavatele, částku, DPH i položky a pošle ji ke kontrole."
+          : "Stačí vyfotit – zkontroluje se jen, že fotka není rozmazaná, a doklad se pošle majiteli projektu. Ten si ho zpracuje sám, ty už nic nevyplňuješ."}
       </p>
+
       {pending && (
         <div className="mt-3 border border-stone-200 p-3">
           <div className="flex flex-wrap items-start gap-3">
@@ -131,6 +168,11 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
               <img src={pending.preview} alt="Náhled dokladu" className="max-h-64 w-auto border border-stone-200" />
             )}
             <div className="min-w-0 flex-1 space-y-2 text-sm">
+              {pending.quality && (
+                <p className={`font-medium ${QUALITY_STYLE[pending.quality.level]}`}>
+                  {pending.quality.level === "ok" ? "Fotka je ostrá a čitelná." : pending.quality.note}
+                </p>
+              )}
               <p className="text-stone-700">
                 {pending.cropped ? "Doklad jsem našel, ořízl a narovnal." : "Papír se nepodařilo najít – fotka se jen zmenšila."}
                 <span className="block text-xs text-stone-500">
@@ -138,23 +180,49 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
                 </span>
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => send([{ file: pending.original }])}
-                  className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
-                >
-                  Odeslat
-                </button>
-                {pending.cropped && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => send([{ file: pending.original, crop: false }])}
-                    className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60"
-                  >
-                    Bez ořezu
-                  </button>
+                {bad ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setPending(null);
+                        camRef.current?.click();
+                      }}
+                      className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
+                    >
+                      Vyfotit znovu
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => send([{ file: pending.original }])}
+                      className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60"
+                    >
+                      Přesto odeslat
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => send([{ file: pending.original }])}
+                      className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
+                    >
+                      Odeslat
+                    </button>
+                    {pending.cropped && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => send([{ file: pending.original, crop: false }])}
+                        className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60"
+                      >
+                        Bez ořezu
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
@@ -172,10 +240,10 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
       {msg && <p className="mt-2 text-xs text-emerald-700">{msg}</p>}
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
 
-      {mine.length > 0 && (
+      {!compact && mine.length > 0 && (
         <ul className="mt-3 border-t border-stone-200">
           {mine.map((m) => {
-            const st = STATUS[m.done ? "applied" : m.status] ?? STATUS.running;
+            const st = STATUS[m.done ? "applied" : m.status] ?? STATUS.uploaded;
             return (
               <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-100 py-2 text-sm last:border-0">
                 <span className="min-w-0 flex-1 basis-40 truncate text-stone-900" title={m.fileName}>

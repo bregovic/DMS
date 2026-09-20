@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { canWrite, getProjectRole, getTaskOnlyAccess } from "@/server/access";
+import { canWrite, getProjectRole, getTaskOnlyAccess, isManager } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { createDocScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { notifyExpenseAdded } from "@/server/notify";
@@ -300,6 +300,32 @@ export async function vendorsForScan(projectId: string) {
  * dodavatel, který v projektu má jen přidělené úkoly. Soubor se uloží jako
  * příloha a rovnou se přečte; výdaj z něj založí správce po kontrole.
  */
+/** Vlastník a spolusprávci projektu – jim chodí oznámení o nových dokladech. */
+async function managerIds(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, ownerId: true, memberships: { where: { role: "member" }, select: { email: true } } },
+  });
+  if (!project) return null;
+  const emails = project.memberships.map((m) => m.email);
+  const members = emails.length
+    ? await prisma.user.findMany({ where: { email: { in: emails, mode: "insensitive" } }, select: { id: true } })
+    : [];
+  return { name: project.name, ownerId: project.ownerId, ids: [project.ownerId, ...members.map((m) => m.id)] };
+}
+
+/** Smí tenhle člověk spustit vytěžení? Vlastník, spolusprávce, nebo komu to vlastník povolil. */
+async function mayScan(projectId: string, user: { id: string; email?: string | null }, role: string | null) {
+  if (isManager(role)) return true;
+  const email = user.email?.toLowerCase();
+  if (!email) return false;
+  const m = await prisma.projectMembership.findFirst({
+    where: { projectId, email: { equals: email, mode: "insensitive" }, canScan: true },
+    select: { id: true },
+  });
+  return !!m;
+}
+
 export async function uploadReceipt(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
@@ -329,12 +355,37 @@ export async function uploadReceipt(formData: FormData) {
     },
     select: { id: true },
   });
+  // Doklad od dodavatele se nečte automaticky (vytěžení jde z rozpočtu vlastníka):
+  // jen se uloží a správcům přijde oznámení, že je co zpracovat. Vlastník může
+  // konkrétnímu člověku čtení povolit v přístupech k projektu.
+  if (!(await mayScan(projectId, user, role))) {
+    const mgr = await managerIds(projectId);
+    if (mgr) {
+      const { notifyUsers } = await import("@/server/notify");
+      await notifyUsers(
+        mgr.ids.filter((id) => id !== user.id),
+        {
+          kind: "doc_uploaded",
+          title: `Nový doklad od ${user.name ?? user.email ?? "dodavatele"}`,
+          body: `${mgr.name} · ${file.name}`,
+          href: "/doklady",
+          projectId,
+          dedupeKey: `docup:${doc.id}`,
+        },
+      );
+    }
+    revalidatePath("/ukoly");
+    revalidatePath("/doklady");
+    revalidatePath(`/projects/${projectId}`);
+    return { scanId: null as string | null };
+  }
+
   const scanId = await createDocScan(projectId, doc.id, user.id);
   after(() => runDocScan(scanId));
   revalidatePath("/ukoly");
   revalidatePath("/doklady");
   revalidatePath(`/projects/${projectId}`);
-  return { scanId };
+  return { scanId: scanId as string | null };
 }
 
 /** Projekty, kam smím poslat doklad (mám přístup nebo tam mám úkoly). */
@@ -342,42 +393,63 @@ export async function projectsForReceipts() {
   const user = await requireUser();
   const { listProjectsForUser } = await import("@/server/access");
   const access = await listProjectsForUser(user);
-  return access
-    .filter((a) => canWrite(a.role) || a.role === "task")
-    .map((a) => ({ id: a.project.id, name: a.project.name }))
+  const list = access.filter((a) => canWrite(a.role) || a.role === "task");
+  const email = user.email?.toLowerCase();
+  const allowed = email
+    ? new Set(
+        (
+          await prisma.projectMembership.findMany({
+            where: { projectId: { in: list.map((a) => a.project.id) }, email: { equals: email, mode: "insensitive" }, canScan: true },
+            select: { projectId: true },
+          })
+        ).map((m) => m.projectId),
+      )
+    : new Set<string>();
+  return list
+    .map((a) => ({
+      id: a.project.id,
+      name: a.project.name,
+      // čte se rovnou (vlastník/spolusprávce nebo povolené vytěžování), jinak to zpracuje majitel
+      autoRead: isManager(a.role) || allowed.has(a.project.id),
+      // přístup jen k úkolům = projekt si otevřít nemůže, doklad pošle odsud
+      taskOnly: a.role === "task",
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }
 
 /** Moje odeslané doklady a jejich stav. */
+/**
+ * Co jsem sem poslal já: doklady podle nahraných souborů. Status je stav
+ * zpracování – sám doklad může jen čekat, až ho majitel projektu zpracuje.
+ */
 export async function myReceipts() {
   const user = await requireUser();
-  const scans = await prisma.docScan.findMany({
-    where: { createdById: user.id },
+  const docs = await prisma.document.findMany({
+    where: { uploadedById: user.id, type: { in: ["receipt", "invoice"] } },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {
       id: true,
-      status: true,
+      originalName: true,
       createdAt: true,
-      result: true,
-      expenseId: true,
       projectId: true,
-      document: { select: { originalName: true } },
+      expenseId: true,
+      project: { select: { name: true } },
+      scan: { select: { id: true, status: true, result: true, expenseId: true } },
     },
   });
-  const names = new Map(
-    (
-      await prisma.project.findMany({ where: { id: { in: scans.map((s) => s.projectId) } }, select: { id: true, name: true } })
-    ).map((p) => [p.id, p.name]),
-  );
-  return scans.map((s) => ({
-    id: s.id,
-    status: s.status,
-    createdAt: s.createdAt,
-    fileName: s.document.originalName,
-    project: names.get(s.projectId) ?? "",
-    supplier: (s.result as { supplier?: { name?: string } } | null)?.supplier?.name ?? null,
-    total: (s.result as { total?: number } | null)?.total ?? null,
-    done: !!s.expenseId,
-  }));
+  return docs.map((d) => {
+    const r = (d.scan?.result ?? null) as { supplier?: { name?: string }; total?: number } | null;
+    const done = !!d.expenseId || !!d.scan?.expenseId;
+    return {
+      id: d.id,
+      status: done ? "applied" : (d.scan?.status ?? "uploaded"),
+      createdAt: d.createdAt,
+      fileName: d.originalName,
+      project: d.project.name,
+      supplier: r?.supplier?.name ?? null,
+      total: r?.total ?? null,
+      done,
+    };
+  });
 }

@@ -146,3 +146,15 @@ export async function setVendorSubRole(formData: FormData) {
 
   revalidatePath(`/projects/${sub.projectId}`);
 }
+
+/** Vlastník povolí (nebo vezme) spolupracovníkovi vytěžování dokladů na svůj účet. */
+export async function setMemberScan(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const email = normEmail(String(formData.get("email") || ""));
+  const allow = String(formData.get("allow")) === "1";
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId: user.id }, select: { id: true } });
+  if (!project) throw new Error("Nemáš oprávnění.");
+  await prisma.projectMembership.updateMany({ where: { projectId, email }, data: { canScan: allow } });
+  revalidatePath(`/projects/${projectId}`);
+}

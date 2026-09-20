@@ -404,6 +404,8 @@ model ProjectMembership {
   email     String // identifikátor člena (lowercase)
   role      String   @default("active")
   vendorId  String?
+  /** Smí spouštět vytěžení dokladů (jede to z rozpočtu vlastníka projektu). */
+  canScan   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

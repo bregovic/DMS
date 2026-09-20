@@ -1,30 +1,34 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Paperclip, Plus, X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { attachExpenseScan, deleteDocument } from "@/server/actions/documents";
+import { DocPreview } from "@/components/documents/doc-preview";
 import { prepareUpload } from "@/lib/client-upload";
 
-type Doc = { id: string; originalName: string };
-type DocType = { value: string; label: string };
+type Doc = { id: string; originalName: string; mimeType?: string | null };
 
+/**
+ * Příloha u výdaje: účtenku nebo fakturu jde přiložit jedním klikem (typ se
+ * pozná ze souboru) a rovnou si ji prohlédnout v dialogu. Drží se decentně –
+ * je to jen řádek pod výdajem.
+ */
 export function ExpenseScan({
   projectId,
   expenseId,
   docs,
   canAttach,
-  types,
 }: {
   projectId: string;
   expenseId: string;
   docs: Doc[];
   canAttach: boolean;
-  types: DocType[];
+  /** Ponecháno kvůli volajícím – typ přílohy se pozná ze souboru. */
+  types?: { value: string; label: string }[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
-  const [type, setType] = useState("receipt");
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -36,7 +40,8 @@ export function ExpenseScan({
         const fd = new FormData();
         fd.set("projectId", projectId);
         fd.set("expenseId", expenseId);
-        fd.set("type", type);
+        // PDF bývá faktura, fotka účtenka; opravit jde v dokladech
+        fd.set("type", /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name) ? "invoice" : "receipt");
         fd.set("file", prepared);
         await attachExpenseScan(fd);
         if (inputRef.current) inputRef.current.value = "";
@@ -49,18 +54,16 @@ export function ExpenseScan({
   if (!canAttach && docs.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
       {docs.map((d) => (
-        <span key={d.id} className="group/doc inline-flex items-center gap-1">
-          <a
-            href={`/api/documents/${d.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline"
-          >
-            <Paperclip className="size-3" />
-            {d.originalName}
-          </a>
+        <span key={d.id} className="inline-flex items-center gap-1">
+          <DocPreview
+            documentId={d.id}
+            name={d.originalName}
+            mimeType={d.mimeType}
+            label={d.originalName}
+            className="h-6 max-w-56 truncate border-stone-200 px-1.5 text-[11px] text-stone-500"
+          />
           {canAttach && (
             <form
               action={deleteDocument}
@@ -69,11 +72,7 @@ export function ExpenseScan({
               }}
             >
               <input type="hidden" name="id" value={d.id} />
-              <button
-                type="submit"
-                title="Smazat přílohu"
-                className="text-stone-300 hover:text-stone-950 cursor-pointer"
-              >
+              <button type="submit" title="Smazat přílohu" className="cursor-pointer text-stone-300 hover:text-stone-950">
                 <X className="size-3" />
               </button>
             </form>
@@ -82,36 +81,26 @@ export function ExpenseScan({
       ))}
       {canAttach && (
         <>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="h-6 rounded-none border border-stone-300 bg-white px-1 text-[11px] text-stone-600 focus-visible:outline-none focus-visible:border-stone-950"
-          >
-            {types.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={pending}
-            className="inline-flex items-center gap-1 text-xs text-stone-400 transition-colors hover:text-stone-950 disabled:opacity-60 cursor-pointer"
+            title="Přiložit účtenku nebo fakturu (foto i PDF)"
+            className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-stone-400 transition-colors hover:text-stone-950 disabled:opacity-60"
           >
-            <Plus className="size-3" />
-            {pending ? "nahrávám…" : "sken"}
+            <Paperclip className="size-3" />
+            {pending ? "nahrávám…" : docs.length ? "další příloha" : "příloha"}
           </button>
           <input
             ref={inputRef}
             type="file"
             className="hidden"
-            accept="image/*,application/pdf,capture=camera"
+            accept="image/*,application/pdf"
             onChange={onChange}
           />
         </>
       )}
-      {err && <span className="text-xs text-stone-500">{err}</span>}
+      {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   );
 }

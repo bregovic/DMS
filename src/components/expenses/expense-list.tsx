@@ -33,7 +33,7 @@ export type ExpenseItem = {
   dueLabel: string | null;
   overdue: boolean;
   hasBank: boolean;
-  docs: { id: string; originalName: string }[];
+  docs: { id: string; originalName: string; mimeType?: string | null }[];
   createdByLabel: string;
   edit: ExpenseEdit;
 };

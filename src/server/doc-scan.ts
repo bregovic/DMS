@@ -92,6 +92,25 @@ const INSTRUCTIONS = `Jsi účetní. Ze snímku nebo PDF účtenky či faktury p
 - summary = 1–2 věty, co doklad obsahuje. warnings = co je nečitelné nebo nejisté.
 Čísla vracej jako čísla bez měny a bez mezer. Když údaj na dokladu není, vrať null.`;
 
+/**
+ * Postgres neuloží do JSON ani do textu znak \u0000 (a osamělé půlky surrogate
+ * páru) – když je model vrátí v přepisu dokladu, spadlo by celé uložení.
+ */
+function stripNul<T>(v: T): T {
+  if (typeof v === "string")
+    return v
+      .replace(/\u0000/g, "")
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+      .replace(/(^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/g, "$1") as T;
+  if (Array.isArray(v)) return v.map((x) => stripNul(x)) as T;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    for (const k of Object.keys(o)) o[k] = stripNul(o[k]);
+    return v;
+  }
+  return v;
+}
+
 /** Spustí vytěžení dokladu – návrh se uloží do DocScan (status ready | error). */
 export async function runDocScan(scanId: string) {
   try {
@@ -118,7 +137,7 @@ export async function runDocScan(scanId: string) {
       SCHEMA,
       { effort: "low", maxOutput: 20_000 },
     );
-    const result = normalize(data);
+    const result = normalize(stripNul(data));
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },
       data: { status: "ready", result: result as unknown as Prisma.InputJsonValue, costUsd },
@@ -158,7 +177,7 @@ export async function runDocScan(scanId: string) {
     await prisma.docScan
       .update({
         where: { id: scanId },
-        data: { status: "error", error: err instanceof Error ? err.message.slice(0, 500) : "Neznámá chyba" },
+        data: { status: "error", error: stripNul(err instanceof Error ? err.message : "Neznámá chyba").slice(0, 500) },
       })
       .catch(() => {});
   }

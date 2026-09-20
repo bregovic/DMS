@@ -36,7 +36,7 @@ export function ProjectSettings({
   project: ProjectData;
   types: { key: string; label: string }[];
   categories: { key: string; label: string }[];
-  members: { email: string; role: string }[];
+  members: { email: string; role: string; canScan?: boolean }[];
   /** Dodavatelé z evidence – dají se přidat do projektu jedním klikem. */
   vendors?: { id: string; name: string; email: string }[];
 }) {

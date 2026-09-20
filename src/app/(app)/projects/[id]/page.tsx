@@ -41,6 +41,7 @@ import { extractable } from "@/server/extraction";
 import { RememberProject } from "@/components/projects/remember-project";
 import { TodoList } from "@/components/tasks/todo-list";
 import { UploadDialog } from "@/components/documents/upload-dialog";
+import { ReceiptScan } from "@/components/expenses/receipt-scan";
 import {
   ProjectTabs,
   TabSection,
@@ -441,6 +442,10 @@ export default async function ProjectDetailPage({
   // jen je-li úroveň v jeho rozsahu (root a nadřazené složky jsou jen k navigaci).
   const levelInScope = !scopeSet || (sub != null && scopeSet.has(sub));
   const canAdd = (role === "owner" || role === "active" || role === "member") && levelInScope;
+  // Vytěžení dokladů jede z rozpočtu vlastníka – spolupracovníkovi ho vlastník povoluje.
+  const canScanDocs =
+    isManager ||
+    project.memberships.some((m) => m.email.toLowerCase() === (user.email ?? "").toLowerCase() && m.canScan);
 
   const levelExpenses = levelInScope
     ? visExpenses.filter((e) => (e.subProjectId ?? null) === (sub ?? null))
@@ -648,7 +653,7 @@ export default async function ProjectDetailPage({
     dueLabel: e.dueDate ? formatDate(e.dueDate) : null,
     overdue: !isExpensePaid(e.stage) && !!e.dueDate && new Date(e.dueDate) < todayStart,
     hasBank: Boolean(e.vendor?.bankAccount),
-    docs: e.documents.map((d) => ({ id: d.id, originalName: d.originalName })),
+    docs: e.documents.map((d) => ({ id: d.id, originalName: d.originalName, mimeType: d.mimeType })),
     createdByLabel: e.createdBy.name ?? e.createdBy.email ?? "?",
     edit: {
       id: e.id,
@@ -907,6 +912,7 @@ export default async function ProjectDetailPage({
                   members={project.memberships.map((m) => ({
                     email: m.email,
                     role: m.role,
+                    canScan: m.canScan,
                   }))}
                 
               vendors={project.vendors.map((v) => ({ id: v.id, name: v.name, email: v.email }))}
@@ -1076,21 +1082,30 @@ export default async function ProjectDetailPage({
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="kicker">Doklady</h3>
               <p className="text-[11px] text-stone-400">
-                Nahraj účtenku nebo fakturu – systém přečte dodavatele, částky, DPH i položky a připraví výdaj ke kontrole.
+                {canScanDocs
+                  ? "Nahraj účtenku nebo fakturu – systém přečte dodavatele, částky, DPH i položky a připraví výdaj ke kontrole."
+                  : "Vyfoť účtenku nebo nahraj fakturu – zkontroluje se jen ostrost fotky a doklad se pošle majiteli projektu ke zpracování."}
               </p>
             </div>
-            <UploadDialog
-              projectId={project.id}
-              types={[
-                { value: "receipt", label: "Účtenka" },
-                { value: "invoice", label: "Faktura" },
-              ]}
-              defaultType="receipt"
-              label="Nahrát doklad"
-              title="Nahrát účtenku nebo fakturu"
-              hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a přečte."
-              variant="primary"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <UploadDialog
+                projectId={project.id}
+                types={[
+                  { value: "receipt", label: "Účtenka" },
+                  { value: "invoice", label: "Faktura" },
+                ]}
+                defaultType="receipt"
+                label="Nahrát doklad"
+                title="Nahrát účtenku nebo fakturu"
+                hint="Přetáhni sem soubory nebo je vyber. Fotku dokladu systém ořízne, narovná a přečte."
+                variant="primary"
+              />
+              <ReceiptScan
+                compact
+                projects={[{ id: project.id, name: project.name, autoRead: canScanDocs }]}
+                initial={[]}
+              />
+            </div>
             <AutoRefresh when={docScans.some((s) => s.status === "running")} />
             {docScans.length > 0 && (
               <ul className="mt-3 border-t border-stone-200">

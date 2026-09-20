@@ -15,12 +15,26 @@ const MAX_DIM = 1800; // delší strana výsledku
 const QUALITY = 0.8;
 const MIN_BYTES = 250 * 1024; // menší soubory nemá smysl přepočítávat
 const WORK = 600; // rozlišení, ve kterém se hledá papír
+const BLUR_BAD = 45; // pod tím je text rozmazaný k nepřečtení
+const BLUR_SOFT = 110; // mezi tím ještě projde, ale stojí za přefocení
+const QUAL_DIM = 800; // rozlišení, ve kterém se měří ostrost (ať práh platí pro všechny fotky)
+
+export type PhotoQuality = {
+  /** Rozptyl Laplaciánu – čím víc, tím ostřejší text. */
+  sharpness: number;
+  /** Průměrný jas 0–255. */
+  brightness: number;
+  level: "ok" | "borderline" | "bad";
+  note: string | null;
+};
 
 export type PhotoResult = {
   file: File;
   cropped: boolean;
   /** Náhled výsledku (data URL) – pro zobrazení před odesláním. */
   preview: string | null;
+  /** Odhad, jestli je fotka čitelná (měří se až na výsledném ořezu). */
+  quality: PhotoQuality | null;
 };
 
 type Pt = { x: number; y: number };
@@ -182,11 +196,62 @@ function warp(src: ImageData, corners: [Pt, Pt, Pt, Pt], scale: number, outW: nu
 }
 
 /**
+ * Je fotka čitelná? Měří se rozptyl Laplaciánu (ostrost hran) a jas, vždy ve
+ * stejném rozlišení, ať práh platí pro telefon i pro foťák. Nic to neodmítá –
+ * jen řekne, že se to nejspíš nepřečte a má smysl fotit znovu.
+ */
+export function photoQuality(src: ImageData): PhotoQuality {
+  const s = Math.min(1, QUAL_DIM / Math.max(src.width, src.height));
+  const w = Math.max(3, Math.round(src.width * s));
+  const h = Math.max(3, Math.round(src.height * s));
+  const g = new Float32Array(w * h);
+  let sum = 0;
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(src.height - 1, Math.round(y / s));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(src.width - 1, Math.round(x / s));
+      const i = (sy * src.width + sx) * 4;
+      const v = (src.data[i] * 299 + src.data[i + 1] * 587 + src.data[i + 2] * 114) / 1000;
+      g[y * w + x] = v;
+      sum += v;
+    }
+  }
+  const brightness = sum / (w * h);
+  let m = 0;
+  let m2 = 0;
+  let n = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const lap = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+      m += lap;
+      m2 += lap * lap;
+      n++;
+    }
+  }
+  const sharpness = Math.round(Math.max(0, m2 / n - (m / n) ** 2));
+  let level: PhotoQuality["level"] = "ok";
+  let note: string | null = null;
+  if (sharpness < BLUR_BAD) {
+    level = "bad";
+    note = "Fotka je rozmazaná – text se nejspíš nepřečte. Zkus to znovu: doklad na rovnou plochu, kolmo shora a chvíli nehýbat.";
+  } else if (sharpness < BLUR_SOFT) {
+    level = "borderline";
+    note = "Fotka je trochu měkká. Půjde to, ale ostřejší snímek se přečte líp.";
+  }
+  if (level !== "bad" && brightness < 55) {
+    level = "borderline";
+    note = "Fotka je dost tmavá – přisviť nebo odstup od stínu.";
+  }
+  return { sharpness, brightness: Math.round(brightness), level, note };
+}
+
+/**
  * Zpracuje fotku dokladu: ořez a narovnání papíru (dá-li se spolehlivě najít)
  * + vyčištění. `crop: false` ořez vynechá.
  */
 export async function processDocumentPhoto(file: File, opts?: { crop?: boolean }): Promise<PhotoResult> {
-  if (!file.type.startsWith("image/") || file.size < MIN_BYTES) return { file, cropped: false, preview: null };
+  if (!file.type.startsWith("image/")) return { file, cropped: false, preview: null, quality: null };
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
@@ -196,7 +261,7 @@ export async function processDocumentPhoto(file: File, opts?: { crop?: boolean }
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return { file, cropped: false, preview: null };
+    if (!ctx) return { file, cropped: false, preview: null, quality: null };
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
     const full = ctx.getImageData(0, 0, w, h);
@@ -235,12 +300,14 @@ export async function processDocumentPhoto(file: File, opts?: { crop?: boolean }
     canvas.width = work.width;
     canvas.height = work.height;
     ctx.putImageData(work, 0, 0);
+    const quality = photoQuality(work);
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", QUALITY));
-    if (!blob || blob.size >= file.size) return { file, cropped: false, preview: null };
+    const preview = canvas.toDataURL("image/jpeg", 0.5);
+    if (!blob || blob.size >= file.size) return { file, cropped: false, preview, quality };
     const out = new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg", lastModified: Date.now() });
-    return { file: out, cropped, preview: canvas.toDataURL("image/jpeg", 0.5) };
+    return { file: out, cropped, preview, quality };
   } catch {
-    return { file, cropped: false, preview: null };
+    return { file, cropped: false, preview: null, quality: null };
   }
 }
 
