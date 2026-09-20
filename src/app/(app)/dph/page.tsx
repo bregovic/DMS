@@ -78,6 +78,55 @@ export default async function VatPage({
     },
   });
 
+  // vystavené doklady (uskutečněná plnění)
+  const incomes = await prisma.income.findMany({
+    where: {
+      project: { ownerId: user.id },
+      ...(projectId ? { projectId } : {}),
+      taxable: true,
+      OR: [
+        { taxDate: { gte: from, lt: to } },
+        { taxDate: null, date: { gte: from, lt: to }, vatAmount: { not: null } },
+      ],
+    },
+    orderBy: [{ taxDate: "asc" }, { date: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      amount: true,
+      currency: true,
+      date: true,
+      taxDate: true,
+      docNumber: true,
+      vatBase: true,
+      vatAmount: true,
+      vatBreakdown: true,
+      customerName: true,
+      customerDic: true,
+      project: { select: { id: true, name: true } },
+    },
+  });
+  const issued = incomes.filter((i) => i.vatAmount != null || i.vatBase != null);
+  const outRate = new Map<number, { base: number; vat: number; count: number }>();
+  for (const i of issued) {
+    const rws = (i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
+    const list = rws.length ? rws : [{ rate: 0, base: Number(i.vatBase ?? 0), vat: Number(i.vatAmount ?? 0) }];
+    for (const r of list) {
+      const g = outRate.get(r.rate) ?? { base: 0, vat: 0, count: 0 };
+      g.base += Number(r.base);
+      g.vat += Number(r.vat);
+      g.count += 1;
+      outRate.set(r.rate, g);
+    }
+  }
+  const outVat = [...outRate.values()].reduce((a, r) => a + r.vat, 0);
+  const a4 = issued.filter((i) => Number(i.amount) >= KH_LIMIT && i.customerDic);
+  const a5 = issued.filter((i) => !(Number(i.amount) >= KH_LIMIT && i.customerDic));
+  const a5Sum = a5.reduce(
+    (a, i) => ({ base: a.base + Number(i.vatBase ?? 0), vat: a.vat + Number(i.vatAmount ?? 0) }),
+    { base: 0, vat: 0 },
+  );
+
   const taxed = expenses.filter((e) => e.deductible && (e.vatAmount != null || e.vatBase != null));
   const skipped = expenses.filter((e) => !e.deductible && (e.vatAmount != null || e.vatBase != null));
 
@@ -197,13 +246,44 @@ export default async function VatPage({
         </div>
       </div>
 
-      {taxed.length === 0 ? (
+      {taxed.length === 0 && issued.length === 0 ? (
         <EmptyState
           title="Za období nejsou doklady s DPH"
           description="Nahraj účtenky a faktury v projektu (Výdaje → Doklady). Systém z nich přečte základ, daň a DUZP a objeví se tady."
         />
       ) : (
         <>
+          {issued.length > 0 && (
+            <section className="mb-8">
+              <h2 className="kicker mb-2">Souhrn – uskutečněná plnění (vystavené doklady)</h2>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-stone-300 text-left text-stone-500">
+                    <th className="py-2 font-medium">Sazba</th>
+                    <th className="py-2 text-right font-medium">Základ</th>
+                    <th className="py-2 text-right font-medium">Daň na výstupu</th>
+                    <th className="py-2 text-right font-medium">Dokladů</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...outRate.entries()]
+                    .sort((a, b) => b[0] - a[0])
+                    .map(([rate, r]) => (
+                      <tr key={rate} className="border-b border-stone-100">
+                        <td className="py-2">{rate} %</td>
+                        <td className="py-2 text-right font-mono">{formatCurrency(r.base)}</td>
+                        <td className="py-2 text-right font-mono">{formatCurrency(r.vat)}</td>
+                        <td className="py-2 text-right text-stone-500">{r.count}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-stone-400">
+                Vystavené doklady se poznají podle IČO a DIČ v Nastavení → Fakturace a daně; v přiznání jsou to řádky 1 a 2.
+              </p>
+            </section>
+          )}
+
           <section className="mb-8">
             <h2 className="kicker mb-2">Souhrn – přijatá zdanitelná plnění</h2>
             <table className="w-full text-sm">
@@ -240,6 +320,21 @@ export default async function VatPage({
             </p>
           </section>
 
+          {issued.length > 0 && (
+            <section className="mb-8 border border-stone-300 bg-stone-50 p-3">
+              <h2 className="kicker mb-1">Odhad vlastní daně</h2>
+              <p className="text-sm text-stone-800">
+                Daň na výstupu <span className="font-mono">{formatCurrency(outVat)}</span> − odpočet{" "}
+                <span className="font-mono">{formatCurrency(totalVat)}</span> ={" "}
+                <b className="font-mono">{formatCurrency(outVat - totalVat)}</b>
+              </p>
+              <p className="mt-1 text-[11px] text-stone-400">
+                Orientační rozdíl z dokladů v období. Nezahrnuje zálohy, opravy, přenesenou daňovou povinnost ani plnění
+                mimo tuhle evidenci.
+              </p>
+            </section>
+          )}
+
           {problems.length > 0 && (
             <section className="mb-8 border border-amber-300 bg-amber-50 p-3">
               <h2 className="kicker mb-2 !text-amber-900">Před podáním doplnit · {problems.length}</h2>
@@ -250,6 +345,51 @@ export default async function VatPage({
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {a4.length > 0 && (
+            <section className="mb-8">
+              <h2 className="kicker mb-1">Kontrolní hlášení · oddíl A.4 (vystavené doklady od {formatCurrency(KH_LIMIT)})</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-xs">
+                  <thead>
+                    <tr className="border-b border-stone-300 text-left text-stone-500">
+                      <th className="py-2 font-medium">DIČ odběratele</th>
+                      <th className="py-2 font-medium">Číslo dokladu</th>
+                      <th className="py-2 font-medium">DUZP</th>
+                      <th className="py-2 font-medium">Doklad</th>
+                      <th className="py-2 text-right font-medium">Základ</th>
+                      <th className="py-2 text-right font-medium">Daň</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {a4.map((i) => (
+                      <tr key={i.id} className="border-b border-stone-100">
+                        <td className="py-1.5">{i.customerDic}</td>
+                        <td className="py-1.5">{i.docNumber ?? "—"}</td>
+                        <td className="py-1.5">{formatDate(i.taxDate ?? i.date)}</td>
+                        <td className="py-1.5">
+                          {i.title}
+                          <span className="text-stone-400"> · {i.customerName ?? "—"}</span>
+                        </td>
+                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(i.vatBase ?? 0))}</td>
+                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(i.vatAmount ?? 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {a5.length > 0 && (
+            <section className="mb-8">
+              <h2 className="kicker mb-1">Kontrolní hlášení · oddíl A.5 (souhrnně)</h2>
+              <p className="text-sm text-stone-700">
+                {a5.length} dokladů · základ <span className="font-mono">{formatCurrency(a5Sum.base)}</span> · daň{" "}
+                <span className="font-mono">{formatCurrency(a5Sum.vat)}</span>
+              </p>
             </section>
           )}
 

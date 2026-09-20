@@ -44,8 +44,28 @@ export async function getDocScan(id: string) {
     },
   });
   if (!scan) throw new Error("Návrh nenalezen.");
-  await writable(scan.projectId);
-  return { ...scan, result: (scan.result ?? null) as ScanResult | null };
+  const user = await writable(scan.projectId);
+  const result = (scan.result ?? null) as ScanResult | null;
+
+  // Vystavil jsem doklad já? Poznáme podle IČO/DIČ z nastavení (Fakturace a daně).
+  const me = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { billingIco: true, billingDic: true, billingName: true },
+  });
+  const norm = (v: string | null | undefined) => (v ?? "").replace(/\s/g, "").toUpperCase().replace(/^CZ/, "");
+  const myIco = norm(me?.billingIco);
+  const myDic = norm(me?.billingDic);
+  const mine = (ico?: string | null, dic?: string | null) =>
+    (!!myIco && (norm(ico) === myIco || norm(dic) === myIco)) || (!!myDic && norm(dic) === myDic);
+  const issued = !!result && mine(result.supplier?.ico, result.supplier?.dic);
+  const received = !!result && mine(result.customer?.ico, result.customer?.dic);
+  return {
+    ...scan,
+    result,
+    // vystavený = já jsem dodavatel; přijatý = já jsem odběratel (nebo neurčeno)
+    direction: issued && !received ? ("issued" as const) : ("received" as const),
+    myBilling: { ico: me?.billingIco ?? null, dic: me?.billingDic ?? null, name: me?.billingName ?? null },
+  };
 }
 
 const num = (v: FormDataEntryValue | null) => {
@@ -124,6 +144,41 @@ export async function applyDocScan(formData: FormData) {
   const total = num(formData.get("total")) ?? 0;
   const paid = formData.get("paid") === "1";
   const subProjectId = String(formData.get("subProjectId") || "") || null;
+  const issued = formData.get("direction") === "issued";
+
+  // Vystavený doklad = příjem a uskutečněné plnění (do DPH na výstupu)
+  if (issued) {
+    const income = await prisma.income.create({
+      data: {
+        projectId: scan.projectId,
+        subProjectId,
+        title: String(formData.get("title") || "Vystavená faktura").slice(0, 200),
+        description: String(formData.get("description") || "").slice(0, 2000) || null,
+        amount: total,
+        currency: String(formData.get("currency") || "CZK").slice(0, 3),
+        category: String(formData.get("category") || "prodej"),
+        date: date(formData.get("date")) ?? new Date(),
+        dueDate: date(formData.get("dueDate")),
+        taxDate: date(formData.get("taxDate")),
+        docNumber: String(formData.get("docNumber") || "").slice(0, 100) || null,
+        vatBase: num(formData.get("vatBase")),
+        vatAmount: num(formData.get("vatAmount")),
+        vatBreakdown: vatRows.length ? vatRows : undefined,
+        customerName: String(formData.get("customerName") || "").slice(0, 200) || null,
+        customerIco: String(formData.get("customerIco") || "").replace(/\D/g, "") || null,
+        customerDic: String(formData.get("customerDic") || "").trim() || null,
+        taxable: formData.get("deductible") !== "0",
+        documentId: scan.documentId,
+        createdById: user.id,
+      },
+      select: { id: true },
+    });
+    await prisma.docScan.update({ where: { id: scan.id }, data: { status: "applied" } });
+    revalidatePath(`/projects/${scan.projectId}`);
+    revalidatePath("/dph");
+    revalidatePath("/doklady");
+    return { incomeId: income.id };
+  }
 
   const expense = await prisma.expense.create({
     data: {

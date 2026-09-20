@@ -51,15 +51,20 @@ export function DocScanReview({
     setScan(s);
     const r = s.result;
     if (r) {
+      const issued = s.direction === "issued";
       setItems(r.items ?? []);
       setRows(r.vatBreakdown ?? []);
       const match = vendors.find((v) => (r.supplier.ico && v.ico === r.supplier.ico) || v.name === r.supplier.name);
       setForm({
         title: r.title ?? r.supplier.name ?? "Doklad",
         description: r.summary ?? "",
+        direction: issued ? "issued" : "received",
         supplierName: r.supplier.name ?? "",
         supplierIco: r.supplier.ico ?? "",
         supplierDic: r.supplier.dic ?? "",
+        customerName: r.customer?.name ?? "",
+        customerIco: r.customer?.ico ?? "",
+        customerDic: r.customer?.dic ?? "",
         vendorId: match?.id ?? "",
         createVendor: match ? "0" : "1",
         docNumber: r.number ?? "",
@@ -71,7 +76,7 @@ export function DocScanReview({
         total: String(r.total ?? ""),
         vatBase: String(r.totalBase ?? ""),
         vatAmount: String(r.totalVat ?? ""),
-        category: "other",
+        category: issued ? "prodej" : "other",
         subProjectId: "",
         deductible: "1",
         paid: r.docType === "receipt" ? "1" : "0",
@@ -170,6 +175,33 @@ export function DocScanReview({
               </ul>
             )}
 
+            <FormSection title="Druh dokladu" hint="poznáme podle IČO a DIČ v Nastavení → Fakturace a daně">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    { v: "received", l: "Přijatý doklad", d: "nákup – výdaj a DPH na vstupu" },
+                    { v: "issued", l: "Vystavený doklad", d: "moje faktura – příjem a DPH na výstupu" },
+                  ] as const
+                ).map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    onClick={() => set("direction", o.v)}
+                    className={`cursor-pointer border px-3 py-2 text-left transition-colors ${
+                      (form.direction ?? "received") === o.v
+                        ? "border-stone-950 bg-stone-950 text-white"
+                        : "border-stone-300 text-stone-700 hover:border-stone-950"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium">{o.l}</span>
+                    <span className={`block text-[11px] ${(form.direction ?? "received") === o.v ? "text-stone-300" : "text-stone-400"}`}>
+                      {o.d}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </FormSection>
+
             <FormSection title="Doklad" hint={scan.document.originalName}>
               <FormGrid cols={3}>
                 <Field label="Název výdaje" htmlFor="ds-title">
@@ -201,6 +233,21 @@ export function DocScanReview({
               </FormGrid>
             </FormSection>
 
+            {form.direction === "issued" ? (
+              <FormSection title="Odběratel" hint="komu jsem doklad vystavil">
+                <FormGrid cols={3}>
+                  <Field label="Název" htmlFor="ds-cust">
+                    <input id="ds-cust" className={input} value={form.customerName ?? ""} onChange={(e) => set("customerName", e.target.value)} />
+                  </Field>
+                  <Field label="IČO" htmlFor="ds-cico">
+                    <input id="ds-cico" className={input} value={form.customerIco ?? ""} onChange={(e) => set("customerIco", e.target.value)} />
+                  </Field>
+                  <Field label="DIČ" htmlFor="ds-cdic">
+                    <input id="ds-cdic" className={input} value={form.customerDic ?? ""} onChange={(e) => set("customerDic", e.target.value)} />
+                  </Field>
+                </FormGrid>
+              </FormSection>
+            ) : (
             <FormSection title="Dodavatel" hint="IČO se ověří v ARESu; existující dodavatel se spáruje">
               <FormGrid cols={3}>
                 <Field label="Název" htmlFor="ds-sup">
@@ -236,6 +283,7 @@ export function DocScanReview({
                 </label>
               </FormGrid>
             </FormSection>
+            )}
 
             <FormSection
               title="Částky a DPH"
@@ -301,7 +349,7 @@ export function DocScanReview({
               <div className="flex flex-wrap gap-4 text-sm text-stone-700">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={form.paid === "1"} onChange={(e) => set("paid", e.target.checked ? "1" : "0")} className="size-4 accent-stone-900" />
-                  Už zaplaceno
+                  {form.direction === "issued" ? "Už uhrazeno" : "Už zaplaceno"}
                 </label>
                 <label className="flex cursor-pointer items-center gap-2">
                   <input
@@ -310,7 +358,7 @@ export function DocScanReview({
                     onChange={(e) => set("deductible", e.target.checked ? "1" : "0")}
                     className="size-4 accent-stone-900"
                   />
-                  Zahrnout do podkladu pro DPH
+                  {form.direction === "issued" ? "Zahrnout do DPH (uskutečněné plnění)" : "Zahrnout do podkladu pro DPH"}
                 </label>
               </div>
             </FormSection>
@@ -378,7 +426,7 @@ export function DocScanReview({
               Zahodit návrh
             </Button>
             <Button type="button" onClick={apply} disabled={busy}>
-              {busy ? "Zakládám…" : "Založit výdaj"}
+              {busy ? "Zakládám…" : form.direction === "issued" ? "Založit příjem" : "Založit výdaj"}
             </Button>
           </DialogFooter>
         </>

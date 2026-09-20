@@ -486,6 +486,18 @@ model Income {
   currency     String   @default("CZK")
   category     String   @default("other") // dotace | vklad | prodej | refundace | other
   date         DateTime @default(now())
+  // Daňový doklad (vystavená faktura z vytěžení): číslo, DUZP, rozpis DPH, odběratel
+  docNumber    String?
+  taxDate      DateTime?
+  dueDate      DateTime?
+  vatBase      Decimal?  @db.Decimal(12, 2)
+  vatAmount    Decimal?  @db.Decimal(12, 2)
+  vatBreakdown Json?
+  customerName String?
+  customerIco  String?
+  customerDic  String?
+  taxable      Boolean   @default(true) // brát do podkladu pro DPH
+  documentId   String? // příloha, ze které doklad vznikl
   createdById  String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

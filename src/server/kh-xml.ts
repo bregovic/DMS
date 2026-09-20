@@ -42,7 +42,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     ? new Date(Date.UTC(year, period.quarter * 3, 1))
     : new Date(Date.UTC(year, period.month ?? 1, 1));
 
-  const [me, expenses] = await Promise.all([
+  const [me, expenses, incomes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -89,6 +89,28 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
         vendor: { select: { dic: true } },
       },
     }),
+    prisma.income.findMany({
+      where: {
+        project: { ownerId: userId },
+        ...(projectId ? { projectId } : {}),
+        taxable: true,
+        OR: [
+          { taxDate: { gte: from, lt: to } },
+          { taxDate: null, date: { gte: from, lt: to }, vatAmount: { not: null } },
+        ],
+      },
+      orderBy: [{ taxDate: "asc" }, { date: "asc" }],
+      select: {
+        amount: true,
+        date: true,
+        taxDate: true,
+        docNumber: true,
+        vatBase: true,
+        vatAmount: true,
+        vatBreakdown: true,
+        customerDic: true,
+      },
+    }),
   ]);
   if (!me) throw new Error("Uživatel nenalezen.");
 
@@ -101,6 +123,8 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
   const empty = () => ({ 1: { base: 0, vat: 0 }, 2: { base: 0, vat: 0 }, 3: { base: 0, vat: 0 } }) as Row["slots"];
   const b2: Row[] = [];
   const b3 = empty();
+  const a4: Row[] = [];
+  const a5 = empty();
 
   for (const e of taxed) {
     const dic = (e.supplierDic ?? e.vendor?.dic ?? "").replace(/\s/g, "").toUpperCase();
@@ -125,7 +149,32 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     }
   }
 
+  // vystavené doklady → A.4 / A.5
+  for (const i of incomes) {
+    if (i.vatAmount == null && i.vatBase == null) continue;
+    const dic = (i.customerDic ?? "").replace(/\s/g, "").toUpperCase();
+    const rows = (i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
+    const list = rows.length ? rows : [{ rate: 21, base: Number(i.vatBase ?? 0), vat: Number(i.vatAmount ?? 0) }];
+    const slots = empty();
+    for (const r of list) {
+      const sl = rateSlot(Number(r.rate));
+      slots[sl].base += Number(r.base);
+      slots[sl].vat += Number(r.vat);
+    }
+    if (Number(i.amount) >= KH_LIMIT && dic && i.docNumber) {
+      a4.push({ dic: dic.replace(/^CZ/, ""), num: i.docNumber, dppd: i.taxDate ?? i.date, slots });
+    } else {
+      for (const k of [1, 2, 3] as const) {
+        a5[k].base += slots[k].base;
+        a5[k].vat += slots[k].vat;
+      }
+      if (Number(i.amount) >= KH_LIMIT && (!dic || !i.docNumber))
+        missing.push(`vystavený doklad ${i.docNumber ?? "(bez čísla)"} nad 10 000 Kč nemá DIČ odběratele nebo číslo – je jen v A.5`);
+    }
+  }
+
   const hasB3 = [1, 2, 3].some((k) => b3[k as 1].base || b3[k as 1].vat);
+  const hasA5 = [1, 2, 3].some((k) => a5[k as 1].base || a5[k as 1].vat);
   const sumBase = b2.reduce((a, r) => a + r.slots[1].base + r.slots[2].base + r.slots[3].base, 0) + (hasB3 ? b3[1].base + b3[2].base + b3[3].base : 0);
   const sumVat = b2.reduce((a, r) => a + r.slots[1].vat + r.slots[2].vat + r.slots[3].vat, 0) + (hasB3 ? b3[1].vat + b3[2].vat + b3[3].vat : 0);
 
@@ -164,6 +213,36 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
       sest_prijmeni: me.lastName,
     })}/>`,
   );
+  a4.forEach((r, i) => {
+    veta.push(
+      `<VetaA4 ${attr({
+        c_radku: i + 1,
+        dic_odb: r.dic,
+        c_evid_dd: r.num,
+        dppd: czDate(r.dppd),
+        zakl_dane1: r.slots[1].base ? amount(r.slots[1].base) : null,
+        dan1: r.slots[1].vat ? amount(r.slots[1].vat) : null,
+        zakl_dane2: r.slots[2].base ? amount(r.slots[2].base) : null,
+        dan2: r.slots[2].vat ? amount(r.slots[2].vat) : null,
+        zakl_dane3: r.slots[3].base ? amount(r.slots[3].base) : null,
+        dan3: r.slots[3].vat ? amount(r.slots[3].vat) : null,
+        kod_rezim_pl: 0,
+        zdph_44: "N",
+        pomer: "N",
+      })}/>`,
+    );
+  });
+  if (hasA5)
+    veta.push(
+      `<VetaA5 ${attr({
+        zakl_dane1: a5[1].base ? amount(a5[1].base) : null,
+        dan1: a5[1].vat ? amount(a5[1].vat) : null,
+        zakl_dane2: a5[2].base ? amount(a5[2].base) : null,
+        dan2: a5[2].vat ? amount(a5[2].vat) : null,
+        zakl_dane3: a5[3].base ? amount(a5[3].base) : null,
+        dan3: a5[3].vat ? amount(a5[3].vat) : null,
+      })}/>`,
+    );
   b2.forEach((r, i) => {
     veta.push(
       `<VetaB2 ${attr({
@@ -202,5 +281,5 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     veta.map((v) => `    ${v}`).join("\n") +
     `\n  </DPHKH1>\n</Pisemnost>\n`;
 
-  return { xml, b2Count: b2.length, hasB3, sumBase, sumVat, missing: [...new Set(missing)] };
+  return { xml, b2Count: b2.length, a4Count: a4.length, hasB3, hasA5, sumBase, sumVat, missing: [...new Set(missing)] };
 }

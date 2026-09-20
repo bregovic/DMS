@@ -29,6 +29,34 @@ export async function GET(req: Request) {
   const projectId = url.searchParams.get("project") || "";
   const [from, to] = periodRange(period, year);
 
+  const incomes = await prisma.income.findMany({
+    where: {
+      project: { ownerId: session.user.id },
+      ...(projectId ? { projectId } : {}),
+      OR: [
+        { taxDate: { gte: from, lt: to } },
+        { taxDate: null, date: { gte: from, lt: to }, vatAmount: { not: null } },
+      ],
+    },
+    orderBy: [{ taxDate: "asc" }, { date: "asc" }],
+    select: {
+      title: true,
+      amount: true,
+      currency: true,
+      date: true,
+      taxDate: true,
+      docNumber: true,
+      vatBase: true,
+      vatAmount: true,
+      vatBreakdown: true,
+      customerName: true,
+      customerIco: true,
+      customerDic: true,
+      taxable: true,
+      project: { select: { name: true } },
+    },
+  });
+
   const expenses = await prisma.expense.findMany({
     where: {
       project: { ownerId: session.user.id },
@@ -59,6 +87,7 @@ export async function GET(req: Request) {
 
   const lines = [
     row([
+      "smer",
       "projekt",
       "duzp",
       "datum",
@@ -84,6 +113,7 @@ export async function GET(req: Request) {
     const kh = !e.deductible ? "" : Number(e.amount) >= KH_LIMIT && dic ? "B.2" : "B.3";
     lines.push(
       row([
+        "prijaty",
         e.project.name,
         d(e.taxDate),
         d(e.date),
@@ -99,6 +129,33 @@ export async function GET(req: Request) {
         kh,
         e.deductible ? "ano" : "ne",
         e.title,
+      ]),
+    );
+  }
+
+  for (const i of incomes) {
+    const rates = ((i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [])
+      .map((r) => `${r.rate}%: ${r.base}/${r.vat}`)
+      .join(" | ");
+    const kh = !i.taxable ? "" : Number(i.amount) >= KH_LIMIT && i.customerDic ? "A.4" : "A.5";
+    lines.push(
+      row([
+        "vystaveny",
+        i.project.name,
+        d(i.taxDate),
+        d(i.date),
+        i.docNumber ?? "",
+        i.customerName ?? "",
+        i.customerIco ?? "",
+        i.customerDic ?? "",
+        i.vatBase != null ? Number(i.vatBase).toFixed(2) : "",
+        i.vatAmount != null ? Number(i.vatAmount).toFixed(2) : "",
+        rates,
+        Number(i.amount).toFixed(2),
+        i.currency,
+        kh,
+        i.taxable ? "ano" : "ne",
+        i.title,
       ]),
     );
   }
