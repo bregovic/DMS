@@ -487,3 +487,81 @@ export async function myReceipts() {
     };
   });
 }
+
+/**
+ * Hromadné založení: z každého přečteného dokladu vznikne výdaj (nebo příjem
+ * u vlastní faktury) se stejnými výchozími hodnotami, jaké nabízí kontrola.
+ * Duplicity a doklady, kde chybí částka, se přeskočí a vrátí se seznam –
+ * ty je potřeba projít ručně.
+ */
+export async function applyReadyScans(formData: FormData) {
+  const projectId = String(formData.get("projectId"));
+  const user = await requireUser();
+  const role = await getProjectRole(projectId, user);
+  if (!canWrite(role)) return { error: "Nemáš oprávnění." };
+
+  const scans = await prisma.docScan.findMany({
+    where: { projectId, status: "ready", expenseId: null },
+    orderBy: { createdAt: "asc" },
+    take: 25,
+    select: { id: true },
+  });
+
+  let created = 0;
+  const skipped: string[] = [];
+  for (const s of scans) {
+    try {
+      const d = await getDocScan(s.id);
+      const r = d.result;
+      const name = r?.number ?? d.document.originalName;
+      if (!r) {
+        skipped.push(`${name} – není co založit`);
+        continue;
+      }
+      if (d.duplicate) {
+        skipped.push(`${name} – už v evidenci`);
+        continue;
+      }
+      if (r.total == null) {
+        skipped.push(`${name} – nepřečetla se částka`);
+        continue;
+      }
+      const issued = d.direction === "issued";
+      const fd = new FormData();
+      const put = (k: string, v: unknown) => fd.set(k, v == null ? "" : String(v));
+      put("scanId", s.id);
+      put("title", r.title ?? r.supplier?.name ?? "Doklad");
+      put("description", r.summary ?? "");
+      put("direction", issued ? "issued" : "received");
+      put("supplierName", r.supplier?.name ?? "");
+      put("supplierIco", r.supplier?.ico ?? "");
+      put("supplierDic", r.supplier?.dic ?? "");
+      put("customerName", r.customer?.name ?? "");
+      put("customerIco", r.customer?.ico ?? "");
+      put("customerDic", r.customer?.dic ?? "");
+      put("createVendor", issued ? "0" : "1");
+      put("docNumber", r.number ?? "");
+      put("date", r.issueDate ?? "");
+      put("taxDate", r.taxDate ?? r.issueDate ?? "");
+      put("dueDate", r.dueDate ?? "");
+      put("variableSymbol", r.variableSymbol ?? "");
+      put("currency", r.currency || "CZK");
+      put("exchangeRate", r.exchangeRate ?? "");
+      put("total", r.total);
+      put("vatBase", r.totalBase ?? "");
+      put("vatAmount", r.totalVat ?? "");
+      put("category", issued ? "prodej" : "other");
+      put("deductible", "1");
+      put("paid", r.docType === "receipt" ? "1" : "0");
+      fd.set("vatRows", JSON.stringify(r.vatBreakdown ?? []));
+      fd.set("items", JSON.stringify(r.items ?? []));
+      await applyDocScan(fd);
+      created += 1;
+    } catch (e) {
+      skipped.push(e instanceof Error ? e.message : "doklad se nepodařilo založit");
+    }
+  }
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/doklady");
+  return { created, skipped };
+}

@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileStack, Loader2 } from "lucide-react";
-import { scanProjectDocuments } from "@/server/actions/doc-scan";
+import { AlertTriangle, FileStack, Loader2, Plus } from "lucide-react";
+import { applyReadyScans, scanProjectDocuments } from "@/server/actions/doc-scan";
 import { UploadDialog } from "@/components/documents/upload-dialog";
 import { ReceiptScan } from "@/components/expenses/receipt-scan";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { DocPreview } from "@/components/documents/doc-preview";
+import { DeleteButton } from "@/components/ui/delete-button";
+import { deleteDocument } from "@/server/actions/documents";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -26,7 +28,16 @@ export type InboxDoc = {
   number: string | null;
   total: number | null;
   currency: string | null;
+  /** na co upozornit před založením (duplicita, chybějící údaje) */
+  issues: string[];
+  duplicate: boolean;
 };
+
+function formOf(projectId: string) {
+  const fd = new FormData();
+  fd.set("projectId", projectId);
+  return fd;
+}
 
 const STATUS: Record<InboxDoc["status"], { label: string; cls: string }> = {
   uploaded: { label: "nahráno", cls: "text-stone-500" },
@@ -60,7 +71,11 @@ export function DocInbox({
   const [busy, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
+  const [msg, setMsg] = useState<string | null>(null);
   const unread = docs.filter((d) => d.status === "uploaded");
+  // hotové doklady bez problémů jde založit naráz; ostatní je potřeba projít
+  const ready = docs.filter((d) => d.status === "ready");
+  const readyClean = ready.filter((d) => !d.duplicate && !d.issues.some((i) => i.startsWith("chybí částka")));
 
   return (
     <section className="mb-4 border border-stone-200 bg-white p-3 shadow-soft">
@@ -85,6 +100,37 @@ export function DocInbox({
           variant="primary"
         />
         <ReceiptScan compact projects={[{ id: projectId, name: projectName, autoRead: false }]} initial={[]} />
+        {canScan && readyClean.length > 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm(`Založit ${readyClean.length} dokladů podle vytěžených údajů?`)) return;
+              setErr(null);
+              setMsg(null);
+              start(async () => {
+                try {
+                  const r = await applyReadyScans(formOf(projectId));
+                  if ("error" in r && r.error) setErr(r.error);
+                  else {
+                    const skipped = r.skipped ?? [];
+                    setMsg(
+                      `Založeno ${r.created ?? 0} dokladů` +
+                        (skipped.length ? ` · ${skipped.length} přeskočeno: ${skipped.slice(0, 3).join("; ")}` : ""),
+                    );
+                    router.refresh();
+                  }
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : "Založení selhalo.");
+                }
+              });
+            }}
+            className="flex h-10 cursor-pointer items-center gap-2 border border-stone-950 bg-white px-4 text-sm text-stone-950 transition-colors hover:bg-stone-950 hover:text-white disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            Založit doklady ({readyClean.length})
+          </button>
+        )}
         {canScan && unread.length > 0 && (
           <button
             type="button"
@@ -93,9 +139,7 @@ export function DocInbox({
               setErr(null);
               start(async () => {
                 try {
-                  const fd = new FormData();
-                  fd.set("projectId", projectId);
-                  await scanProjectDocuments(fd);
+                  await scanProjectDocuments(formOf(projectId));
                   router.refresh();
                 } catch (e) {
                   setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
@@ -110,6 +154,7 @@ export function DocInbox({
         )}
       </div>
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+      {msg && <p className="mt-2 text-xs text-stone-600">{msg}</p>}
 
       <AutoRefresh when={docs.some((d) => d.status === "running")} />
 
@@ -133,7 +178,22 @@ export function DocInbox({
                     <span className="text-stone-500"> · návrh: {d.target === "income" ? "příjem" : "výdaj"}</span>
                   )}
                 </span>
+                {d.issues.length > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${d.duplicate ? "text-amber-700" : "text-stone-500"}`}
+                    title={d.issues.join(" · ")}
+                  >
+                    <AlertTriangle className="size-3.5" />
+                    {d.duplicate ? "duplicita" : d.issues[0]}
+                    {d.issues.length > 1 && ` +${d.issues.length - 1}`}
+                  </span>
+                )}
                 <DocPreview documentId={d.id} name={d.name} mimeType={d.mimeType} />
+                <DeleteButton
+                  action={deleteDocument}
+                  fields={{ id: d.id }}
+                  confirm={`Smazat nahraný doklad „${d.name}"? Záznam ani soubor už nepůjde vrátit.`}
+                />
                 {canScan && (
                   <DocScanReview
                     scanId={d.scanId}

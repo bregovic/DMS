@@ -9,6 +9,10 @@ import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { DocPreview } from "@/components/documents/doc-preview";
+import { DeleteButton } from "@/components/ui/delete-button";
+import { deleteDocument } from "@/server/actions/documents";
+import { deleteExpense } from "@/server/actions/expenses";
+import { deleteIncome } from "@/server/actions/incomes";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { isExpensePaid } from "@/lib/constants";
@@ -282,6 +286,11 @@ export default async function DocsPage({
                 <span className="text-xs text-stone-500">{projName.get(d.projectId)}</span>
                 <span className="text-xs text-stone-400">{formatDate(d.createdAt)}</span>
                 <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
+                <DeleteButton
+                  action={deleteDocument}
+                  fields={{ id: d.id }}
+                  confirm="Smazat nahraný doklad?"
+                />
                 <DocScanReview
                   scanId={null}
                   documentId={d.id}
@@ -422,6 +431,7 @@ export default async function DocsPage({
                       {r.status}
                     </td>
                     <td className="py-1.5 pl-2 text-right">
+                      <span className="inline-flex items-center justify-end gap-1">
                       {r.doc ? (
                         <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
                       ) : (
@@ -429,6 +439,21 @@ export default async function DocsPage({
                           otevřít
                         </Link>
                       )}
+                      {(r.kind === "receipt" || r.kind === "invoice-in") && (
+                        <DeleteButton
+                          action={deleteExpense}
+                          fields={{ id: r.id.slice(1), projectId: r.projectId }}
+                          confirm={`Smazat doklad ${r.docNumber ?? ""} i s přílohou?`}
+                        />
+                      )}
+                      {r.kind === "invoice-out" && (
+                        <DeleteButton
+                          action={deleteIncome}
+                          fields={{ id: r.id.slice(1), projectId: r.projectId }}
+                          confirm={`Smazat doklad ${r.docNumber ?? ""}?`}
+                        />
+                      )}
+                      </span>
                     </td>
                   </tr>
                 ))}
