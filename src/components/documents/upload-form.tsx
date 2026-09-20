@@ -18,14 +18,20 @@ const ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf,.zip,.txt,.csv,.eml
 export function UploadForm({
   projectId,
   types,
+  defaultType = "other",
+  compact = false,
 }: {
   projectId: string;
   types: DocType[];
+  /** Předvybraný typ (např. účtenka u dokladů). */
+  defaultType?: string;
+  /** Kompaktní režim – jen řádek s výběrem a tlačítkem. */
+  compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [type, setType] = useState("other");
+  const [type, setType] = useState(defaultType);
   const [newType, setNewType] = useState("");
   const [dragOver, setDragOver] = useState(false);
 

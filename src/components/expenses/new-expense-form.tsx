@@ -12,6 +12,7 @@ import { EXPENSE_KINDS } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import { prepareUpload } from "@/lib/client-upload";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { FormSection } from "@/components/ui/form-section";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -138,6 +139,7 @@ export function NewExpenseForm({
           <input type="hidden" name="subProjectId" value={subProject} />
           <input type="hidden" name="amountMode" value={amountMode} />
 
+          <FormSection title="Co a kam">
           {/* Typ záznamu */}
           <div className="flex gap-2">
             {EXPENSE_KINDS.map((k) => (
@@ -196,7 +198,7 @@ export function NewExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Dodavatel</Label>
               <Combobox
@@ -232,6 +234,9 @@ export function NewExpenseForm({
             </div>
           </div>
 
+          </FormSection>
+
+          <FormSection title="Částka">
           {/* Režim částky */}
           <div className="flex gap-2">
             {[
@@ -267,7 +272,7 @@ export function NewExpenseForm({
           </label>
 
           {amountMode === "fixed" ? (
-            <div className="grid grid-cols-2 items-end gap-4">
+            <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="amount">{isIncome ? "Částka příjmu" : "Částka"}</Label>
                 <Input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0" required />
@@ -283,7 +288,7 @@ export function NewExpenseForm({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="hours">Hodiny</Label>
                   <Input id="hours" name="hours" type="number" step="0.25" min="0" placeholder="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
@@ -307,7 +312,10 @@ export function NewExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          </FormSection>
+
+          <FormSection title="Doklad a platba">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="date">Datum</Label>
               <DateInput id="date" name="date" defaultValue={today} required />
@@ -323,7 +331,7 @@ export function NewExpenseForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="dueDate">Splatnost</Label>
               <DateInput id="dueDate" name="dueDate" />
@@ -343,10 +351,15 @@ export function NewExpenseForm({
               ))}
             </select>
           </div>
+          </FormSection>
+
+          <FormSection title="Poznámka">
           <div className="space-y-1.5">
             <Label htmlFor="description">Poznámka (volitelné)</Label>
             <textarea id="description" name="description" rows={2} className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950" />
           </div>
+
+          </FormSection>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

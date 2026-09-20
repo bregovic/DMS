@@ -26,6 +26,7 @@ import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-for
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
+import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { ACTIVITY_PERIODS, TaskActivity } from "@/components/tasks/task-activity";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
@@ -192,6 +193,20 @@ export default async function ProjectDetailPage({
     getDocumentTypes(),
   ]);
   if (!project) notFound();
+
+  // Doklady (účtenky/faktury) čekající na kontrolu – z vytěžení příloh
+  const docScans = await prisma.docScan.findMany({
+    where: { projectId: id, status: { in: ["running", "ready", "error"] } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      status: true,
+      error: true,
+      result: true,
+      document: { select: { id: true, originalName: true, type: true } },
+    },
+  });
 
   const catMap = new Map(categories.map((c) => [c.key, c.label]));
   const typeLabel = typeMap.get(project.type) ?? "Ostatní";
@@ -1038,6 +1053,56 @@ export default async function ProjectDetailPage({
         )}
 
         {/* Výdaje */}
+        {tab === "vydaje" && canAdd && (
+          <div className="mb-4 border border-stone-200 bg-white p-3 shadow-soft">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="kicker">Doklady</h3>
+              <p className="text-[11px] text-stone-400">
+                Nahraj účtenku nebo fakturu – systém přečte dodavatele, částky, DPH i položky a připraví výdaj ke kontrole.
+              </p>
+            </div>
+            <UploadForm
+              projectId={project.id}
+              types={[
+                { value: "receipt", label: "Účtenka" },
+                { value: "invoice", label: "Faktura" },
+              ]}
+              defaultType="receipt"
+              compact
+            />
+            {docScans.length > 0 && (
+              <ul className="mt-3 border-t border-stone-200">
+                {docScans.map((sc) => {
+                  const r = sc.result as { supplier?: { name?: string | null }; total?: number | null; number?: string | null } | null;
+                  return (
+                    <li key={sc.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-100 py-2 text-sm">
+                      <span className="min-w-0 flex-1 basis-48 truncate text-stone-900" title={sc.document.originalName}>
+                        {sc.document.originalName}
+                        {r?.supplier?.name && <span className="text-xs text-stone-500"> · {r.supplier.name}</span>}
+                        {r?.number && <span className="text-xs text-stone-400"> · č. {r.number}</span>}
+                      </span>
+                      {r?.total != null && <span className="font-mono text-stone-950">{formatCurrency(r.total)}</span>}
+                      <span
+                        className={`text-xs ${sc.status === "ready" ? "text-orange-700" : sc.status === "error" ? "text-red-600" : "text-stone-500"}`}
+                      >
+                        {sc.status === "ready" ? "ke kontrole" : sc.status === "error" ? "nepodařilo se přečíst" : "čtu doklad…"}
+                      </span>
+                      <DocScanReview
+                        scanId={sc.id}
+                        documentId={sc.document.id}
+                        projectId={project.id}
+                        subProjects={project.subProjects.map((x) => ({ id: x.id, name: x.name }))}
+                        categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                        label={sc.status === "error" ? "Zkusit znovu" : "Zkontrolovat"}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         {tab === "vydaje" && (
         <TabSection
           title={

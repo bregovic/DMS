@@ -42,7 +42,7 @@ export function NewVendorForm() {
             <Label htmlFor="email">E-mail (identifikátor)</Label>
             <Input id="email" name="email" type="email" placeholder="dodavatel@firma.cz" required />
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="category">Kategorie</Label>
               <select id="category" name="category" defaultValue="construction" className={fieldClass}>
@@ -58,7 +58,7 @@ export function NewVendorForm() {
               <Input id="phone" name="phone" type="tel" placeholder="+420…" />
             </div>
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="bankAccount">Účet / IBAN (volitelné)</Label>
               <Input

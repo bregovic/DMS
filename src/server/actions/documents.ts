@@ -55,7 +55,7 @@ export async function attachExpenseScan(formData: FormData) {
     file.name,
     `${project.ownerId}/${projectId}/${docType}`,
   );
-  await prisma.document.create({
+  const doc = await prisma.document.create({
     data: {
       projectId,
       expenseId,
@@ -66,7 +66,19 @@ export async function attachExpenseScan(formData: FormData) {
       type: docType,
       uploadedById: user.id,
     },
+    select: { id: true, mimeType: true, originalName: true },
   });
+
+  // Účtenku a fakturu rovnou přečteme – návrh výdaje čeká na potvrzení.
+  if (!expenseId && (docType === "receipt" || docType === "invoice") && extractable(doc.mimeType, doc.originalName)) {
+    try {
+      const { createDocScan, runDocScan } = await import("@/server/doc-scan");
+      const scanId = await createDocScan(projectId, doc.id, user.id);
+      after(() => runDocScan(scanId));
+    } catch {
+      // limit zpracování nebo vypnuté – doklad zůstane jen jako příloha
+    }
+  }
 
   revalidatePath(`/projects/${projectId}`);
 }

@@ -97,7 +97,7 @@ export function NewTaskForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="t-assignee">Řešitel (e-mail)</Label>
               <Input id="t-assignee" name="assigneeEmail" type="email" placeholder="kdo@to.cz" />
@@ -114,7 +114,7 @@ export function NewTaskForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="t-start">Začátek</Label>
               <DateInput id="t-start" name="startDate" />
@@ -125,7 +125,7 @@ export function NewTaskForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="t-priority">Priorita</Label>
               <select id="t-priority" name="priority" defaultValue="" className={fieldClass}>

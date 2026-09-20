@@ -59,7 +59,7 @@ export function EditVendorForm({ vendor }: { vendor: Vendor }) {
             <Label htmlFor="ev-email">E-mail (identifikátor)</Label>
             <Input id="ev-email" name="email" type="email" defaultValue={vendor.email} required />
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ev-category">Kategorie</Label>
               <select id="ev-category" name="category" defaultValue={vendor.category} className={fieldClass}>
@@ -75,7 +75,7 @@ export function EditVendorForm({ vendor }: { vendor: Vendor }) {
               <Input id="ev-phone" name="phone" type="tel" defaultValue={vendor.phone ?? ""} />
             </div>
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ev-bank">Bankovní účet / IBAN</Label>
               <Input id="ev-bank" name="bankAccount" defaultValue={vendor.bankAccount ?? ""} placeholder="123-456/0100 / CZ65…" />

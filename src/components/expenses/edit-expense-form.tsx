@@ -116,7 +116,7 @@ export function EditExpenseForm({
             <Input id="ee-title" name="title" defaultValue={expense.title} required autoFocus />
           </div>
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Dodavatel</Label>
               <Combobox
@@ -199,7 +199,7 @@ export function EditExpenseForm({
           </label>
 
           {amountMode === "fixed" ? (
-            <div className="grid grid-cols-2 items-end gap-4">
+            <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="ee-amount">{isIncome ? "Částka příjmu" : "Částka"}</Label>
                 <Input
@@ -224,7 +224,7 @@ export function EditExpenseForm({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="ee-hours">Hodiny</Label>
                   <Input id="ee-hours" name="hours" type="number" step="0.25" min="0" value={hours} onChange={(e) => setHours(e.target.value)} required />
@@ -248,7 +248,7 @@ export function EditExpenseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="ee-date">Datum</Label>
               <DateInput id="ee-date" name="date" defaultValue={expense.date} required />
@@ -263,7 +263,7 @@ export function EditExpenseForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ee-stage">Stav</Label>
               <select id="ee-stage" name="stage" defaultValue={expense.stage ?? ""} className={fieldClass}>

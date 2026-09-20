@@ -73,7 +73,7 @@ export function NewProjectForm({ types }: { types: ProjectTypeOption[] }) {
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
             />
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="np-start">Začátek (volitelné)</Label>
               <DateInput id="np-start" name="startDate" />

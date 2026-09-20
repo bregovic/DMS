@@ -393,7 +393,7 @@ export function TaskDetailDialog({
               const lock = !d.canEdit;
               return (
                 <>
-                  <div className="grid grid-cols-2 items-end gap-4">
+                  <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="dd-start">Začátek</Label>
                       <DateInput key={`s-${d.startDate}`} id="dd-start" name="startDate" defaultValue={d.startDate ?? ""} disabled={lock} onChange={() => setLocked(true)} />
@@ -407,7 +407,7 @@ export function TaskDetailDialog({
                   {!(d.kind === "phase" && d.childCount > 0) && (
                     <div className="space-y-1.5">
                       {d.canEdit && <input type="hidden" name="actualForm" value="1" />}
-                      <div className="grid grid-cols-2 items-end gap-4">
+                      <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="dd-astart">Skutečný začátek</Label>
                           <DateInput key={`as-${d.actualStart}`} id="dd-astart" name="actualStart" defaultValue={d.actualStart ?? ""} disabled={lock} />

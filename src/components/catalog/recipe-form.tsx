@@ -97,7 +97,7 @@ export function RecipeForm({
               />
             )}
           </div>
-          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="col-span-2 space-y-1.5">
               <Label htmlFor="r-qf">Vzorec spotřeby</Label>
               <Input id="r-qf" name="quantityFormula" defaultValue={recipe?.quantityFormula ?? ""} placeholder="16 * delka * vyska" required />

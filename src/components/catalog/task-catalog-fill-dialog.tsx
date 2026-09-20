@@ -132,7 +132,7 @@ export function TaskCatalogFillDialog({
 
           {op && (
             <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 sm:grid-cols-3">
                 {op.paramsMeta.map((p) => (
                   <ParamField
                     key={p.key}

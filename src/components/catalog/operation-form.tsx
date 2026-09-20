@@ -62,7 +62,7 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
     <Dialog title={editing ? "Upravit úkon" : "Nový úkon"} size="lg" onClose={() => setOpen(false)}>
         <form ref={formRef} action={action} className="space-y-5 p-5">
           {editing && <input type="hidden" name="id" value={operation.id} />}
-          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="o-code">Kód</Label>
               <Input id="o-code" name="code" defaultValue={operation?.code} placeholder="ZD-PRICKA" required />
@@ -72,7 +72,7 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
               <Input id="o-name" name="name" defaultValue={operation?.name} placeholder="Vyzdění příčky" required />
             </div>
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="o-unit">MJ úkonu</Label>
               <Input id="o-unit" name="unit" list="op-units" defaultValue={operation?.unit ?? "m2"} />
@@ -91,7 +91,7 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
             <Label htmlFor="o-qf">Vzorec množství (MJ)</Label>
             <Input id="o-qf" name="quantityFormula" defaultValue={operation?.quantityFormula ?? "1"} placeholder="delka * vyska" />
           </div>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="o-lf">Vzorec normohodin</Label>
               <Input id="o-lf" name="laborFormula" defaultValue={operation?.laborFormula ?? "0"} placeholder="1.2 * delka * vyska" />
@@ -106,7 +106,7 @@ export function OperationForm({ operation }: { operation?: OperationInput }) {
             <code>vyska</code>). Funkce: ceil, floor, round, min, max, abs, sqrt.
             Desetinná tečka.
           </p>
-          <div className="grid grid-cols-2 items-end gap-4">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="o-crew">Počet lidí (parta)</Label>
               <Input id="o-crew" name="crew" type="number" step="1" min="1" max="20" defaultValue={operation?.crew ?? 1} placeholder="1" />
