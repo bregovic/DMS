@@ -132,7 +132,7 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
             )}
             <div className="min-w-0 flex-1 space-y-2 text-sm">
               <p className="text-stone-700">
-                {pending.cropped ? "Doklad jsem našel a narovnal." : "Fotku jsem vyčistil (ořez papíru se nepovedl najít)."}
+                {pending.cropped ? "Doklad jsem našel, ořízl a narovnal." : "Papír se nepodařilo najít – fotka se jen zmenšila."}
                 <span className="block text-xs text-stone-500">
                   {Math.round(pending.original.size / 1024)} kB → {Math.round(pending.ready.size / 1024)} kB
                 </span>
