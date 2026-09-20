@@ -155,16 +155,8 @@ export async function uploadDocument(formData: FormData) {
     select: { id: true, mimeType: true, originalName: true },
   });
 
-  // Účtenku a fakturu rovnou přečteme – návrh výdaje pak čeká na potvrzení.
-  if (!expenseId && (docType === "receipt" || docType === "invoice") && extractable(doc.mimeType, doc.originalName)) {
-    try {
-      const { createDocScan, runDocScan } = await import("@/server/doc-scan");
-      const scanId = await createDocScan(projectId, doc.id, user.id);
-      after(() => runDocScan(scanId));
-    } catch (err) {
-      console.error("doc-scan start failed", err);
-    }
-  }
+  // Doklady se nečtou samy: nahrávají se průběžně a vytěžení se pouští
+  // tlačítkem (po jednom, nebo celá dávka najednou) v přehledu dokladů.
 
   revalidatePath(`/projects/${projectId}`);
 }

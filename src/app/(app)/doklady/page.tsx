@@ -269,7 +269,8 @@ export default async function DocsPage({
       <div className="mt-6">
         <DocUploadBox projects={projects} />
         <p className="mt-2 text-[11px] text-stone-400">
-          Z dokladu se přečte dodavatel (ARES), číslo, DUZP, DPH i položky. Vlastní faktura se založí jako příjem.
+          Nahrané doklady se přečtou až na povel (tlačítko u dokladu nebo dávka v projektu): dodavatel z ARESu, číslo,
+          DUZP, DPH i položky. Vlastní faktura se založí jako příjem.
         </p>
       </div>
 

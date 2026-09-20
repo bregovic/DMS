@@ -82,7 +82,7 @@ export function DocInbox({
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="kicker">Doklady projektu</h3>
         <p className="text-[11px] text-stone-400">
-          {canScan ? "Nahraj průběžně, přečti jednotlivě nebo hromadně." : "Doklady zpracuje majitel projektu."}
+          {canScan ? "Nahrané doklady se čtou až na povel – jednotlivě, nebo celá dávka." : "Doklady zpracuje majitel projektu."}
         </p>
       </div>
 

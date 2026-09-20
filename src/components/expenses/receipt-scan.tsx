@@ -95,7 +95,7 @@ export function ReceiptScan({
         await uploadReceipt(fd);
       }
       const kolik = items.length > 1 ? `${items.length} dokladů` : "Doklad";
-      setMsg(autoRead ? `${kolik} odeslán, čtu…` : `${kolik} odeslán ke zpracování.`);
+      setMsg(autoRead ? `${kolik} nahrán – přečíst ho můžeš v přehledu dokladů.` : `${kolik} odeslán ke zpracování.`);
       setPending(null);
       setMine(await myReceipts());
     } catch (e) {
@@ -151,7 +151,7 @@ export function ReceiptScan({
       </div>
       {!compact && (
         <p className="mt-2 text-[11px] text-stone-400">
-          {autoRead ? "Doklad se přečte a připraví ke kontrole." : "Doklad se pošle majiteli projektu ke zpracování."}
+          {autoRead ? "Doklad se uloží; přečteš ho v přehledu dokladů." : "Doklad se pošle majiteli projektu ke zpracování."}
         </p>
       )}
 

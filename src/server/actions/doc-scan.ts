@@ -389,10 +389,9 @@ export async function uploadReceipt(formData: FormData) {
     },
     select: { id: true },
   });
-  // Doklad od dodavatele se nečte automaticky (vytěžení jde z rozpočtu vlastníka):
-  // jen se uloží a správcům přijde oznámení, že je co zpracovat. Vlastník může
-  // konkrétnímu člověku čtení povolit v přístupech k projektu.
-  if (!(await mayScan(projectId, user, role))) {
+  // Doklady se nečtou samy – nahrají se a vytěžení se pouští v přehledu
+  // (po jednom, nebo celá dávka). Správcům dáme vědět, že přibyl doklad.
+  if (!isManager(role)) {
     const mgr = await managerIds(projectId);
     if (mgr) {
       const { notifyUsers } = await import("@/server/notify");
@@ -408,18 +407,11 @@ export async function uploadReceipt(formData: FormData) {
         },
       );
     }
-    revalidatePath("/ukoly");
-    revalidatePath("/doklady");
-    revalidatePath(`/projects/${projectId}`);
-    return { scanId: null as string | null };
   }
-
-  const scanId = await createDocScan(projectId, doc.id, user.id);
-  after(() => runDocScan(scanId));
   revalidatePath("/ukoly");
   revalidatePath("/doklady");
   revalidatePath(`/projects/${projectId}`);
-  return { scanId: scanId as string | null };
+  return { scanId: null as string | null };
 }
 
 /** Projekty, kam smím poslat doklad (mám přístup nebo tam mám úkoly). */
