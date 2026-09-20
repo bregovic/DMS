@@ -13,6 +13,7 @@ const links = [
   { href: "/vendors", label: "Dodavatelé" },
   { href: "/katalog", label: "Katalog" },
   { href: "/payments", label: "Platby" },
+  { href: "/dph", label: "DPH" },
   { href: "/reports", label: "Reporty" },
   { href: "/import", label: "Import" },
   { href: "/settings", label: "Nastavení" },

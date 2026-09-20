@@ -27,6 +27,7 @@ import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
+import { projectPriceSummary } from "@/server/price-check";
 import { ACTIVITY_PERIODS, TaskActivity } from "@/components/tasks/task-activity";
 import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dialog";
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
@@ -193,6 +194,9 @@ export default async function ProjectDetailPage({
     getDocumentTypes(),
   ]);
   if (!project) notFound();
+
+  // Porovnání nakoupených položek s ceníkem katalogu
+  const priceCheck = await projectPriceSummary(id);
 
   // Doklady (účtenky/faktury) čekající na kontrolu – z vytěžení příloh
   const docScans = await prisma.docScan.findMany({
@@ -1101,6 +1105,66 @@ export default async function ProjectDetailPage({
               </ul>
             )}
           </div>
+        )}
+
+        {tab === "vydaje" && priceCheck && (
+          <details className="mb-4 border border-stone-200 bg-white p-3 shadow-soft">
+            <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-2">
+              <span className="kicker">Nákup vs. ceník katalogu</span>
+              <span className="text-sm">
+                {priceCheck.count} položek za {formatCurrency(priceCheck.volume)} ·{" "}
+                <b className={priceCheck.weighted > 5 ? "text-red-700" : priceCheck.weighted < -5 ? "text-emerald-700" : "text-stone-950"}>
+                  {priceCheck.weighted > 0 ? "+" : ""}
+                  {priceCheck.weighted.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} %
+                </b>{" "}
+                proti ceníku
+              </span>
+            </summary>
+            <p className="mt-2 text-[11px] text-stone-400">
+              Porovnává jednotkové ceny z dokladů (přepočtené na ceny s DPH) s ceníkem katalogu. Kladné číslo = nakoupeno
+              dráž než ceník, záporné = levněji. Když je položka soustavně dražší, může být zastaralá cena v katalogu.
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 text-left text-stone-500">
+                    <th className="py-1.5 font-medium">Položka</th>
+                    <th className="py-1.5 font-medium">Doklad</th>
+                    <th className="py-1.5 text-right font-medium">Zaplaceno / MJ</th>
+                    <th className="py-1.5 text-right font-medium">Ceník</th>
+                    <th className="py-1.5 text-right font-medium">Rozdíl</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceCheck.items.slice(0, 25).map((i) => {
+                    const diff = Number(i.diffPct);
+                    return (
+                      <tr key={i.id} className="border-b border-stone-100">
+                        <td className="py-1.5 pr-2">
+                          {i.description}
+                          <span className="block text-stone-400">{i.materialCode}</span>
+                        </td>
+                        <td className="py-1.5 pr-2 text-stone-500">
+                          {i.expense.vendor?.name ?? i.expense.title}
+                          <span className="block text-stone-400">{formatDate(i.expense.date)}</span>
+                        </td>
+                        <td className="py-1.5 text-right font-mono">
+                          {i.unitPrice != null ? formatCurrency(Number(i.unitPrice)) : "—"}
+                        </td>
+                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(i.catalogPrice))}</td>
+                        <td
+                          className={`py-1.5 text-right font-mono ${diff > 10 ? "text-red-700" : diff < -10 ? "text-emerald-700" : "text-stone-600"}`}
+                        >
+                          {diff > 0 ? "+" : ""}
+                          {diff.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} %
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
         )}
 
         {tab === "vydaje" && (

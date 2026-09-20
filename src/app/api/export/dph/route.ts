@@ -1,0 +1,113 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * CSV podkladu pro DPH: doklady období podle DUZP (základ, daň, sazby, DIČ,
+ * číslo dokladu) + řádek pro oddíl kontrolního hlášení. Otevře se v Excelu.
+ */
+const csvField = (v: string) => (/[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const row = (v: (string | number | null | undefined)[]) => v.map((x) => csvField(x == null ? "" : String(x))).join(";");
+const KH_LIMIT = 10_000;
+
+function periodRange(period: string, year: number): [Date, Date] {
+  if (period.startsWith("q")) {
+    const q = Math.min(4, Math.max(1, Number(period.slice(1)) || 1));
+    return [new Date(Date.UTC(year, (q - 1) * 3, 1)), new Date(Date.UTC(year, q * 3, 1))];
+  }
+  if (period === "rok") return [new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year + 1, 0, 1))];
+  const m = Math.min(12, Math.max(1, Number(period.replace("m", "")) || 1));
+  return [new Date(Date.UTC(year, m - 1, 1)), new Date(Date.UTC(year, m, 1))];
+}
+const d = (x: Date | null) => (x ? x.toISOString().slice(0, 10).split("-").reverse().join(".") : "");
+
+export async function GET(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
+  const url = new URL(req.url);
+  const year = Number(url.searchParams.get("year")) || new Date().getUTCFullYear();
+  const period = url.searchParams.get("period") || `m${new Date().getUTCMonth() + 1}`;
+  const projectId = url.searchParams.get("project") || "";
+  const [from, to] = periodRange(period, year);
+
+  const expenses = await prisma.expense.findMany({
+    where: {
+      project: { ownerId: session.user.id },
+      ...(projectId ? { projectId } : {}),
+      OR: [
+        { taxDate: { gte: from, lt: to } },
+        { taxDate: null, date: { gte: from, lt: to }, vatAmount: { not: null } },
+      ],
+    },
+    orderBy: [{ taxDate: "asc" }, { date: "asc" }],
+    select: {
+      title: true,
+      amount: true,
+      currency: true,
+      date: true,
+      taxDate: true,
+      docNumber: true,
+      vatBase: true,
+      vatAmount: true,
+      vatBreakdown: true,
+      supplierIco: true,
+      supplierDic: true,
+      deductible: true,
+      project: { select: { name: true } },
+      vendor: { select: { name: true, ico: true, dic: true } },
+    },
+  });
+
+  const lines = [
+    row([
+      "projekt",
+      "duzp",
+      "datum",
+      "cislo_dokladu",
+      "dodavatel",
+      "ico",
+      "dic",
+      "zaklad",
+      "dan",
+      "sazby",
+      "celkem",
+      "mena",
+      "oddil_kh",
+      "do_dph",
+      "nazev",
+    ]),
+  ];
+  for (const e of expenses) {
+    const dic = e.supplierDic ?? e.vendor?.dic ?? "";
+    const rates = ((e.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [])
+      .map((r) => `${r.rate}%: ${r.base}/${r.vat}`)
+      .join(" | ");
+    const kh = !e.deductible ? "" : Number(e.amount) >= KH_LIMIT && dic ? "B.2" : "B.3";
+    lines.push(
+      row([
+        e.project.name,
+        d(e.taxDate),
+        d(e.date),
+        e.docNumber ?? "",
+        e.vendor?.name ?? "",
+        e.supplierIco ?? e.vendor?.ico ?? "",
+        dic,
+        e.vatBase != null ? Number(e.vatBase).toFixed(2) : "",
+        e.vatAmount != null ? Number(e.vatAmount).toFixed(2) : "",
+        rates,
+        Number(e.amount).toFixed(2),
+        e.currency,
+        kh,
+        e.deductible ? "ano" : "ne",
+        e.title,
+      ]),
+    );
+  }
+
+  const name = `dph-${year}-${period}${projectId ? "-projekt" : ""}.csv`;
+  return new Response("﻿" + lines.join("\r\n"), {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${name}"`,
+    },
+  });
+}

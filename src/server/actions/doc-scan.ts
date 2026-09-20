@@ -166,6 +166,11 @@ export async function applyDocScan(formData: FormData) {
   });
 
   await prisma.document.update({ where: { id: scan.documentId }, data: { expenseId: expense.id } });
+  // porovnání nakoupených položek s ceníkem katalogu (na pozadí)
+  after(async () => {
+    const { checkExpensePrices } = await import("@/server/price-check");
+    await checkExpensePrices(expense.id).catch(() => []);
+  });
   await prisma.docScan.update({ where: { id: scan.id }, data: { status: "applied", expenseId: expense.id } });
   await notifyExpenseAdded([expense.id], user.id);
   revalidatePath(`/projects/${scan.projectId}`);
