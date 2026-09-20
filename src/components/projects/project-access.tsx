@@ -95,11 +95,14 @@ export function ProjectAccess({
   subProjectId,
   members,
   canManage,
+  vendors = [],
 }: {
   projectId: string;
   subProjectId?: string;
   members: Member[];
   canManage: boolean;
+  /** Dodavatelé z evidence – přidají se jedním klikem podle e-mailu. */
+  vendors?: { id: string; name: string; email: string }[];
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Exclude<Role, "none">>("member");
@@ -134,6 +137,40 @@ export function ProjectAccess({
           <span className="text-stone-700">dodavatel</span> jen své záznamy;{" "}
           <span className="text-stone-700">jen čtení</span> nic nemění.
         </p>
+      )}
+
+      {canManage && vendors.length > 0 && (
+        <div className="mb-3 border border-stone-200 bg-stone-50 p-2">
+          <p className="kicker mb-1.5">Z evidence dodavatelů</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {vendors.map((v) => (
+              <li key={v.id}>
+                <button
+                  type="button"
+                  disabled={pending}
+                  title={`Přidat ${v.email} jako dodavatele (vidí jen své záznamy)`}
+                  onClick={() => {
+                    setErr(null);
+                    start(async () => {
+                      try {
+                        await call(projectId, subProjectId, v.email.toLowerCase(), "active");
+                      } catch (ex) {
+                        setErr(ex instanceof Error ? ex.message : "Přidání selhalo.");
+                      }
+                    });
+                  }}
+                  className="cursor-pointer border border-stone-300 bg-white px-2 py-1 text-xs text-stone-700 transition-colors hover:border-stone-950 disabled:opacity-50"
+                >
+                  + {v.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-stone-400">
+            Přidá se jako <span className="text-stone-600">dodavatel</span> (vidí jen své záznamy a může vykazovat).
+            Roli jde pak změnit v seznamu níž.
+          </p>
+        </div>
       )}
 
       {members.length === 0 ? (

@@ -128,6 +128,17 @@ export function QrAggregateModal({
               onClick={async () => {
                 const ids = groups.flatMap((g) => g.ids);
                 if (ids.length === 0) return;
+                // Pojistka: zelené tlačítko je hned vedle „Zavřít“ a označí
+                // všechny výdaje v okně – ať to nejde odkliknout omylem.
+                const sum = groups.reduce((a, g) => a + g.amount, 0);
+                if (
+                  !window.confirm(
+                    `Označit ${ids.length} ${ids.length === 1 ? "výdaj" : ids.length < 5 ? "výdaje" : "výdajů"} za ${Math.round(sum).toLocaleString("cs-CZ")} Kč jako uhrazené?
+
+QR kód si můžeš zobrazit i bez toho – stačí okno zavřít.`,
+                  )
+                )
+                  return;
                 setPaying(true);
                 try {
                   const fd = new FormData();
@@ -142,9 +153,9 @@ export function QrAggregateModal({
                   setPaying(false);
                 }
               }}
-              className="h-9 border border-emerald-600 bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+              className="h-9 cursor-pointer border border-emerald-600 px-4 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white disabled:opacity-50"
             >
-              {paying ? "Ukládám…" : "Potvrdit úhradu (uhrazeno)"}
+              {paying ? "Ukládám…" : "Zaplaceno – označit jako uhrazené"}
             </button>
           </div>
         )}

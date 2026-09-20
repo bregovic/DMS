@@ -161,7 +161,7 @@ export function IncomeSection({
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="inc-category">Kategorie</Label>
                   <select
@@ -189,7 +189,7 @@ export function IncomeSection({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="inc-amount">Částka</Label>
                   <Input

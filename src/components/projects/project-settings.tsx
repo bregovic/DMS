@@ -31,11 +31,14 @@ export function ProjectSettings({
   types,
   categories,
   members,
+  vendors = [],
 }: {
   project: ProjectData;
   types: { key: string; label: string }[];
   categories: { key: string; label: string }[];
   members: { email: string; role: string }[];
+  /** Dodavatelé z evidence – dají se přidat do projektu jedním klikem. */
+  vendors?: { id: string; name: string; email: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
@@ -103,7 +106,7 @@ export function ProjectSettings({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="ps-start">Začátek</Label>
               <DateInput id="ps-start" name="startDate" defaultValue={project.startDate ?? ""} />
@@ -162,10 +165,24 @@ export function ProjectSettings({
               Přístup k celému projektu · {members.length}
             </button>
             <p className="mt-2 text-xs text-stone-400">
+              Dodavatele přidáš jedním klikem z evidence; spolupracovníka pozveš e-mailem.
               Tady dáváš přístup k <span className="text-stone-600">celému projektu</span>.
               Přístup jen ke konkrétní složce nastav uvnitř té složky (panel „Přístup ke složce").
             </p>
           </div>
+
+          {membersOpen && (
+            <Dialog title="Přístup k projektu" size="lg" onClose={() => setMembersOpen(false)}>
+              <div className="p-5">
+                <ProjectAccess projectId={project.id} members={members} canManage vendors={vendors} />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setMembersOpen(false)}>
+                  Zavřít
+                </Button>
+              </DialogFooter>
+            </Dialog>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

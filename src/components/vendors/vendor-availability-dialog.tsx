@@ -182,7 +182,7 @@ export function VendorAvailabilityDialog({
                 <ChevronRight className="size-4" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-3">
               {months.map((m) => (
                 <Month key={iso(m)} month={m} map={map} />
               ))}

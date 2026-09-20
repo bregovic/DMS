@@ -898,7 +898,9 @@ export default async function ProjectDetailPage({
                     email: m.email,
                     role: m.role,
                   }))}
-                />
+                
+              vendors={project.vendors.map((v) => ({ id: v.id, name: v.name, email: v.email }))}
+            />
               )}
               <DeleteButton
                 action={deleteProject}
