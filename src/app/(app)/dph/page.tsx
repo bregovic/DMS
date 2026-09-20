@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FinanceNav } from "@/components/invoices/finance-nav";
+import { PeriodPicker } from "@/components/invoices/period-picker";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 /**
@@ -171,15 +172,7 @@ export default async function VatPage({
     if (miss.length) problems.push({ id: e.id, title: e.title, what: miss.join(", ") });
   }
 
-  const href = (over: Record<string, string>) => {
-    const u = new URLSearchParams({ year: String(year), period, ...(projectId ? { project: projectId } : {}), ...over });
-    return `/dph?${u.toString()}`;
-  };
-  const chip = (active: boolean) =>
-    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
-      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
-    }`;
-  const years = [year + 1, year, year - 1, year - 2].filter((y, i, a) => a.indexOf(y) === i && y <= now.getUTCFullYear() + 1);
+  const years = [now.getUTCFullYear() + 1, now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2, year].filter((y, i, a) => a.indexOf(y) === i).sort((a, b) => b - a);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -207,43 +200,8 @@ export default async function VatPage({
         </div>
       </div>
 
-      <div className="mb-6 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="kicker mr-1 w-14">Období</span>
-          {[1, 2, 3, 4].map((q) => (
-            <Link key={q} href={href({ period: `q${q}` })} className={chip(period === `q${q}`)}>
-              {q}. čtvrtletí
-            </Link>
-          ))}
-          <Link href={href({ period: "rok" })} className={chip(period === "rok")}>
-            Celý rok
-          </Link>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="kicker mr-1 w-14">Měsíc</span>
-          {MONTHS.map((m, i) => (
-            <Link key={m} href={href({ period: `m${i + 1}` })} className={chip(period === `m${i + 1}`)}>
-              {m.slice(0, 3)}
-            </Link>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="kicker mr-1 w-14">Rok</span>
-          {years.map((y) => (
-            <Link key={y} href={href({ year: String(y) })} className={chip(year === y)}>
-              {y}
-            </Link>
-          ))}
-          <span className="kicker mx-1 ml-4">Projekt</span>
-          <Link href={href({ project: "" })} className={chip(!projectId)}>
-            Všechny
-          </Link>
-          {projects.map((p) => (
-            <Link key={p.id} href={href({ project: p.id })} className={chip(projectId === p.id)}>
-              {p.name}
-            </Link>
-          ))}
-        </div>
+      <div className="mb-6">
+        <PeriodPicker period={period} year={year} projectId={projectId} projects={projects} years={years} />
       </div>
 
       {taxed.length === 0 && issued.length === 0 ? (

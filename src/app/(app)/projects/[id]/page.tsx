@@ -27,6 +27,8 @@ import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
+import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
+import { INV_ATTR } from "@/lib/bulk-ids";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { projectPriceSummary } from "@/server/price-check";
 import { ACTIVITY_PERIODS, TaskActivity } from "@/components/tasks/task-activity";
@@ -450,6 +452,12 @@ export default async function ProjectDetailPage({
   const levelIncomes = levelInScope
     ? visIncomes.filter((i) => (i.subProjectId ?? null) === (sub ?? null))
     : [];
+
+  // Výkazy: vykázaná práce (k vyúčtování), doklady a příjmy na této úrovni
+  const workExpenses = levelExpenses.filter((e) => e.kind === "work" || e.hours != null);
+  const docExpenses = levelExpenses.filter((e) => e.docNumber);
+  const myWork = workExpenses.filter((e) => e.createdById === user.id);
+
   const incomeRows = levelIncomes.map((i) => ({
     id: i.id,
     title: i.title,
@@ -1036,6 +1044,7 @@ export default async function ProjectDetailPage({
         active={tab}
         tabs={[
           { key: "vydaje", label: "Výdaje", count: levelExpenses.length },
+          { key: "vykazy", label: "Výkazy", count: workExpenses.length + levelIncomes.length },
           { key: "ukoly", label: "Úkoly", count: levelTasks.length },
           { key: "zadanky", label: "Žádanky", count: levelRequests.length },
           { key: "prijmy", label: "Příjmy", count: levelIncomes.length },
@@ -1569,6 +1578,122 @@ export default async function ProjectDetailPage({
           </>
         )}
       </TabSection>
+      )}
+
+      {/* Výkazy: práce, doklady a příjmy pohromadě */}
+      {tab === "vykazy" && (
+        <div className="mt-6 space-y-10">
+          <section>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="kicker">Vykázaná práce · {workExpenses.length}</h2>
+              <span className="text-sm text-stone-600">
+                celkem <span className="font-mono text-stone-950">{formatCurrency(workExpenses.reduce((a, e) => a + Number(e.amount), 0))}</span>
+              </span>
+            </div>
+            {workExpenses.length === 0 ? (
+              <p className="text-sm text-stone-500">Zatím tu není vykázaná práce.</p>
+            ) : (
+              <>
+                <ul>
+                  {workExpenses.map((e) => {
+                    const paid = isExpensePaid(e.stage);
+                    const mine = e.createdById === user.id;
+                    return (
+                      <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                        {mine && !paid ? (
+                          <input
+                            type="checkbox"
+                            value={e.id}
+                            {...{ [INV_ATTR]: "" }}
+                            aria-label={`Vybrat výkaz ${e.title}`}
+                            className="size-4 shrink-0 cursor-pointer accent-stone-900"
+                          />
+                        ) : (
+                          <span className="size-4 shrink-0" />
+                        )}
+                        <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.date)}</span>
+                        <span className="min-w-0 flex-1 basis-40 truncate text-stone-900" title={e.title}>
+                          {e.title}
+                          <span className="text-xs text-stone-400">
+                            {e.vendor?.name ? ` · ${e.vendor.name}` : ""}
+                            {e.hours != null ? ` · ${Number(e.hours).toLocaleString("cs-CZ")} h` : ""}
+                          </span>
+                        </span>
+                        <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
+                        <span className={`w-24 text-right text-xs ${paid ? "text-emerald-700" : "text-orange-700"}`}>
+                          {paid ? "uhrazeno" : "k úhradě"}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {myWork.length > 0 && (
+                  <InvoiceCreateBar amounts={Object.fromEntries(myWork.map((e) => [e.id, Number(e.amount)]))} />
+                )}
+                <p className="mt-2 text-[11px] text-stone-400">
+                  Své nevyúčtované výkazy zaškrtni a dole vystav fakturu nebo žádost o úhradu.
+                </p>
+              </>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="kicker">Doklady (přijaté) · {docExpenses.length}</h2>
+              <Link href="/doklady" className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline">
+                všechny doklady →
+              </Link>
+            </div>
+            {docExpenses.length === 0 ? (
+              <p className="text-sm text-stone-500">Zatím žádný doklad. Nahraj účtenku nebo fakturu v záložce Výdaje.</p>
+            ) : (
+              <ul>
+                {docExpenses.map((e) => (
+                  <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                    <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.taxDate ?? e.date)}</span>
+                    <span className="w-28 shrink-0 text-xs text-stone-400">{e.docNumber}</span>
+                    <span className="min-w-0 flex-1 basis-40 truncate text-stone-900">
+                      {e.vendor?.name ?? e.title}
+                    </span>
+                    <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
+                    <span className="w-24 text-right font-mono text-xs text-stone-500">
+                      {e.vatAmount != null ? `DPH ${formatCurrency(Number(e.vatAmount), e.currency)}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="kicker">Příjmy · {levelIncomes.length}</h2>
+              <span className="text-sm text-stone-600">
+                celkem <span className="font-mono text-stone-950">{formatCurrency(levelIncomes.reduce((a, i) => a + Number(i.amount), 0))}</span>
+              </span>
+            </div>
+            {levelIncomes.length === 0 ? (
+              <p className="text-sm text-stone-500">Zatím žádné příjmy (vystavené faktury, vklady, dotace, půjčky).</p>
+            ) : (
+              <ul>
+                {levelIncomes.map((i) => (
+                  <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+                    <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(i.taxDate ?? i.date)}</span>
+                    <span className="w-28 shrink-0 text-xs text-stone-400">{i.docNumber ?? ""}</span>
+                    <span className="min-w-0 flex-1 basis-40 truncate text-stone-900">
+                      {i.title}
+                      {i.customerName && <span className="text-xs text-stone-400"> · {i.customerName}</span>}
+                    </span>
+                    <span className="font-mono text-emerald-700">{formatCurrency(Number(i.amount), i.currency)}</span>
+                    <span className="w-24 text-right font-mono text-xs text-stone-500">
+                      {i.vatAmount != null ? `DPH ${formatCurrency(Number(i.vatAmount), i.currency)}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       )}
 
       {/* Úkoly */}

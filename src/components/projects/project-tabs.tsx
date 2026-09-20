@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const PROJECT_TABS = ["vydaje", "ukoly", "zadanky", "prijmy", "dokumenty"] as const;
+export const PROJECT_TABS = ["vydaje", "vykazy", "ukoly", "zadanky", "prijmy", "dokumenty"] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 export const DEFAULT_PROJECT_TAB: ProjectTab = "vydaje";
 

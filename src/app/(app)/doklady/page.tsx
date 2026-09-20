@@ -2,36 +2,89 @@ import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { FinanceNav } from "@/components/invoices/finance-nav";
+import { PeriodPicker } from "@/components/invoices/period-picker";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { isExpensePaid } from "@/lib/constants";
 
 /**
- * Doklady napříč projekty: co čeká na kontrolu po vytěžení a co už je
- * zaúčtované jako výdaj (s číslem dokladu, DUZP a DPH).
+ * Doklady napříč projekty v jednom seznamu: přijaté (účtenky, faktury
+ * dodavatelů) i vystavené (moje faktury a žádosti o úhradu). Filtruje se
+ * typem, směrem (vstup/výstup), projektem a obdobím podle DUZP.
  */
-export default async function DocsPage() {
+
+type Row = {
+  id: string;
+  kind: "receipt" | "invoice-in" | "invoice-out" | "request-out";
+  direction: "in" | "out";
+  date: Date;
+  docNumber: string | null;
+  party: string | null;
+  projectId: string;
+  projectName: string;
+  amount: number;
+  currency: string;
+  vat: number | null;
+  status: string;
+  href: string;
+};
+
+const KIND_LABEL: Record<Row["kind"], string> = {
+  receipt: "Účtenka",
+  "invoice-in": "Faktura přijatá",
+  "invoice-out": "Faktura vystavená",
+  "request-out": "Žádost o úhradu",
+};
+
+function range(period: string, year: number): [Date, Date] | null {
+  if (period === "vse") return null;
+  if (period === "rok") return [new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year + 1, 0, 1))];
+  if (period.startsWith("q")) {
+    const q = Math.min(4, Math.max(1, Number(period.slice(1)) || 1));
+    return [new Date(Date.UTC(year, (q - 1) * 3, 1)), new Date(Date.UTC(year, q * 3, 1))];
+  }
+  const m = Math.min(12, Math.max(1, Number(period.replace("m", "")) || 1));
+  return [new Date(Date.UTC(year, m - 1, 1)), new Date(Date.UTC(year, m, 1))];
+}
+
+export default async function DocsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string; year?: string; period?: string; smer?: string; typ?: string }>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
+  const now = new Date();
+  const year = Number(sp?.year) || now.getUTCFullYear();
+  const period = sp?.period || "vse";
+  const projectId = sp?.project || "";
+  const smer = sp?.smer === "in" || sp?.smer === "out" ? sp.smer : "";
+  const typ = sp?.typ ?? "";
+  const win = range(period, year);
+  const inWin = (d: Date) => !win || (d >= win[0] && d < win[1]);
+
   const [projects, categories] = await Promise.all([
     prisma.project.findMany({ where: { ownerId: user.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getExpenseCategories(),
   ]);
   const ids = projects.map((p) => p.id);
+  const scope = projectId ? [projectId] : ids;
 
-  const [scans, docs] = await Promise.all([
+  const [scans, expenses, incomes, invoices] = await Promise.all([
     prisma.docScan.findMany({
-      where: { projectId: { in: ids }, status: { in: ["running", "ready", "error"] } },
+      where: { projectId: { in: scope }, status: { in: ["running", "ready", "error"] } },
       orderBy: { createdAt: "desc" },
       take: 50,
       select: { id: true, projectId: true, status: true, result: true, document: { select: { id: true, originalName: true } } },
     }),
     prisma.expense.findMany({
-      where: { projectId: { in: ids }, docNumber: { not: null } },
+      where: { projectId: { in: scope }, docNumber: { not: null } },
       orderBy: [{ taxDate: "desc" }, { date: "desc" }],
-      take: 50,
+      take: 300,
       select: {
         id: true,
         title: true,
@@ -41,18 +94,130 @@ export default async function DocsPage() {
         taxDate: true,
         docNumber: true,
         vatAmount: true,
-        deductible: true,
-        project: { select: { id: true, name: true } },
+        stage: true,
+        projectId: true,
         vendor: { select: { name: true } },
-        documents: { select: { id: true }, take: 1 },
+        documents: { select: { type: true }, take: 1 },
+      },
+    }),
+    prisma.income.findMany({
+      where: { projectId: { in: scope }, docNumber: { not: null } },
+      orderBy: [{ taxDate: "desc" }, { date: "desc" }],
+      take: 300,
+      select: {
+        id: true,
+        title: true,
+        amount: true,
+        currency: true,
+        date: true,
+        taxDate: true,
+        docNumber: true,
+        vatAmount: true,
+        customerName: true,
+        projectId: true,
+      },
+    }),
+    prisma.invoice.findMany({
+      where: { OR: [{ issuerId: user.id }, { recipientId: user.id }, { project: { ownerId: user.id } }], ...(projectId ? { projectId } : {}) },
+      orderBy: { issueDate: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        number: true,
+        kind: true,
+        status: true,
+        amount: true,
+        currency: true,
+        issueDate: true,
+        issuerId: true,
+        supplier: true,
+        customer: true,
+        projectId: true,
+        project: { select: { name: true } },
       },
     }),
   ]);
+
   const projName = new Map(projects.map((p) => [p.id, p.name]));
-  const cats = categories.map((c) => ({ key: c.key, label: c.label }));
+  const rows: Row[] = [];
+  for (const e of expenses) {
+    const d = e.taxDate ?? e.date;
+    if (!inWin(d)) continue;
+    rows.push({
+      id: `e${e.id}`,
+      kind: e.documents[0]?.type === "invoice" ? "invoice-in" : "receipt",
+      direction: "in",
+      date: d,
+      docNumber: e.docNumber,
+      party: e.vendor?.name ?? e.title,
+      projectId: e.projectId,
+      projectName: projName.get(e.projectId) ?? "",
+      amount: Number(e.amount),
+      currency: e.currency,
+      vat: e.vatAmount != null ? Number(e.vatAmount) : null,
+      status: isExpensePaid(e.stage) ? "uhrazeno" : "k úhradě",
+      href: `/projects/${e.projectId}?tab=vydaje`,
+    });
+  }
+  for (const i of incomes) {
+    const d = i.taxDate ?? i.date;
+    if (!inWin(d)) continue;
+    rows.push({
+      id: `i${i.id}`,
+      kind: "invoice-out",
+      direction: "out",
+      date: d,
+      docNumber: i.docNumber,
+      party: i.customerName ?? i.title,
+      projectId: i.projectId,
+      projectName: projName.get(i.projectId) ?? "",
+      amount: Number(i.amount),
+      currency: i.currency,
+      vat: i.vatAmount != null ? Number(i.vatAmount) : null,
+      status: "přijato",
+      href: `/projects/${i.projectId}?tab=prijmy`,
+    });
+  }
+  for (const inv of invoices) {
+    if (!inWin(inv.issueDate)) continue;
+    const out = inv.issuerId === user.id;
+    const party = ((out ? inv.customer : inv.supplier) as { name?: string } | null)?.name ?? null;
+    rows.push({
+      id: `f${inv.id}`,
+      kind: inv.kind === "request" ? "request-out" : out ? "invoice-out" : "invoice-in",
+      direction: out ? "out" : "in",
+      date: inv.issueDate,
+      docNumber: inv.number,
+      party,
+      projectId: inv.projectId,
+      projectName: inv.project.name,
+      amount: Number(inv.amount),
+      currency: inv.currency,
+      vat: null,
+      status: inv.status === "paid" ? "uhrazeno" : inv.status === "cancelled" ? "stornováno" : "k úhradě",
+      href: `/faktury/${inv.id}`,
+    });
+  }
+  const shown = rows
+    .filter((r) => (!smer || r.direction === smer) && (!typ || r.kind === typ))
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const sum = (dir: "in" | "out") => shown.filter((r) => r.direction === dir).reduce((a, r) => a + r.amount, 0);
+
+  const years = [now.getUTCFullYear() + 1, now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2, year]
+    .filter((y, i, a) => a.indexOf(y) === i)
+    .sort((a, b) => b - a);
+  const qs = (over: Record<string, string>) => {
+    const u = new URLSearchParams({ ...(projectId ? { project: projectId } : {}), period, year: String(year), ...(smer ? { smer } : {}), ...(typ ? { typ } : {}), ...over });
+    for (const [k, v] of [...u.entries()]) if (!v) u.delete(k);
+    return `/doklady?${u.toString()}`;
+  };
+  const chip = (active: boolean) =>
+    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
+      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
+    }`;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <header className="mb-4">
         <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
       </header>
@@ -63,12 +228,12 @@ export default async function DocsPage() {
         <DocUploadBox projects={projects} />
         <p className="mt-2 text-[11px] text-stone-400">
           Účtenku i fakturu systém přečte: dodavatele podle IČO z ARESu, číslo dokladu, DUZP, základ a DPH po sazbách
-          a jednotlivé položky. Výdaj založíš až po kontrole.
+          a položky. Doklad, který jsi vystavil ty (podle IČO v Nastavení), se založí jako příjem.
         </p>
       </div>
 
       {scans.length > 0 && (
-        <section className="mt-8">
+        <section className="mt-6">
           <h2 className="kicker mb-2">Ke kontrole · {scans.length}</h2>
           <ul className="border-t border-stone-200">
             {scans.map((sc) => {
@@ -89,7 +254,7 @@ export default async function DocsPage() {
                     scanId={sc.id}
                     documentId={sc.document.id}
                     projectId={sc.projectId}
-                    categories={cats}
+                    categories={categories.map((c) => ({ key: c.key, label: c.label }))}
                     label={sc.status === "error" ? "Zkusit znovu" : "Zkontrolovat"}
                   />
                 </li>
@@ -99,44 +264,74 @@ export default async function DocsPage() {
         </section>
       )}
 
-      <section className="mt-8">
-        <h2 className="kicker mb-2">Zaúčtované doklady</h2>
-        {docs.length === 0 ? (
+      <section className="mt-8 space-y-3">
+        <PeriodPicker period={period} year={year} projectId={projectId} projects={projects} years={years} allowAll />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="kicker mr-1 w-12">Směr</span>
+          <Link href={qs({ smer: "" })} className={chip(!smer)}>
+            Vše
+          </Link>
+          <Link href={qs({ smer: "in" })} className={chip(smer === "in")}>
+            Vstup (přijaté)
+          </Link>
+          <Link href={qs({ smer: "out" })} className={chip(smer === "out")}>
+            Výstup (vystavené)
+          </Link>
+          <span className="kicker ml-4 mr-1 w-12">Typ</span>
+          <Link href={qs({ typ: "" })} className={chip(!typ)}>
+            Vše
+          </Link>
+          {(Object.keys(KIND_LABEL) as Row["kind"][]).map((k) => (
+            <Link key={k} href={qs({ typ: k })} className={chip(typ === k)}>
+              {KIND_LABEL[k]}
+            </Link>
+          ))}
+        </div>
+        <p className="text-xs text-stone-500">
+          {shown.length} dokladů · přijaté <span className="font-mono">{formatCurrency(sum("in"))}</span> · vystavené{" "}
+          <span className="font-mono">{formatCurrency(sum("out"))}</span>
+        </p>
+      </section>
+
+      <section className="mt-4">
+        {shown.length === 0 ? (
           <EmptyState
-            title="Zatím žádné doklady"
-            description="Nahraj účtenku nebo fakturu výše – systém ji přečte a připraví výdaj ke kontrole."
+            title="Žádné doklady"
+            description="Nahraj účtenku nebo fakturu výše – systém ji přečte a připraví ke kontrole. Vystavené faktury z vykázané práce se sem přidají samy."
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">
-                  <th className="py-2 font-medium">DUZP</th>
+                  <th className="py-2 font-medium">Datum / DUZP</th>
+                  <th className="py-2 font-medium">Typ</th>
                   <th className="py-2 font-medium">Číslo</th>
-                  <th className="py-2 font-medium">Dodavatel</th>
+                  <th className="py-2 font-medium">Protistrana</th>
                   <th className="py-2 font-medium">Projekt</th>
-                  <th className="py-2 text-right font-medium">Celkem</th>
+                  <th className="py-2 text-right font-medium">Částka</th>
                   <th className="py-2 text-right font-medium">DPH</th>
+                  <th className="py-2 text-right font-medium">Stav</th>
                 </tr>
               </thead>
               <tbody>
-                {docs.map((e) => (
-                  <tr key={e.id} className="border-b border-stone-100">
-                    <td className="py-1.5 whitespace-nowrap">{formatDate(e.taxDate ?? e.date)}</td>
-                    <td className="py-1.5">{e.docNumber}</td>
+                {shown.map((r) => (
+                  <tr key={r.id} className="border-b border-stone-100">
+                    <td className="py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
                     <td className="py-1.5">
-                      {e.vendor?.name ?? "—"}
-                      <span className="block text-xs text-stone-400">{e.title}</span>
+                      <span className={r.direction === "out" ? "text-emerald-700" : "text-stone-700"}>{KIND_LABEL[r.kind]}</span>
                     </td>
                     <td className="py-1.5">
-                      <Link href={`/projects/${e.project.id}?tab=vydaje`} className="text-stone-700 underline-offset-2 hover:underline">
-                        {e.project.name}
+                      <Link href={r.href} className="text-stone-900 underline-offset-2 hover:underline">
+                        {r.docNumber ?? "—"}
                       </Link>
                     </td>
-                    <td className="py-1.5 text-right font-mono">{formatCurrency(Number(e.amount), e.currency)}</td>
-                    <td className="py-1.5 text-right font-mono">
-                      {e.vatAmount != null ? formatCurrency(Number(e.vatAmount), e.currency) : "—"}
-                      {!e.deductible && <span className="block text-[10px] text-stone-400">mimo DPH</span>}
+                    <td className="py-1.5 text-stone-600">{r.party ?? "—"}</td>
+                    <td className="py-1.5 text-stone-600">{r.projectName}</td>
+                    <td className="py-1.5 text-right font-mono">{formatCurrency(r.amount, r.currency)}</td>
+                    <td className="py-1.5 text-right font-mono text-stone-500">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
+                    <td className={`py-1.5 text-right text-xs ${r.status === "uhrazeno" || r.status === "přijato" ? "text-emerald-700" : r.status === "stornováno" ? "text-stone-400" : "text-orange-700"}`}>
+                      {r.status}
                     </td>
                   </tr>
                 ))}
