@@ -11,7 +11,7 @@
  */
 
 const MAX_DIM = 1800; // delší strana výsledku
-const QUALITY = 0.72;
+const QUALITY = 0.7;
 const MIN_BYTES = 250 * 1024; // menší soubory nemá smysl přepočítávat
 const WORK = 600; // rozlišení, ve kterém se hledá papír
 
@@ -180,17 +180,36 @@ function warp(src: ImageData, corners: [Pt, Pt, Pt, Pt], scale: number, outW: nu
   return out;
 }
 
-/** Šedá + roztažení kontrastu + doostření (na místě v ImageData). */
+/** Medián 3×3 – odstraní zrno z fotky, hrany textu nechá ostré. */
+function median3(src: Uint8ClampedArray, w: number, h: number) {
+  const out = new Uint8ClampedArray(src.length);
+  const win = new Uint8Array(9);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) {
+        out[i] = src[i];
+        continue;
+      }
+      win[0] = src[i - w - 1]; win[1] = src[i - w]; win[2] = src[i - w + 1];
+      win[3] = src[i - 1]; win[4] = src[i]; win[5] = src[i + 1];
+      win[6] = src[i + w - 1]; win[7] = src[i + w]; win[8] = src[i + w + 1];
+      win.sort();
+      out[i] = win[4];
+    }
+  }
+  return out;
+}
+
+/** Šedá + odšumění + roztažení kontrastu + jemné doostření (na místě). */
 function enhance(img: ImageData) {
   const px = img.data;
   const n = img.width * img.height;
-  const gray = new Uint8ClampedArray(n);
+  const raw = new Uint8ClampedArray(n);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) raw[j] = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+  const gray = median3(raw, img.width, img.height);
   const hist = new Uint32Array(256);
-  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const g = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
-    gray[j] = g;
-    hist[g | 0]++;
-  }
+  for (let j = 0; j < n; j++) hist[gray[j] | 0]++;
   let acc = 0;
   let lo = 0;
   let hi = 255;
@@ -217,7 +236,9 @@ function enhance(img: ImageData) {
   const lut = new Uint8ClampedArray(256);
   for (let v = 0; v < 256; v++) {
     const t = Math.min(1, Math.max(0, (v - lo) / span));
-    lut[v] = Math.round(255 * (t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t)));
+    // 60 % lineární, 40 % S-křivka – papír zesvětlí, ale text se nevypálí
+    const sc = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+    lut[v] = Math.round(255 * (0.6 * t + 0.4 * sc));
   }
   const lvl = new Uint8ClampedArray(n);
   for (let j = 0; j < n; j++) lvl[j] = lut[gray[j]];
@@ -234,7 +255,7 @@ function enhance(img: ImageData) {
       }
       const blur =
         (lvl[i - w - 1] + lvl[i - w] + lvl[i - w + 1] + lvl[i - 1] + lvl[i] + lvl[i + 1] + lvl[i + w - 1] + lvl[i + w] + lvl[i + w + 1]) / 9;
-      sharp[i] = lvl[i] + 0.6 * (lvl[i] - blur);
+      sharp[i] = lvl[i] + 0.35 * (lvl[i] - blur);
     }
   }
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
