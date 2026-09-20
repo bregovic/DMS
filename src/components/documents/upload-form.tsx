@@ -47,7 +47,8 @@ export function UploadForm({
     for (let i = 0; i < files.length; i++) {
       setProgress(files.length > 1 ? `Nahrávám ${i + 1}/${files.length}…` : "Nahrávám…");
       try {
-        const prepared = await prepareUpload(files[i]);
+        // u účtenek a faktur fotku vyčistíme (menší soubor, lepší čitelnost)
+        const prepared = await prepareUpload(files[i], { doc: type === "receipt" || type === "invoice" });
         const fd = new FormData();
         fd.set("projectId", projectId);
         fd.set("type", type);

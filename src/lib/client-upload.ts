@@ -27,9 +27,18 @@ export async function compressImage(file: File): Promise<File> {
   }
 }
 
-/** Připraví soubor k nahrání (komprese) a ohlídá limit. Vyhodí chybu při překročení. */
-export async function prepareUpload(file: File): Promise<File> {
-  const out = await compressImage(file);
+/**
+ * Připraví soubor k nahrání a ohlídá limit.
+ * `doc: true` = fotka dokladu: vyčistí se (šedá, kontrast, doostření) a je
+ * výrazně menší; když by to nepomohlo, použije se běžná komprese.
+ */
+export async function prepareUpload(file: File, opts?: { doc?: boolean }): Promise<File> {
+  let out = file;
+  if (opts?.doc) {
+    const { cleanDocumentPhoto } = await import("@/lib/image-clean");
+    out = await cleanDocumentPhoto(file);
+  }
+  if (out === file) out = await compressImage(file);
   if (out.size > MAX_UPLOAD) {
     throw new Error("Soubor je větší než 14 MB (i po kompresi).");
   }

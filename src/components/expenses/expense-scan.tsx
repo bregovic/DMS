@@ -32,7 +32,7 @@ export function ExpenseScan({
     setErr(null);
     start(async () => {
       try {
-        const prepared = await prepareUpload(file);
+        const prepared = await prepareUpload(file, { doc: true });
         const fd = new FormData();
         fd.set("projectId", projectId);
         fd.set("expenseId", expenseId);

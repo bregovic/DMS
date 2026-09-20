@@ -48,7 +48,7 @@ export function ReceiptScan({ projects, initial }: { projects: Project[]; initia
       for (const f of list) {
         const fd = new FormData();
         fd.set("projectId", projectId);
-        fd.set("file", await prepareUpload(f));
+        fd.set("file", await prepareUpload(f, { doc: true }));
         await uploadReceipt(fd);
       }
       setMsg(list.length > 1 ? `Odesláno ${list.length} dokladů, čtu je…` : "Odesláno, čtu doklad…");

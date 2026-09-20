@@ -105,7 +105,7 @@ export function NewExpenseForm({
             try {
               const f = fd.get("file");
               if (f instanceof File && f.size > 0) {
-                fd.set("file", await prepareUpload(f));
+                fd.set("file", await prepareUpload(f, { doc: true }));
               }
               await createExpense(fd);
             } catch (err) {
