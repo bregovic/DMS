@@ -180,11 +180,12 @@ export function DocInbox({
                 </span>
                 {d.issues.length > 0 && (
                   <span
-                    className={`inline-flex items-center gap-1 text-xs ${d.duplicate ? "text-amber-700" : "text-stone-500"}`}
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-xs ${d.duplicate ? "text-amber-700" : "text-stone-500"}`}
                     title={d.issues.join(" · ")}
                   >
                     <AlertTriangle className="size-3.5" />
-                    {d.duplicate ? "duplicita" : d.issues[0]}
+                    {/* dlouhé poznámky z vytěžení jen naznačíme, celé jsou v tooltipu */}
+                    {d.duplicate ? "duplicita" : (d.issues.find((i) => i.length <= 24) ?? "zkontrolovat")}
                     {d.issues.length > 1 && ` +${d.issues.length - 1}`}
                   </span>
                 )}
