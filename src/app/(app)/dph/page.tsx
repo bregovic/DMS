@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FinanceNav } from "@/components/invoices/finance-nav";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 /**
@@ -133,18 +134,29 @@ export default async function VatPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
-        <div>
-          <h1 className="display text-4xl text-stone-950">DPH</h1>
-          <p className="kicker mt-1">přijatá plnění podle DUZP · {periodLabel}</p>
-        </div>
-        <Link
-          href={`/api/export/dph?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
-          className="flex h-10 items-center border border-stone-300 px-4 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
-        >
-          Stáhnout CSV
-        </Link>
+      <header className="mb-4">
+        <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
       </header>
+      <FinanceNav />
+      <div className="mb-6 mt-6 flex flex-wrap items-end justify-between gap-3">
+        <p className="kicker">DPH · přijatá plnění podle DUZP · {periodLabel}</p>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/api/export/dph?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+            className="flex h-9 items-center border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+          >
+            CSV podkladu
+          </Link>
+          {period !== "rok" && (
+            <Link
+              href={`/api/export/kh?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+              className="flex h-9 items-center border border-stone-950 bg-stone-950 px-3 text-sm text-white transition-colors hover:bg-stone-800"
+            >
+              XML kontrolního hlášení
+            </Link>
+          )}
+        </div>
+      </div>
 
       <div className="mb-6 space-y-2 border border-stone-200 bg-white p-3 shadow-soft">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -290,6 +302,12 @@ export default async function VatPage({
               <span className="font-mono">{formatCurrency(b3Sum.vat)}</span>
             </p>
           </section>
+
+          <p className="mb-10 text-[11px] text-stone-400">
+            XML se načítá na portálu MOJE daně (Elektronická podání → Načíst soubor), kde projde kontrolou. Identifikační
+            údaje (DIČ, adresa, finanční úřad) se berou z Nastavení → Fakturace a daně. Jde o podklad, ne o podání –
+            čísla i zařazení dokladů si před odesláním zkontroluj.
+          </p>
         </>
       )}
     </div>

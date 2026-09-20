@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
+import { FinanceNav } from "@/components/invoices/finance-nav";
 import { prisma } from "@/lib/prisma";
 import { PaymentInfo } from "@/components/expenses/payment-info";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
@@ -96,6 +97,11 @@ export default async function PaymentsPage({
 
   return (
     <div className="mx-auto max-w-7xl">
+      <header className="mb-4">
+        <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
+      </header>
+      <FinanceNav />
+      <div className="mt-6" />
       {invoiceRequests.length > 0 && (
         <section className="mb-8 border border-orange-200 bg-orange-50/60 p-4">
           <h2 className="kicker mb-2 !text-orange-800">Žádosti o úhradu · {invoiceRequests.length}</h2>
@@ -124,9 +130,9 @@ export default async function PaymentsPage({
           </ul>
         </section>
       )}
-      <header className="mb-6 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
+      <header className="mb-6 mt-6 flex items-end justify-between gap-4 border-b border-stone-300/80 pb-6">
         <div>
-          <h1 className="display text-4xl text-stone-950">Platby</h1>
+          <h2 className="kicker">Platby</h2>
           <p className="kicker mt-1">
             {expenses.length} položek
             {statusFilterActive ? " (filtrováno)" : ""}

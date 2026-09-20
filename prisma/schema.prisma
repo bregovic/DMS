@@ -29,6 +29,20 @@ model User {
   billingAddress String?
   billingAccount String? // číslo účtu nebo IBAN
   vatPayer       Boolean   @default(false)
+  // Údaje pro daňová podání (kontrolní hlášení, přiznání)
+  taxSubjectType  String? // FO | PO
+  firstName       String?
+  lastName        String?
+  street          String?
+  houseNo         String?
+  orientNo        String?
+  city            String?
+  zip             String?
+  country         String?   @default("ČESKÁ REPUBLIKA")
+  phone           String?
+  dataBoxId       String? // ID datové schránky
+  taxOfficeCode   String? // kód finančního úřadu (c_ufo)
+  taxOfficeBranch String? // územní pracoviště (c_pracufo)
   remindersAt    DateTime? // kdy se naposledy generovaly připomínky
   notifications  Notification[]
 

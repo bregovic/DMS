@@ -57,7 +57,22 @@ export async function updateBilling(formData: FormData) {
       billingAddress: t("billingAddress"),
       billingAccount: t("billingAccount"),
       vatPayer: formData.get("vatPayer") === "1",
+      // údaje pro daňová podání (kontrolní hlášení)
+      taxSubjectType: formData.get("taxSubjectType") === "PO" ? "PO" : "FO",
+      firstName: t("firstName"),
+      lastName: t("lastName"),
+      street: t("street"),
+      houseNo: t("houseNo"),
+      orientNo: t("orientNo"),
+      city: t("city"),
+      zip: t("zip"),
+      country: t("country") ?? "ČESKÁ REPUBLIKA",
+      phone: t("phone"),
+      dataBoxId: t("dataBoxId"),
+      taxOfficeCode: t("taxOfficeCode"),
+      taxOfficeBranch: t("taxOfficeBranch"),
     },
   });
   revalidatePath("/settings");
+  revalidatePath("/settings/fakturace");
 }
