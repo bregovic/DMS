@@ -26,7 +26,6 @@ import { EditSubProjectForm } from "@/components/subprojects/edit-subproject-for
 import { NewTaskForm } from "@/components/tasks/new-task-form";
 import { BulkTaskBar } from "@/components/tasks/bulk-task-bar";
 import { TaskRow } from "@/components/tasks/task-row";
-import { DocPreview } from "@/components/documents/doc-preview";
 import { InvoiceCreateBar } from "@/components/invoices/invoice-create-bar";
 import { INV_ATTR } from "@/lib/bulk-ids";
 import { projectPriceSummary } from "@/server/price-check";
@@ -62,7 +61,6 @@ import {
   isExpensePaid,
   expenseStage,
 } from "@/lib/constants";
-import { incomeCategoryLabel } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
@@ -474,7 +472,6 @@ export default async function ProjectDetailPage({
 
   // Výkazy: vykázaná práce (k vyúčtování), doklady a příjmy na této úrovni
   const workExpenses = levelExpenses.filter((e) => e.kind === "work" || e.hours != null);
-  const docExpenses = levelExpenses.filter((e) => e.docNumber);
   const myWork = workExpenses.filter((e) => e.createdById === user.id);
 
   // Vystavil doklad majitel projektu? Pak návrh míří do příjmů.
@@ -1661,73 +1658,10 @@ export default async function ProjectDetailPage({
             )}
           </section>
 
-          <section>
-            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="kicker">Doklady (přijaté) · {docExpenses.length}</h2>
-              <Link href="/doklady" className="text-xs text-stone-500 underline-offset-2 hover:text-stone-950 hover:underline">
-                všechny doklady →
-              </Link>
-            </div>
-            {docExpenses.length === 0 ? (
-              <p className="text-sm text-stone-500">Zatím žádný doklad. Nahraj účtenku nebo fakturu v záložce Výdaje.</p>
-            ) : (
-              <ul>
-                {docExpenses.map((e) => (
-                  <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                    <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(e.taxDate ?? e.date)}</span>
-                    <span className="w-28 shrink-0 text-xs text-stone-400">{e.docNumber}</span>
-                    <span className="min-w-0 flex-1 basis-40 truncate text-stone-900">
-                      {e.vendor?.name ?? e.title}
-                    </span>
-                    <span className="font-mono text-stone-950">{formatCurrency(Number(e.amount), e.currency)}</span>
-                    <span className="w-24 text-right font-mono text-xs text-stone-500">
-                      {e.vatAmount != null ? `DPH ${formatCurrency(Number(e.vatAmount), e.currency)}` : ""}
-                    </span>
-                    {e.documents[0] && (
-                      <DocPreview
-                        documentId={e.documents[0].id}
-                        name={e.documents[0].originalName}
-                        mimeType={e.documents[0].mimeType}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section>
-            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="kicker">Příjmy · {levelIncomes.length}</h2>
-              <span className="text-sm text-stone-600">
-                celkem <span className="font-mono text-stone-950">{formatCurrency(levelIncomes.reduce((a, i) => a + Number(i.amount), 0))}</span>
-              </span>
-            </div>
-            {levelIncomes.length === 0 ? (
-              <p className="text-sm text-stone-500">Zatím žádné příjmy (vystavené faktury, vklady, dotace, půjčky).</p>
-            ) : (
-              <ul>
-                {levelIncomes.map((i) => (
-                  <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                    <span className="w-20 shrink-0 text-xs text-stone-500">{formatDate(i.taxDate ?? i.date)}</span>
-                    <span className="w-28 shrink-0 text-xs text-stone-400">{i.docNumber ?? ""}</span>
-                    <span className="min-w-0 flex-1 basis-40 truncate text-stone-900">
-                      {i.title}
-                      <span className="text-xs text-stone-400">
-                        {" · "}
-                        {incomeCategoryLabel(i.category)}
-                        {i.customerName ? ` · ${i.customerName}` : ""}
-                      </span>
-                    </span>
-                    <span className="font-mono text-emerald-700">{formatCurrency(Number(i.amount), i.currency)}</span>
-                    <span className="w-24 text-right font-mono text-xs text-stone-500">
-                      {i.vatAmount != null ? `DPH ${formatCurrency(Number(i.vatAmount), i.currency)}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <p className="text-[11px] text-stone-400">
+            Výkazy jsou o vykázané práci a fakturaci za ni. Přijaté a vystavené doklady najdeš v záložce Výdaje,
+            Příjmy a v modulu <Link href="/doklady" className="underline underline-offset-2 hover:text-stone-950">Doklady</Link>.
+          </p>
         </div>
       )}
 
