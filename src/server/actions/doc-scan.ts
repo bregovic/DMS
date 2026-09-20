@@ -29,6 +29,35 @@ export async function scanDocument(formData: FormData) {
   return { id };
 }
 
+/**
+ * Hromadné přečtení: pustí vytěžení u všech nahraných dokladů projektu, které
+ * ještě přečtené nejsou. Doklady se tak dají nahrávat průběžně a zpracovat
+ * naráz.
+ */
+export async function scanProjectDocuments(formData: FormData) {
+  const projectId = String(formData.get("projectId"));
+  const user = await requireUser();
+  const role = await getProjectRole(projectId, user);
+  if (!canWrite(role)) return { error: "Nemáš oprávnění." };
+  if (!(await mayScan(projectId, user, role))) return { error: "Vytěžování dokladů ti vlastník projektu nepovolil." };
+
+  const docs = await prisma.document.findMany({
+    where: { projectId, type: { in: ["receipt", "invoice"] }, expenseId: null, scan: { is: null } },
+    orderBy: { createdAt: "asc" },
+    take: 25,
+    select: { id: true },
+  });
+  const ids: string[] = [];
+  for (const d of docs) ids.push(await createDocScan(projectId, d.id, user.id));
+  after(async () => {
+    // po jednom, ať se nevyčerpá limit a chyba se projeví u konkrétního dokladu
+    for (const id of ids) await runDocScan(id);
+  });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/doklady");
+  return { count: ids.length };
+}
+
 /** Návrh k potvrzení (pro dialog kontroly). */
 export async function getDocScan(id: string) {
   const scan = await prisma.docScan.findUnique({
@@ -47,11 +76,14 @@ export async function getDocScan(id: string) {
   const user = await writable(scan.projectId);
   const result = (scan.result ?? null) as ScanResult | null;
 
-  // Vystavil jsem doklad já? Poznáme podle IČO/DIČ z nastavení (Fakturace a daně).
-  const me = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { billingIco: true, billingDic: true, billingName: true },
+  // Vystavil doklad majitel projektu? Poznáme podle jeho IČO/DIČ z nastavení
+  // (Fakturace a daně) – ne podle toho, kdo je zrovna přihlášený, aby to
+  // spolusprávci vyhodnotilo stejně jako vlastníkovi.
+  const owner = await prisma.project.findUnique({
+    where: { id: scan.projectId },
+    select: { ownerId: true, owner: { select: { billingIco: true, billingDic: true, billingName: true } } },
   });
+  const me = owner?.owner ?? null;
   const norm = (v: string | null | undefined) => (v ?? "").replace(/\s/g, "").toUpperCase().replace(/^CZ/, "");
   const myIco = norm(me?.billingIco);
   const myDic = norm(me?.billingDic);
@@ -67,13 +99,13 @@ export async function getDocScan(id: string) {
   if (dupNumber) {
     if (issued) {
       const hit = await prisma.income.findFirst({
-        where: { project: { ownerId: user.id }, docNumber: dupNumber, ...(dupIco ? { customerIco: dupIco } : {}) },
+        where: { project: { ownerId: owner?.ownerId }, docNumber: dupNumber, ...(dupIco ? { customerIco: dupIco } : {}) },
         select: { title: true, date: true, amount: true, project: { select: { name: true } } },
       });
       if (hit) duplicate = { kind: "income", title: hit.title, date: hit.date, amount: Number(hit.amount), project: hit.project.name };
     } else {
       const hit = await prisma.expense.findFirst({
-        where: { project: { ownerId: user.id }, docNumber: dupNumber, ...(dupIco ? { supplierIco: dupIco } : {}) },
+        where: { project: { ownerId: owner?.ownerId }, docNumber: dupNumber, ...(dupIco ? { supplierIco: dupIco } : {}) },
         select: { title: true, date: true, amount: true, project: { select: { name: true } } },
       });
       if (hit) duplicate = { kind: "expense", title: hit.title, date: hit.date, amount: Number(hit.amount), project: hit.project.name };
@@ -202,6 +234,7 @@ export async function applyDocScan(formData: FormData) {
         vatBase: num(formData.get("vatBase")),
         vatAmount: num(formData.get("vatAmount")),
         vatBreakdown: vatRows.length ? vatRows : undefined,
+        exchangeRate: num(formData.get("exchangeRate")),
         customerName: String(formData.get("customerName") || "").slice(0, 200) || null,
         customerIco: String(formData.get("customerIco") || "").replace(/\D/g, "") || null,
         customerDic: String(formData.get("customerDic") || "").trim() || null,
@@ -239,6 +272,7 @@ export async function applyDocScan(formData: FormData) {
       vatAmount: num(formData.get("vatAmount")),
       vatRate: vatRows.length === 1 ? vatRows[0].rate : null,
       vatBreakdown: vatRows.length ? vatRows : undefined,
+      exchangeRate: num(formData.get("exchangeRate")),
       supplierIco: ico,
       supplierDic: dic,
       deductible: formData.get("deductible") !== "0",

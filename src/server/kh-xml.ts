@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { managedProjectIds } from "@/server/access";
+import { amountCzk, vatRowsCzk } from "@/lib/vat";
 
 /**
  * XML kontrolního hlášení (písemnost DPHKH1) pro portál MOJE daně.
@@ -42,6 +44,8 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     ? new Date(Date.UTC(year, period.quarter * 3, 1))
     : new Date(Date.UTC(year, period.month ?? 1, 1));
 
+  // spolusprávce projektu zpracovává doklady stejně jako vlastník
+  const scope = await managedProjectIds({ id: userId, email: (await prisma.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email ?? null });
   const [me, expenses, incomes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -68,8 +72,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     }),
     prisma.expense.findMany({
       where: {
-        project: { ownerId: userId },
-        ...(projectId ? { projectId } : {}),
+        projectId: projectId ? projectId : { in: scope },
         deductible: true,
         OR: [
           { taxDate: { gte: from, lt: to } },
@@ -85,14 +88,15 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
         vatBase: true,
         vatAmount: true,
         vatBreakdown: true,
+        currency: true,
+        exchangeRate: true,
         supplierDic: true,
         vendor: { select: { dic: true } },
       },
     }),
     prisma.income.findMany({
       where: {
-        project: { ownerId: userId },
-        ...(projectId ? { projectId } : {}),
+        projectId: projectId ? projectId : { in: scope },
         taxable: true,
         OR: [
           { taxDate: { gte: from, lt: to } },
@@ -108,6 +112,8 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
         vatBase: true,
         vatAmount: true,
         vatBreakdown: true,
+        currency: true,
+        exchangeRate: true,
         customerDic: true,
       },
     }),
@@ -128,15 +134,14 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
 
   for (const e of taxed) {
     const dic = (e.supplierDic ?? e.vendor?.dic ?? "").replace(/\s/g, "").toUpperCase();
-    const rows = (e.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
-    const list = rows.length ? rows : [{ rate: 21, base: Number(e.vatBase ?? 0), vat: Number(e.vatAmount ?? 0) }];
+    const list = vatRowsCzk(e, () => 21);
     const slots = empty();
     for (const r of list) {
       const s = rateSlot(Number(r.rate));
       slots[s].base += Number(r.base);
       slots[s].vat += Number(r.vat);
     }
-    const single = Number(e.amount) >= KH_LIMIT && !!dic && !!e.docNumber;
+    const single = amountCzk(e) >= KH_LIMIT && !!dic && !!e.docNumber;
     if (single) {
       b2.push({ dic: dic.replace(/^CZ/, ""), num: e.docNumber!, dppd: e.taxDate ?? e.date, slots });
     } else {
@@ -144,7 +149,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
         b3[k].base += slots[k].base;
         b3[k].vat += slots[k].vat;
       }
-      if (Number(e.amount) >= KH_LIMIT && (!dic || !e.docNumber))
+      if (amountCzk(e) >= KH_LIMIT && (!dic || !e.docNumber))
         missing.push(`doklad ${e.docNumber ?? "(bez čísla)"} nad 10 000 Kč nemá DIČ nebo číslo – je jen v B.3`);
     }
   }
@@ -153,22 +158,21 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
   for (const i of incomes) {
     if (i.vatAmount == null && i.vatBase == null) continue;
     const dic = (i.customerDic ?? "").replace(/\s/g, "").toUpperCase();
-    const rows = (i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
-    const list = rows.length ? rows : [{ rate: 21, base: Number(i.vatBase ?? 0), vat: Number(i.vatAmount ?? 0) }];
+    const list = vatRowsCzk(i, () => 21);
     const slots = empty();
     for (const r of list) {
       const sl = rateSlot(Number(r.rate));
       slots[sl].base += Number(r.base);
       slots[sl].vat += Number(r.vat);
     }
-    if (Number(i.amount) >= KH_LIMIT && dic && i.docNumber) {
+    if (amountCzk(i) >= KH_LIMIT && dic && i.docNumber) {
       a4.push({ dic: dic.replace(/^CZ/, ""), num: i.docNumber, dppd: i.taxDate ?? i.date, slots });
     } else {
       for (const k of [1, 2, 3] as const) {
         a5[k].base += slots[k].base;
         a5[k].vat += slots[k].vat;
       }
-      if (Number(i.amount) >= KH_LIMIT && (!dic || !i.docNumber))
+      if (amountCzk(i) >= KH_LIMIT && (!dic || !i.docNumber))
         missing.push(`vystavený doklad ${i.docNumber ?? "(bez čísla)"} nad 10 000 Kč nemá DIČ odběratele nebo číslo – je jen v A.5`);
     }
   }

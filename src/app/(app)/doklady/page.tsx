@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
+import { managedProjectIds } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
@@ -70,8 +71,9 @@ export default async function DocsPage({
   const win = range(period, year);
   const inWin = (d: Date) => !win || (d >= win[0] && d < win[1]);
 
+  const managedIds = await managedProjectIds(user);
   const [projects, categories] = await Promise.all([
-    prisma.project.findMany({ where: { ownerId: user.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.project.findMany({ where: { id: { in: managedIds } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getExpenseCategories(),
   ]);
   const ids = projects.map((p) => p.id);
@@ -142,7 +144,7 @@ export default async function DocsPage({
       },
     }),
     prisma.invoice.findMany({
-      where: { OR: [{ issuerId: user.id }, { recipientId: user.id }, { project: { ownerId: user.id } }], ...(projectId ? { projectId } : {}) },
+      where: { OR: [{ issuerId: user.id }, { recipientId: user.id }, { projectId: { in: managedIds } }], ...(projectId ? { projectId } : {}) },
       orderBy: { issueDate: "desc" },
       take: 200,
       select: {

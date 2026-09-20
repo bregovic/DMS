@@ -31,6 +31,12 @@ export type ScanResult = {
   taxDate: string | null; // DUZP
   dueDate: string | null;
   currency: string;
+  /** Kurz CZK za 1 jednotku měny (jen u cizí měny). */
+  exchangeRate: number | null;
+  /** Celkem v CZK, pokud je na dokladu uvedeno. */
+  totalCzk: number | null;
+  /** Odkud je kurz – z dokladu, nebo z kurzovního lístku ČNB. */
+  rateNote?: string | null;
   total: number | null;
   totalBase: number | null;
   totalVat: number | null;
@@ -62,6 +68,8 @@ const SCHEMA = obj({
   taxDate: str,
   dueDate: str,
   currency: { type: "string" },
+  exchangeRate: n,
+  totalCzk: n,
   total: n,
   totalBase: n,
   totalVat: n,
@@ -83,7 +91,8 @@ const INSTRUCTIONS = `Jsi účetní. Ze snímku nebo PDF účtenky či faktury p
 - docType: receipt = účtenka/paragon, invoice = faktura (daňový doklad), proforma = zálohová faktura, credit_note = dobropis.
 - supplier = kdo doklad vystavil (prodávající). ico = 8 číslic bez mezer, dic například CZ12345678. customer = odběratel, pokud je uveden.
 - number = číslo dokladu, issueDate = datum vystavení, taxDate = DUZP (datum uskutečnění zdanitelného plnění; na účtence je to datum prodeje), dueDate = splatnost. Datumy ve formátu YYYY-MM-DD.
-- total = celkem k úhradě s DPH, totalBase = základ celkem, totalVat = daň celkem.
+- total = celkem k úhradě s DPH, totalBase = základ celkem, totalVat = daň celkem – v měně dokladu.
+- currency = měna dokladu (CZK, EUR, USD…). Je-li doklad v cizí měně: exchangeRate = kurz uvedený na dokladu (kolik Kč za 1 jednotku měny), totalCzk = celková částka v Kč, pokud ji doklad uvádí (u českých dokladů v EUR bývá rekapitulace DPH i v Kč). Když kurz ani částka v Kč na dokladu nejsou, vrať null.
 - vatBreakdown = rozpis po sazbách přesně z rekapitulace dokladu (v ČR 21, 12 a 0 %). Když na dokladu rozpis není a doklad je bez DPH, vrať prázdné pole.
 - reverseCharge = true u přenesené daňové povinnosti (režim PDP, „daň odvede zákazník").
 - items = jednotlivé položky (popis, množství, MJ, jednotková cena bez DPH pokud je uvedená, částka za položku, sazba). U účtenky s mnoha položkami vrať nejvýš 40 nejdůležitějších.
@@ -137,7 +146,7 @@ export async function runDocScan(scanId: string) {
       SCHEMA,
       { effort: "low", maxOutput: 20_000 },
     );
-    const result = normalize(stripNul(data));
+    const result = await fillExchangeRate(normalize(stripNul(data)));
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },
       data: { status: "ready", result: result as unknown as Prisma.InputJsonValue, costUsd },
@@ -187,6 +196,8 @@ export async function runDocScan(scanId: string) {
 export function normalize(d: ScanResult): ScanResult {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
   d.currency = currencyCode(d.currency);
+  d.exchangeRate = num(d.exchangeRate);
+  d.totalCzk = num(d.totalCzk);
   d.supplier.ico = d.supplier.ico?.replace(/\D/g, "").slice(0, 8) || null;
   d.supplier.dic = d.supplier.dic?.replace(/\s/g, "").toUpperCase() || null;
   d.vatBreakdown = (d.vatBreakdown ?? [])
@@ -213,6 +224,53 @@ export function normalize(d: ScanResult): ScanResult {
   const itemSum = d.items.reduce((a, i) => a + (i.amount || 0), 0);
   if (d.total != null && itemSum > 0 && Math.abs(itemSum - d.total) > Math.max(1, d.total * 0.15) && Math.abs(itemSum - (d.totalBase ?? 0)) > Math.max(1, d.total * 0.15))
     d.warnings.push("Součet položek neodpovídá celkové částce – položky můžou být neúplné.");
+  return d;
+}
+
+/**
+ * Kurz ČNB k datu (Kč za jednotku měny). Kurzovní lístek vychází jen
+ * v pracovní dny, tak se zkouší i pár dní zpět.
+ */
+export async function cnbRate(currency: string, day: Date): Promise<{ rate: number; date: string } | null> {
+  const code = currency.toUpperCase();
+  if (!code || code === "CZK") return null;
+  for (let back = 0; back < 6; back++) {
+    const d = new Date(day.getTime() - back * 86400000).toISOString().slice(0, 10);
+    try {
+      const res = await fetch(`https://api.cnb.cz/cnbapi/exrates/daily?date=${d}&lang=CZ`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const j = (await res.json()) as { rates?: { currencyCode?: string; rate?: number; amount?: number; validFor?: string }[] };
+      const row = j.rates?.find((r) => r.currencyCode?.toUpperCase() === code);
+      if (row?.rate) return { rate: row.rate / (row.amount || 1), date: row.validFor ?? d };
+    } catch {
+      // síť nevyšla – zkusíme starší den
+    }
+  }
+  return null;
+}
+
+/** Doplní kurz k cizí měně: přednost má doklad, pak kurzovní lístek ČNB. */
+export async function fillExchangeRate(d: ScanResult): Promise<ScanResult> {
+  if (currencyCode(d.currency) === "CZK") return d;
+  if (d.exchangeRate) {
+    d.rateNote = "kurz z dokladu";
+    return d;
+  }
+  if (d.totalCzk && d.total) {
+    d.exchangeRate = Math.round((d.totalCzk / d.total) * 10000) / 10000;
+    d.rateNote = "dopočteno z částky v Kč na dokladu";
+    return d;
+  }
+  const day = new Date(d.taxDate ?? d.issueDate ?? new Date().toISOString().slice(0, 10));
+  const cnb = await cnbRate(d.currency, isNaN(day.getTime()) ? new Date() : day);
+  if (cnb) {
+    d.exchangeRate = cnb.rate;
+    d.rateNote = `kurz ČNB ${new Date(cnb.date).toLocaleDateString("cs-CZ")}`;
+    if (d.total != null) d.totalCzk = Math.round(d.total * cnb.rate * 100) / 100;
+  }
   return d;
 }
 

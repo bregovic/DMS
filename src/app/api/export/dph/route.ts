@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { amountCzk, vatTotalsCzk } from "@/lib/vat";
 
 /**
  * CSV podkladu pro DPH: doklady období podle DUZP (základ, daň, sazby, DIČ,
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
       taxDate: true,
       docNumber: true,
       vatBase: true,
+      exchangeRate: true,
       vatAmount: true,
       vatBreakdown: true,
       customerName: true,
@@ -75,6 +77,7 @@ export async function GET(req: Request) {
       taxDate: true,
       docNumber: true,
       vatBase: true,
+      exchangeRate: true,
       vatAmount: true,
       vatBreakdown: true,
       supplierIco: true,
@@ -100,6 +103,10 @@ export async function GET(req: Request) {
       "sazby",
       "celkem",
       "mena",
+      "kurz",
+      "zaklad_czk",
+      "dan_czk",
+      "celkem_czk",
       "oddil_kh",
       "do_dph",
       "nazev",
@@ -110,7 +117,8 @@ export async function GET(req: Request) {
     const rates = ((e.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [])
       .map((r) => `${r.rate}%: ${r.base}/${r.vat}`)
       .join(" | ");
-    const kh = !e.deductible ? "" : Number(e.amount) >= KH_LIMIT && dic ? "B.2" : "B.3";
+    const kh = !e.deductible ? "" : amountCzk(e) >= KH_LIMIT && dic ? "B.2" : "B.3";
+    const czk = vatTotalsCzk(e);
     lines.push(
       row([
         "prijaty",
@@ -126,6 +134,10 @@ export async function GET(req: Request) {
         rates,
         Number(e.amount).toFixed(2),
         e.currency,
+        e.currency === "CZK" ? "" : String(e.exchangeRate ?? ""),
+        czk.base.toFixed(2),
+        czk.vat.toFixed(2),
+        amountCzk(e).toFixed(2),
         kh,
         e.deductible ? "ano" : "ne",
         e.title,
@@ -137,7 +149,8 @@ export async function GET(req: Request) {
     const rates = ((i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [])
       .map((r) => `${r.rate}%: ${r.base}/${r.vat}`)
       .join(" | ");
-    const kh = !i.taxable ? "" : Number(i.amount) >= KH_LIMIT && i.customerDic ? "A.4" : "A.5";
+    const kh = !i.taxable ? "" : amountCzk(i) >= KH_LIMIT && i.customerDic ? "A.4" : "A.5";
+    const czk = vatTotalsCzk(i);
     lines.push(
       row([
         "vystaveny",
@@ -153,6 +166,10 @@ export async function GET(req: Request) {
         rates,
         Number(i.amount).toFixed(2),
         i.currency,
+        i.currency === "CZK" ? "" : String(i.exchangeRate ?? ""),
+        czk.base.toFixed(2),
+        czk.vat.toFixed(2),
+        amountCzk(i).toFixed(2),
         kh,
         i.taxable ? "ano" : "ne",
         i.title,

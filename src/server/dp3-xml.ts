@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { managedProjectIds } from "@/server/access";
+import { vatRowsCzk } from "@/lib/vat";
 
 /**
  * Přiznání k DPH (písemnost DPHDP3) z dokladů evidovaných v aplikaci.
@@ -54,6 +56,8 @@ export async function buildDp3(userId: string, period: Dp3Period, projectId?: st
     ],
   };
 
+  // spolusprávce projektu zpracovává doklady stejně jako vlastník
+  const scope = await managedProjectIds({ id: userId, email: (await prisma.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email ?? null });
   const [me, expenses, incomes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -78,25 +82,20 @@ export async function buildDp3(userId: string, period: Dp3Period, projectId?: st
       },
     }),
     prisma.expense.findMany({
-      where: { project: { ownerId: userId }, ...(projectId ? { projectId } : {}), deductible: true, ...win },
-      select: { vatBase: true, vatAmount: true, vatBreakdown: true },
+      where: { projectId: projectId ? projectId : { in: scope }, deductible: true, ...win },
+      select: { vatBase: true, vatAmount: true, vatBreakdown: true, currency: true, exchangeRate: true },
     }),
     prisma.income.findMany({
-      where: { project: { ownerId: userId }, ...(projectId ? { projectId } : {}), taxable: true, ...win },
-      select: { vatBase: true, vatAmount: true, vatBreakdown: true },
+      where: { projectId: projectId ? projectId : { in: scope }, taxable: true, ...win },
+      select: { vatBase: true, vatAmount: true, vatBreakdown: true, currency: true, exchangeRate: true },
     }),
   ]);
   if (!me) throw new Error("Uživatel nenalezen.");
 
   const acc = () => ({ 21: { base: 0, vat: 0 }, 12: { base: 0, vat: 0 }, 0: { base: 0, vat: 0 } });
-  const add = (
-    target: ReturnType<typeof acc>,
-    rows: { rate: number; base: number; vat: number }[] | null,
-    fallbackBase: number,
-    fallbackVat: number,
-  ) => {
-    const list = rows?.length ? rows : [{ rate: fallbackVat > 0 ? 21 : 0, base: fallbackBase, vat: fallbackVat }];
-    for (const r of list) {
+  // doklady v cizí měně se do přiznání počítají přepočtené kurzem
+  const add = (target: ReturnType<typeof acc>, doc: Parameters<typeof vatRowsCzk>[0]) => {
+    for (const r of vatRowsCzk(doc, (_b, vat) => (vat > 0 ? 21 : 0))) {
       const k = Number(r.rate) >= 20 ? 21 : Number(r.rate) >= 11 ? 12 : 0;
       target[k].base += Number(r.base) || 0;
       target[k].vat += Number(r.vat) || 0;
@@ -104,8 +103,8 @@ export async function buildDp3(userId: string, period: Dp3Period, projectId?: st
   };
   const out = acc();
   const inp = acc();
-  for (const i of incomes) add(out, i.vatBreakdown as never, Number(i.vatBase ?? 0), Number(i.vatAmount ?? 0));
-  for (const e of expenses) add(inp, e.vatBreakdown as never, Number(e.vatBase ?? 0), Number(e.vatAmount ?? 0));
+  for (const i of incomes) add(out, i);
+  for (const e of expenses) add(inp, e);
 
   const taxOut = round(out[21].vat + out[12].vat);
   const deduction = round(inp[21].vat + inp[12].vat);

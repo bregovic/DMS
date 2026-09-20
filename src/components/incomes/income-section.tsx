@@ -1,8 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Plus, X, Pencil } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Paperclip, Plus, X, Pencil } from "lucide-react";
 import { createIncome, updateIncome, deleteIncome } from "@/server/actions/incomes";
+import { attachIncomeDocument } from "@/server/actions/documents";
+import { DocPreview } from "@/components/documents/doc-preview";
+import { prepareUpload } from "@/lib/client-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -23,7 +26,70 @@ export type IncomeRow = {
   category: string;
   date: string; // yyyy-mm-dd
   subProjectName: string | null;
+  /** přiložený doklad (vystavená faktura, příjmový doklad) */
+  doc?: { id: string; name: string; mimeType: string | null } | null;
 };
+
+/** Doklad u příjmu – náhled, nebo tiché tlačítko pro přiložení. */
+function IncomeDoc({
+  projectId,
+  income,
+  canManage,
+}: {
+  projectId: string;
+  income: IncomeRow;
+  canManage: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, start] = useTransition();
+  if (income.doc)
+    return (
+      <DocPreview
+        documentId={income.doc.id}
+        name={income.doc.name}
+        mimeType={income.doc.mimeType}
+        label={income.doc.name}
+        className="h-6 max-w-48 truncate border-stone-200 px-1.5 text-[11px] text-stone-500"
+      />
+    );
+  if (!canManage) return null;
+  return (
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        title="Přiložit vystavenou fakturu nebo doklad (foto i PDF)"
+        onClick={() => inputRef.current?.click()}
+        className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-stone-400 transition-colors hover:text-stone-950 disabled:opacity-60"
+      >
+        <Paperclip className="size-3" />
+        {pending ? "nahrávám…" : "doklad"}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          start(async () => {
+            try {
+              const fd = new FormData();
+              fd.set("projectId", projectId);
+              fd.set("incomeId", income.id);
+              fd.set("file", await prepareUpload(file, { doc: true }));
+              await attachIncomeDocument(fd);
+              if (inputRef.current) inputRef.current.value = "";
+            } catch (err) {
+              window.alert(err instanceof Error ? err.message : "Nahrání selhalo.");
+            }
+          });
+        }}
+      />
+    </>
+  );
+}
 
 type Editing = IncomeRow | "new" | null;
 
@@ -93,6 +159,9 @@ export function IncomeSection({
                 {i.description && (
                   <p className="mt-0.5 text-xs text-stone-500">{i.description}</p>
                 )}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <IncomeDoc projectId={projectId} income={i} canManage={canManage} />
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <span className="font-mono text-sm font-medium text-emerald-700">

@@ -421,6 +421,8 @@ model Expense {
   description String?
   amount      Decimal  @db.Decimal(12, 2)
   currency    String   @default("CZK")
+  /** Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH). */
+  exchangeRate Float?
   category    String   @default("other")
   kind        String   @default("expense") // expense | work | purchase
   status      String   @default("approved") // approved | for_approval (schvalování)
@@ -486,6 +488,8 @@ model Income {
   description  String?
   amount       Decimal  @db.Decimal(12, 2)
   currency     String   @default("CZK")
+  /** Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH). */
+  exchangeRate Float?
   category     String   @default("other") // dotace | vklad | prodej | refundace | other
   date         DateTime @default(now())
   // Daňový doklad (vystavená faktura z vytěžení): číslo, DUZP, rozpis DPH, odběratel

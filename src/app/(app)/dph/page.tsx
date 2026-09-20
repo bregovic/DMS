@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
+import { managedProjectIds } from "@/server/access";
 import { prisma } from "@/lib/prisma";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
 import { buildDp3 } from "@/server/dp3-xml";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { amountCzk, rateMissing, vatRowsCzk, vatTotalsCzk } from "@/lib/vat";
 
 /**
  * Podklad pro DPH (#doklady): z vytěžených dokladů sečte přijatá zdanitelná
@@ -44,16 +46,16 @@ export default async function VatPage({
   const [from, to, periodLabel] = periodRange(period, year);
   const projectId = sp?.project || "";
 
+  const managedIds = await managedProjectIds(user);
   const projects = await prisma.project.findMany({
-    where: { ownerId: user.id },
+    where: { id: { in: managedIds } },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
 
   const expenses = await prisma.expense.findMany({
     where: {
-      project: { ownerId: user.id },
-      ...(projectId ? { projectId } : {}),
+      projectId: projectId ? projectId : { in: managedIds },
       OR: [
         { taxDate: { gte: from, lt: to } },
         { taxDate: null, date: { gte: from, lt: to }, vatAmount: { not: null } },
@@ -71,6 +73,7 @@ export default async function VatPage({
       vatBase: true,
       vatAmount: true,
       vatBreakdown: true,
+      exchangeRate: true,
       supplierIco: true,
       supplierDic: true,
       deductible: true,
@@ -83,8 +86,7 @@ export default async function VatPage({
   // vystavené doklady (uskutečněná plnění)
   const incomes = await prisma.income.findMany({
     where: {
-      project: { ownerId: user.id },
-      ...(projectId ? { projectId } : {}),
+      projectId: projectId ? projectId : { in: managedIds },
       taxable: true,
       OR: [
         { taxDate: { gte: from, lt: to } },
@@ -103,6 +105,7 @@ export default async function VatPage({
       vatBase: true,
       vatAmount: true,
       vatBreakdown: true,
+      exchangeRate: true,
       customerName: true,
       customerDic: true,
       project: { select: { id: true, name: true } },
@@ -111,9 +114,7 @@ export default async function VatPage({
   const issued = incomes.filter((i) => i.vatAmount != null || i.vatBase != null);
   const outRate = new Map<number, { base: number; vat: number; count: number }>();
   for (const i of issued) {
-    const rws = (i.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
-    const list = rws.length ? rws : [{ rate: 0, base: Number(i.vatBase ?? 0), vat: Number(i.vatAmount ?? 0) }];
-    for (const r of list) {
+    for (const r of vatRowsCzk(i)) {
       const g = outRate.get(r.rate) ?? { base: 0, vat: 0, count: 0 };
       g.base += Number(r.base);
       g.vat += Number(r.vat);
@@ -122,10 +123,10 @@ export default async function VatPage({
     }
   }
 
-  const a4 = issued.filter((i) => Number(i.amount) >= KH_LIMIT && i.customerDic);
-  const a5 = issued.filter((i) => !(Number(i.amount) >= KH_LIMIT && i.customerDic));
+  const a4 = issued.filter((i) => amountCzk(i) >= KH_LIMIT && i.customerDic);
+  const a5 = issued.filter((i) => !(amountCzk(i) >= KH_LIMIT && i.customerDic));
   const a5Sum = a5.reduce(
-    (a, i) => ({ base: a.base + Number(i.vatBase ?? 0), vat: a.vat + Number(i.vatAmount ?? 0) }),
+    (a, i) => ({ base: a.base + vatTotalsCzk(i).base, vat: a.vat + vatTotalsCzk(i).vat }),
     { base: 0, vat: 0 },
   );
 
@@ -147,9 +148,7 @@ export default async function VatPage({
   // souhrn po sazbách
   const byRate = new Map<number, { base: number; vat: number; count: number }>();
   for (const e of taxed) {
-    const rows = (e.vatBreakdown as { rate: number; base: number; vat: number }[] | null) ?? [];
-    const list = rows.length ? rows : [{ rate: 0, base: Number(e.vatBase ?? 0), vat: Number(e.vatAmount ?? 0) }];
-    for (const r of list) {
+    for (const r of vatRowsCzk(e)) {
       const g = byRate.get(r.rate) ?? { base: 0, vat: 0, count: 0 };
       g.base += Number(r.base);
       g.vat += Number(r.vat);
@@ -162,10 +161,10 @@ export default async function VatPage({
 
   // kontrolní hlášení: B.2 jednotlivě, B.3 souhrnně
   const dicOf = (e: (typeof taxed)[number]) => e.supplierDic ?? e.vendor?.dic ?? null;
-  const b2 = taxed.filter((e) => Number(e.amount) >= KH_LIMIT && dicOf(e));
-  const b3 = taxed.filter((e) => !(Number(e.amount) >= KH_LIMIT && dicOf(e)));
+  const b2 = taxed.filter((e) => amountCzk(e) >= KH_LIMIT && dicOf(e));
+  const b3 = taxed.filter((e) => !(amountCzk(e) >= KH_LIMIT && dicOf(e)));
   const b3Sum = b3.reduce(
-    (a, e) => ({ base: a.base + Number(e.vatBase ?? 0), vat: a.vat + Number(e.vatAmount ?? 0) }),
+    (a, e) => ({ base: a.base + vatTotalsCzk(e).base, vat: a.vat + vatTotalsCzk(e).vat }),
     { base: 0, vat: 0 },
   );
 
@@ -178,7 +177,8 @@ export default async function VatPage({
     if (!e.docNumber) miss.push("číslo dokladu");
     if (!e.taxDate) miss.push("DUZP");
     if (e.vatBase == null || e.vatAmount == null) miss.push("základ nebo daň");
-    if (e.currency !== "CZK") miss.push(`měna ${e.currency}`);
+    if (rateMissing(e)) miss.push(`měna ${e.currency} bez kurzu – doplň kurz u výdaje`);
+    else if (e.currency !== "CZK") miss.push(`měna ${e.currency}, přepočteno kurzem ${e.exchangeRate}`);
     const key = `${e.supplierIco ?? e.vendor?.ico ?? "?"}|${e.docNumber ?? ""}`;
     if (e.docNumber && seen.has(key)) miss.push("stejné číslo dokladu už v období je");
     if (e.docNumber) seen.set(key, e.id);

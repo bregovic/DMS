@@ -14,6 +14,42 @@ import { emlSummary, parseEmlHeader } from "@/lib/eml";
 // Server actions mají strop 15 MB na odeslání (next.config) – soubor do 14 MB se vejde.
 const MAX_UPLOAD = 14 * 1024 * 1024;
 
+/** Připojí doklad k příjmu (vystavená faktura, příjmový doklad). */
+export async function attachIncomeDocument(formData: FormData) {
+  const user = await requireUser();
+  const projectId = String(formData.get("projectId"));
+  const incomeId = String(formData.get("incomeId"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
+  if (file.size > MAX_UPLOAD) throw new Error("Soubor je větší než 14 MB.");
+
+  const role = await getProjectRole(projectId, user);
+  if (!isManager(role)) throw new Error("Nemáš oprávnění.");
+  const income = await prisma.income.findFirst({ where: { id: incomeId, projectId }, select: { id: true } });
+  if (!income) throw new Error("Příjem nenalezen.");
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  if (!project) throw new Error("Projekt nenalezen.");
+
+  const docType = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name) ? "invoice" : "receipt";
+  const key = await storage.save(Buffer.from(await file.arrayBuffer()), file.name, `${project.ownerId}/${projectId}/${docType}`);
+  const doc = await prisma.document.create({
+    data: {
+      projectId,
+      fileName: key,
+      originalName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      type: docType,
+      uploadedById: user.id,
+    },
+    select: { id: true },
+  });
+  await prisma.income.update({ where: { id: incomeId }, data: { documentId: doc.id } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/doklady");
+  return { documentId: doc.id };
+}
+
 /** Připojí sken k existující položce (výdaji). Owner ke všem, aktivní dodavatel jen ke svým. */
 export async function attachExpenseScan(formData: FormData) {
   const user = await requireUser();

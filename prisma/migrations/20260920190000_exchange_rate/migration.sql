@@ -1,0 +1,2 @@
+ALTER TABLE "dms"."Expense" ADD COLUMN "exchangeRate" DOUBLE PRECISION;
+ALTER TABLE "dms"."Income" ADD COLUMN "exchangeRate" DOUBLE PRECISION;

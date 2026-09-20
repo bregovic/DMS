@@ -19,6 +19,25 @@ const projectInclude = {
   expenses: { select: { amount: true, createdById: true } },
 };
 
+/**
+ * Projekty, které uživatel spravuje – vlastní, nebo je v nich spolusprávce.
+ * Podle toho se řídí moduly Doklady a DPH: spolusprávce doklady projektu vidí
+ * a zpracovává, dodavatel ne.
+ */
+export async function managedProjectIds(user: SessionUser): Promise<string[]> {
+  const email = user.email?.toLowerCase() ?? null;
+  const [owned, mems] = await Promise.all([
+    prisma.project.findMany({ where: { ownerId: user.id }, select: { id: true } }),
+    email
+      ? prisma.projectMembership.findMany({
+          where: { email: { equals: email, mode: "insensitive" }, role: "member" },
+          select: { projectId: true },
+        })
+      : Promise.resolve([] as { projectId: string }[]),
+  ]);
+  return [...new Set([...owned.map((p) => p.id), ...mems.map((m) => m.projectId)])];
+}
+
 /** Projekty, ke kterým má uživatel přístup: vlastní + projektové i subprojektové členství. */
 export async function listProjectsForUser(user: SessionUser) {
   const email = user.email?.toLowerCase() ?? null;

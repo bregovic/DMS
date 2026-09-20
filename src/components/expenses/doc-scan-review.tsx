@@ -73,6 +73,7 @@ export function DocScanReview({
         dueDate: r.dueDate ?? "",
         variableSymbol: r.variableSymbol ?? "",
         currency: r.currency || "CZK",
+        exchangeRate: String(r.exchangeRate ?? ""),
         total: String(r.total ?? ""),
         vatBase: String(r.totalBase ?? ""),
         vatAmount: String(r.totalVat ?? ""),
@@ -114,6 +115,9 @@ export function DocScanReview({
   }, [open, scan?.status]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  // doklad v cizí měně: do DPH se počítá přepočet kurzem (z dokladu nebo ČNB)
+  const foreign = (form.currency || "CZK").toUpperCase() !== "CZK";
+  const rate = Number(String(form.exchangeRate ?? "").replace(",", ".")) || 0;
   const [force, setForce] = useState(false);
   const rowsTotal = rows.reduce((a, r) => a + r.base + r.vat, 0);
 
@@ -307,6 +311,12 @@ export function DocScanReview({
                 rows.length > 0 ? (
                   <span className="text-xs text-stone-500">
                     rozpis celkem {formatCurrency(rowsTotal, form.currency || "CZK")}
+                    {foreign && rate > 0 && (
+                      <span className="ml-2 text-stone-500">
+                        · v Kč {formatCurrency(rowsTotal * rate)} (základ {formatCurrency(rows.reduce((a, r) => a + r.base, 0) * rate)}, daň{" "}
+                        {formatCurrency(rows.reduce((a, r) => a + r.vat, 0) * rate)})
+                      </span>
+                    )}
                   </span>
                 ) : null
               }
@@ -346,6 +356,17 @@ export function DocScanReview({
                 <Field label="Měna" htmlFor="ds-cur">
                   <input id="ds-cur" className={input} value={form.currency ?? "CZK"} onChange={(e) => set("currency", e.target.value)} />
                 </Field>
+                {foreign && (
+                  <Field label="Kurz (Kč za 1)" htmlFor="ds-rate" hint={scan.result?.rateNote ?? undefined}>
+                    <input
+                      id="ds-rate"
+                      inputMode="decimal"
+                      className={input}
+                      value={form.exchangeRate ?? ""}
+                      onChange={(e) => set("exchangeRate", e.target.value)}
+                    />
+                  </Field>
+                )}
                 <Field label="VS" htmlFor="ds-vs">
                   <input id="ds-vs" className={input} value={form.variableSymbol ?? ""} onChange={(e) => set("variableSymbol", e.target.value)} />
                 </Field>
