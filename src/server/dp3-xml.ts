@@ -95,7 +95,7 @@ export async function buildDp3(userId: string, period: Dp3Period, projectId?: st
   const acc = () => ({ 21: { base: 0, vat: 0 }, 12: { base: 0, vat: 0 }, 0: { base: 0, vat: 0 } });
   // doklady v cizí měně se do přiznání počítají přepočtené kurzem
   const add = (target: ReturnType<typeof acc>, doc: Parameters<typeof vatRowsCzk>[0]) => {
-    for (const r of vatRowsCzk(doc, (_b, vat) => (vat > 0 ? 21 : 0))) {
+    for (const r of vatRowsCzk(doc)) {
       const k = Number(r.rate) >= 20 ? 21 : Number(r.rate) >= 11 ? 12 : 0;
       target[k].base += Number(r.base) || 0;
       target[k].vat += Number(r.vat) || 0;

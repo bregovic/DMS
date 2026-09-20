@@ -21,6 +21,19 @@ type Doc = {
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/**
+ * Sazba dopočtená z poměru daně a základu – použije se u dokladu, který nemá
+ * uložený rozpis po sazbách (starší doklady, ruční zápis). Sedí-li poměr na
+ * zákonnou sazbu, vezme se ta; jinak se vrátí, co doklad opravdu říká, ať je
+ * v přehledu vidět, že je něco divně.
+ */
+export function impliedRate(base: number, vat: number): number {
+  if (!(vat > 0) || !(base > 0)) return 0;
+  const r = (vat / base) * 100;
+  for (const legal of [21, 12]) if (Math.abs(r - legal) <= 1.5) return legal;
+  return Math.round(r * 10) / 10;
+}
+
 /** Kurz dokladu (Kč za jednotku měny); 1 u korunových i u chybějícího kurzu. */
 export function docRate(doc: Doc): number {
   const cur = (doc.currency ?? "CZK").toUpperCase();
@@ -40,15 +53,19 @@ export function amountCzk(doc: Doc): number {
   return round2(num(doc.amount) * docRate(doc));
 }
 
-/** Rozpis DPH dokladu v korunách; bez rozpisu jeden řádek ze souhrnu. */
-export function vatRowsCzk(doc: Doc, fallbackRate?: (base: number, vat: number) => number): VatRow[] {
+/**
+ * Rozpis DPH dokladu v korunách. Když doklad rozpis nemá, vznikne jeden řádek
+ * ze souhrnu a sazba se dopočítá z poměru daně a základu (dřív padal do 0 %,
+ * takže se doklad v přehledu tvářil jako osvobozený).
+ */
+export function vatRowsCzk(doc: Doc): VatRow[] {
   const rate = docRate(doc);
   const rows = (doc.vatBreakdown as VatRow[] | null) ?? [];
   const list = rows.length
     ? rows
     : [
         {
-          rate: fallbackRate ? fallbackRate(num(doc.vatBase), num(doc.vatAmount)) : 0,
+          rate: impliedRate(num(doc.vatBase), num(doc.vatAmount)),
           base: num(doc.vatBase),
           vat: num(doc.vatAmount),
         },

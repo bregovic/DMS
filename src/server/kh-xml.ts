@@ -134,7 +134,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
 
   for (const e of taxed) {
     const dic = (e.supplierDic ?? e.vendor?.dic ?? "").replace(/\s/g, "").toUpperCase();
-    const list = vatRowsCzk(e, () => 21);
+    const list = vatRowsCzk(e);
     const slots = empty();
     for (const r of list) {
       const s = rateSlot(Number(r.rate));
@@ -158,7 +158,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
   for (const i of incomes) {
     if (i.vatAmount == null && i.vatBase == null) continue;
     const dic = (i.customerDic ?? "").replace(/\s/g, "").toUpperCase();
-    const list = vatRowsCzk(i, () => 21);
+    const list = vatRowsCzk(i);
     const slots = empty();
     for (const r of list) {
       const sl = rateSlot(Number(r.rate));
