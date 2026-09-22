@@ -165,6 +165,18 @@ export async function applyExtraction(formData: FormData) {
       ).id;
   }
 
+  // Zaškrtnutá část bez vybrané žádanky je nejčastější zádrhel – radši
+  // řekneme která, než obecné „vyber aspoň jednu".
+  const bezZadanky = result.parts
+    .map((p, i) => ({ p, i }))
+    .filter(({ i }) => formData.get(`use_${i}`) === "1" && !String(formData.get(`req_${i}`) || ""));
+  if (bezZadanky.length)
+    throw new Error(
+      `Vyber žádanku u ${bezZadanky.length === 1 ? "části" : "částí"}: ${bezZadanky
+        .map((x) => x.p.label)
+        .join(", ")}.`,
+    );
+
   const parts = result.parts
     .map((_, i) => i)
     .filter((i) => formData.get(`use_${i}`) === "1")
