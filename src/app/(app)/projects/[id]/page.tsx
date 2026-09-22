@@ -1646,6 +1646,9 @@ export default async function ProjectDetailPage({
                     score: o.score,
                     status: o.status,
                     selected: o.selected,
+                    bundleName: o.bundleOfferId
+                      ? (bundles.find((b) => b.offers.some((x) => x.id === o.bundleOfferId))?.name ?? "balíček")
+                      : null,
                     planTaskCount: Array.isArray(o.planTasks) ? o.planTasks.length : 0,
                     tasksCreated: !!o.tasksCreatedAt,
                     canEdit:

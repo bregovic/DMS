@@ -33,6 +33,8 @@ export type OfferView = {
   status: string;
   selected: boolean;
   canEdit: boolean;
+  /** Část společné nabídky na balíček (#40) – cena tu klidně chybí. */
+  bundleName?: string | null;
   /** Úkoly do plánu navržené AI – založí se po výběru nabídky (#33). */
   planTaskCount?: number;
   tasksCreated?: boolean;
@@ -231,6 +233,7 @@ export function OffersPanel({
                   )}
                 </p>
                 <p className="kicker mt-0.5">
+                  {o.bundleName ? `ze společné nabídky · ${o.bundleName} · ` : ""}
                   {o.deliveryDate ? `do ${formatDate(o.deliveryDate)}` : "termín neurčen"}
                   {o.rating ? ` · ${o.rating}` : ""}
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
