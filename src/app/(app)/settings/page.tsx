@@ -4,11 +4,16 @@ import { ChangePasswordForm } from "@/components/account/change-password-form";
 import { InstallButton } from "@/components/app/install-button";
 import { SettingsNav } from "@/components/account/settings-nav";
 import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
+import { NotifySettings } from "@/components/account/notify-settings";
+import { mailConfigured } from "@/lib/mailer";
 
 /** Účet: přihlášení, mobilní aplikace a moje dostupnost jako dodavatele. */
 export default async function SettingsPage() {
   const user = await requireUser();
-  const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { passwordHash: true, notifyByEmail: true, notifyEmail: true },
+  });
   const hasPassword = Boolean(dbUser?.passwordHash);
 
   // Dodavatelé navázaní na e-mail uživatele (uživatel je zároveň dodavatelem)
@@ -36,6 +41,20 @@ export default async function SettingsPage() {
           </p>
         )}
         <ChangePasswordForm hasPassword={hasPassword} />
+      </section>
+
+      <section className="mt-12">
+        <h2 className="kicker mb-2">Oznámení</h2>
+        <p className="mb-4 max-w-sm text-sm text-stone-500">
+          Přidělený úkol, výdaj od ostatních, připomínky a žádosti o úhradu chodí do zvonečku.
+          Můžou chodit i na e-mail.
+        </p>
+        <NotifySettings
+          enabled={!!dbUser?.notifyByEmail}
+          address={dbUser?.notifyEmail ?? null}
+          loginEmail={user.email ?? null}
+          configured={mailConfigured()}
+        />
       </section>
 
       <section className="mt-12">

@@ -24,9 +24,11 @@
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "html2canvas-pro": "^2.4.3",
+    "imapflow": "^2.0.5",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "lucide-react": "^1.17.0",
+    "mailparser": "^3.9.28",
     "next": "16.2.7",
     "next-auth": "^5.0.0-beta.31",
     "pg": "^8.21.0",
@@ -35,6 +37,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
+    "resend": "^6.28.1",
     "tailwind-merge": "^3.6.0",
     "word-extractor": "^1.0.4",
     "zod": "^4.4.3"
@@ -42,6 +45,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/qrcode": "^1.5.6",

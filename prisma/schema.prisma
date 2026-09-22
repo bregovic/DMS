@@ -51,6 +51,9 @@ model User {
   taxOfficeCode   String? // kód finančního úřadu (c_ufo)
   taxOfficeBranch String? // územní pracoviště (c_pracufo)
   remindersAt    DateTime? // kdy se naposledy generovaly připomínky
+  /** Posílat oznámení i e-mailem (#41). Prázdná adresa = přihlašovací e-mail. */
+  notifyByEmail  Boolean   @default(false)
+  notifyEmail    String?
   notifications  Notification[]
 
   accounts          Account[]
@@ -71,6 +74,7 @@ model User {
   catalogWishes     CatalogWish[] @relation("CatalogWishOwner")
   packages          Package[]    @relation("PackageOwner")
   taxFilings        TaxFiling[]  @relation("TaxFilingUser")
+  inboundMails      InboundMail[] @relation("InboundMailOwner")
 }
 
 model Account {
@@ -905,6 +909,57 @@ model Notification {
 
   @@unique([userId, dedupeKey])
   @@index([userId, readAt])
+}
+
+// ---------------------------------------------------------------------------
+// Doručená pošta (#41): přeposlané nabídky a faktury. E-mail i přílohy se
+// uloží do vstupní složky, nic se nezakládá samo – zařazení potvrzuje člověk.
+// ---------------------------------------------------------------------------
+
+model InboundMail {
+  id          String   @id @default(cuid())
+  /** Message-ID z hlavičky – tentýž e-mail se nenačte dvakrát. */
+  messageId   String   @unique
+  fromName    String?
+  fromAddress String
+  subject     String
+  receivedAt  DateTime
+  bodyText    String?
+  /** nova | zarazena | odmitnuta | chyba */
+  status      String   @default("nova")
+  /** Návrh zařazení z obsahu (potvrzuje uživatel). */
+  projectId   String?
+  requestId   String?
+  suggestion  Json? // { projectId, requestId, kind, confidence, reason }
+  note        String? // co se stalo – i do zprávy o zpracování
+  /** Původní .eml v úložišti (klíč), ať je vidět celý originál. */
+  rawKey      String?
+  ownerId     String // komu pošta patří (majitel schránky)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User                @relation("InboundMailOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  attachments InboundAttachment[]
+
+  @@index([ownerId, status])
+  @@index([receivedAt])
+}
+
+model InboundAttachment {
+  id           String  @id @default(cuid())
+  mailId       String
+  fileName     String // klíč v úložišti
+  originalName String
+  mimeType     String
+  size         Int
+  /** Co to je podle rozpoznání: offer | invoice | technical | other */
+  kind         String  @default("other")
+  /** Po zařazení odkaz na založený dokument. */
+  documentId   String?
+
+  mail InboundMail @relation(fields: [mailId], references: [id], onDelete: Cascade)
+
+  @@index([mailId])
 }
 
 // Faktura / žádost o úhradu vykázané práce (dodavatel → vlastník projektu).

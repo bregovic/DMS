@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { REQUEST_HANDLED_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { mailTemplate, para, sendMail } from "@/lib/mailer";
 
 /**
  * Oznámení (zvoneček v hlavičce). Interní modul – volá se ze serverových
@@ -16,7 +17,7 @@ type N = { kind: string; title: string; body?: string | null; href?: string | nu
 export async function notifyUsers(userIds: string[], n: N) {
   const ids = [...new Set(userIds.filter(Boolean))];
   if (!ids.length) return;
-  await prisma.notification
+  const created = await prisma.notification
     .createMany({
       data: ids.map((userId) => ({
         userId,
@@ -29,7 +30,36 @@ export async function notifyUsers(userIds: string[], n: N) {
       })),
       skipDuplicates: true,
     })
-    .catch(() => {});
+    .catch(() => null);
+  // dedupeKey zahodil duplicity – pak už není co posílat (připomínky by jinak
+  // chodily každý den znovu).
+  if (created && created.count > 0) await emailNotification(ids, n);
+}
+
+/**
+ * Oznámení i e-mailem, komu si to zapnul v Nastavení (#41). Odeslání nesmí
+ * shodit akci, kvůli které vzniklo – případná chyba se jen spolkne.
+ */
+async function emailNotification(userIds: string[], n: N) {
+  const users = await prisma.user
+    .findMany({
+      where: { id: { in: userIds }, notifyByEmail: true },
+      select: { id: true, email: true, notifyEmail: true },
+    })
+    .catch(() => []);
+  if (!users.length) return;
+  const base = process.env.APP_URL || "https://dokumenty.up.railway.app";
+  const { html, text } = mailTemplate({
+    title: n.title,
+    lines: n.body ? [para(n.body)] : [],
+    action: n.href ? { label: "Otevřít v DMS", href: `${base}${n.href}` } : undefined,
+  });
+  await Promise.all(
+    users.map((u) => {
+      const to = u.notifyEmail || u.email;
+      return to ? sendMail({ to, subject: `DMS – ${n.title}`, html, text }).catch(() => undefined) : undefined;
+    }),
+  );
 }
 
 async function usersByEmail(emails: string[]) {
