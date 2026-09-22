@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, Mail, Paperclip, RefreshCw, X } from "lucide-react";
-import { deleteMail, dismissMail, fileMail, projectOptions, runMailbox } from "@/server/actions/inbound";
+import { Check, Download, Mail, Paperclip, RefreshCw, Sparkle, X } from "lucide-react";
+import { deleteMail, dismissMail, fileMail, projectOptions, resuggestMail, runMailbox } from "@/server/actions/inbound";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,13 @@ const KINDS = [
 ];
 
 const kindLabel = (k: string) => KINDS.find((x) => x.value === k)?.label ?? "Ostatní";
+/** Server actions berou FormData – tohle ušetří psaní u akcí z tlačítka. */
+function formDataOf(fields: Record<string, string>) {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  return fd;
+}
+
 const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} kB`;
 
 const selectClass =
@@ -308,6 +315,22 @@ export function MailInbox({
   const [pending, start] = useTransition();
   const active = mails.find((m) => m.id === open) ?? null;
 
+  const resuggest = (id: string) =>
+    start(async () => {
+      setMsg(null);
+      try {
+        const r = await resuggestMail(formDataOf({ mailId: id }));
+        setMsg(
+          r.requests === 0
+            ? "Nabídka nesedí na žádnou otevřenou žádanku."
+            : `Navrženo ${r.requests} ${r.requests === 1 ? "žádanka" : r.requests < 5 ? "žádanky" : "žádanek"}.`,
+        );
+        router.refresh();
+      } catch (e) {
+        setMsg(e instanceof Error ? e.message : "Přepočet návrhu selhal.");
+      }
+    });
+
   const fetchNow = () =>
     start(async () => {
       setMsg(null);
@@ -414,6 +437,16 @@ export function MailInbox({
                       >
                         <Check className="size-3" />
                         Zařadit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => resuggest(m.id)}
+                        disabled={pending}
+                        title="Spočítat návrh žádanek znovu (např. když mezitím přibyly)"
+                        className="inline-flex cursor-pointer items-center gap-1 border border-stone-300 px-2 py-1 text-[11px] text-stone-600 hover:border-stone-950 disabled:opacity-50"
+                      >
+                        <Sparkle className="size-3" />
+                        Navrhnout znovu
                       </button>
                       <form action={dismissMail}>
                         <input type="hidden" name="mailId" value={m.id} />

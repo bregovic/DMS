@@ -8,7 +8,8 @@ import { storage } from "@/lib/storage";
 import { getProjectRole, isManager } from "@/server/access";
 import { requestFolder } from "@/server/document-files";
 import { createExtraction, extractable, runExtraction } from "@/server/extraction";
-import { ingestMailbox, reportIngest } from "@/server/inbound";
+import { ingestMailbox, reportIngest, suggestRouting } from "@/server/inbound";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * Doručená pošta (#41) – zařazení přeposlané pošty do evidence.
@@ -232,6 +233,64 @@ export async function fileMail(formData: FormData) {
   revalidatePath("/posta");
   revalidatePath(`/projects/${projectId}`);
   return { documents: picked.length, extracting: docIds.length, bundled: platne.length > 1 };
+}
+
+/**
+ * Přepočítat návrh zařazení u už uložené zprávy. Hodí se, když mezitím
+ * přibyly žádanky – nebo když se zlepšilo samo rozpoznávání a stará pošta
+ * má návrh z dřívějška.
+ */
+export async function resuggestMail(formData: FormData) {
+  const { mail } = await mailCtx(String(formData.get("mailId")));
+  const row = await prisma.inboundMail.findUnique({
+    where: { id: mail.id },
+    select: {
+      id: true,
+      ownerId: true,
+      subject: true,
+      fromName: true,
+      fromAddress: true,
+      bodyText: true,
+      receivedAt: true,
+      projectId: true,
+      subProjectId: true,
+      note: true,
+      attachments: { select: { originalName: true, mimeType: true, size: true } },
+    },
+  });
+  if (!row) throw new Error("Zpráva nenalezena.");
+
+  const suggestion = await suggestRouting(
+    {
+      messageId: row.id,
+      fromName: row.fromName,
+      fromAddress: row.fromAddress,
+      subject: row.subject,
+      receivedAt: row.receivedAt,
+      bodyText: row.bodyText,
+      attachments: row.attachments.map((a) => ({
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: a.size,
+        content: Buffer.alloc(0), // k návrhu stačí názvy příloh
+      })),
+    },
+    row.ownerId,
+    { projectId: row.projectId, subProjectId: row.subProjectId },
+  );
+  if (!suggestion) throw new Error("Návrh se nepodařilo spočítat – zkus to za chvíli.");
+
+  await prisma.inboundMail.update({
+    where: { id: row.id },
+    data: {
+      // Projekt ze štítku zůstává, ten určil člověk.
+      projectId: row.projectId ?? suggestion.projectId,
+      requestId: suggestion.requestId,
+      suggestion: suggestion as unknown as Prisma.InputJsonValue,
+    },
+  });
+  revalidatePath("/posta");
+  return { requests: suggestion.requestIds.length };
 }
 
 export async function dismissMail(formData: FormData) {

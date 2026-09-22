@@ -174,7 +174,7 @@ async function routingContext(ownerId: string, forced?: { projectId?: string | n
 }
 
 /** Návrh zařazení. Když AI není k dispozici, vrátí prázdný návrh – není to chyba. */
-async function suggestRouting(
+export async function suggestRouting(
   mail: FetchedMail,
   ownerId: string,
   forced?: { projectId: string | null; subProjectId: string | null },
