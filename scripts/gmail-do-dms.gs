@@ -4,13 +4,14 @@
  * Skript běží pod účtem schránky, takže nepotřebuje heslo aplikace ani IMAP.
  *
  * ── Jak se to používá ──────────────────────────────────────────────────
- * Ke každému projektu v DMS si v Gmailu založíš **stejnojmenný štítek**
- * (např. „Dům", „Garáž"). Co do štítku přetáhneš, to se zpracuje – a rovnou
- * do toho projektu. Skript se na nic jiného ve schránce nepodívá, takže ho
- * jde bez obav pustit i ve vlastní běžné poště.
+ * Ke každému projektu – nebo i ke složce uvnitř projektu – si v Gmailu
+ * založíš **stejnojmenný štítek** (např. „Dům" nebo „Garáž", což je složka
+ * projektu Dům). Co do štítku přetáhneš, to se zpracuje a zařadí se tam.
+ * Skript se na nic jiného ve schránce nepodívá, takže ho jde bez obav
+ * pustit i ve vlastní běžné poště.
  *
- * Seznam projektů si skript stahuje z DMS sám. Když v DMS přibude projekt,
- * stačí v Gmailu založit štítek téhož jména – do kódu se nesahá.
+ * Seznam projektů i složek si skript stahuje z DMS sám. Když v DMS přibude
+ * projekt nebo složka, stačí založit štítek téhož jména – do kódu se nesahá.
  *
  * Štítky můžou být i vnořené („DMS/Dům"); porovnává se poslední část,
  * bez ohledu na velikost písmen a diakritiku.
@@ -22,10 +23,10 @@
  *  3. Projekt → Nastavení projektu → Vlastnosti skriptu, přidat:
  *       DMS_URL     = https://dokumenty.up.railway.app
  *       DMS_SECRET  = <hodnota CRON_SECRET ze služby DMS na Railway>
- *  4. V Gmailu založit štítky pojmenované jako projekty v DMS
+ *  4. V Gmailu založit štítky pojmenované jako projekty nebo složky v DMS
  *  5. Spustit jednou ručně `otestujSpojeni` → Google se zeptá na oprávnění
  *     (čtení Gmailu a odesílání požadavků), potvrdit; v Protokolu spuštění
- *     se vypíše, jaké projekty DMS vrátil a které štítky k nim v Gmailu jsou
+ *     se vypíše, jaká místa DMS vrátil a které štítky k nim v Gmailu jsou
  *  6. Spouštěče (ikona budíku) → Přidat spouštěč:
  *       funkce `zpracujPostu`, časový, každých 5 minut
  *
@@ -52,7 +53,7 @@ function nastaveni() {
   return { zaklad: zaklad, secret: secret };
 }
 
-/** Názvy projektů z DMS – podle nich se hledají štítky. */
+/** Názvy projektů i složek z DMS – podle nich se hledají štítky. */
 function nactiProjekty(n) {
   var odpoved = UrlFetchApp.fetch(n.zaklad + '/api/mail/projects', {
     method: 'get',
@@ -62,7 +63,9 @@ function nactiProjekty(n) {
   if (odpoved.getResponseCode() !== 200) {
     throw new Error('Seznam projektů se nepodařilo načíst: ' + odpoved.getContentText());
   }
-  return JSON.parse(odpoved.getContentText()).projects || [];
+  var j = JSON.parse(odpoved.getContentText());
+  // Štítkem může být projekt i složka uvnitř něj („Garáž" pod „Dům").
+  return (j.projects || []).concat(j.folders || []);
 }
 
 /** Štítky v Gmailu, jejichž název odpovídá některému projektu. */
@@ -87,7 +90,7 @@ function zpracujPostu() {
   var n = nastaveni();
   var stitky = najdiStitky(nactiProjekty(n));
   if (!stitky.length) {
-    Logger.log('Žádný štítek neodpovídá projektu v DMS – není co zpracovat.');
+    Logger.log('Žádný štítek neodpovídá projektu ani složce v DMS – není co zpracovat.');
     return;
   }
 
@@ -167,7 +170,7 @@ function otestujSpojeni() {
   var n = nastaveni();
   var projekty = nactiProjekty(n);
   var stitky = najdiStitky(projekty);
-  Logger.log('Projekty v DMS: ' + (projekty.join(', ') || '(žádné)'));
+  Logger.log('Projekty a složky v DMS: ' + (projekty.join(', ') || '(žádné)'));
   Logger.log('Štítky v Gmailu, které jim odpovídají: ' + (stitky.join(', ') || '(žádné)'));
 
   var chybi = projekty.filter(function (p) {

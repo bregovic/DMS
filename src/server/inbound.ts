@@ -71,25 +71,50 @@ function labelKey(s: string) {
 }
 
 /**
- * Projekt podle stejnojmenného štítku z Gmailu (#41). Uživatel přetáhne
- * e-mail pod štítek pojmenovaný jako projekt a tím určí zařazení sám –
+ * Zařazení podle stejnojmenného štítku z Gmailu (#41). Uživatel přetáhne
+ * e-mail pod štítek pojmenovaný jako projekt **nebo jako složka uvnitř
+ * projektu** („Garáž" pod projektem „Dům") a tím určí zařazení sám –
  * spolehlivěji než odhad z textu.
  *
- * Vrací i důvod, proč se projekt neurčil, ať je to vidět u zprávy:
+ * Vrací i důvod, proč se zařazení neurčilo, ať je to vidět u zprávy:
  * žádný štítek nesedí, nebo jich sedí víc a není jasné který.
  */
 async function projectFromLabels(labels: string[] | undefined, ownerId: string) {
-  if (!labels?.length) return { projectId: null as string | null, note: null as string | null };
-  const projects = await prisma.project.findMany({ where: { ownerId }, select: { id: true, name: true } });
-  const byKey = new Map(projects.map((p) => [labelKey(p.name), p]));
-  const hits = [...new Set(labels.map(labelKey))].map((k) => byKey.get(k)).filter((p) => !!p);
-  if (hits.length === 1) return { projectId: hits[0]!.id, note: `Projekt podle štítku „${hits[0]!.name}".` };
-  if (hits.length > 1)
+  const prazdne = { projectId: null as string | null, subProjectId: null as string | null, note: null as string | null };
+  if (!labels?.length) return prazdne;
+
+  const projects = await prisma.project.findMany({
+    where: { ownerId },
+    select: { id: true, name: true, subProjects: { select: { id: true, name: true } } },
+  });
+
+  type Hit = { projectId: string; subProjectId: string | null; label: string };
+  const byKey = new Map<string, Hit>();
+  for (const p of projects) {
+    byKey.set(labelKey(p.name), { projectId: p.id, subProjectId: null, label: p.name });
+    for (const sp of p.subProjects) {
+      // Projekt téhož jména má přednost před složkou.
+      const k = labelKey(sp.name);
+      if (!byKey.has(k)) byKey.set(k, { projectId: p.id, subProjectId: sp.id, label: `${p.name} / ${sp.name}` });
+    }
+  }
+
+  const hits = [...new Set(labels.map(labelKey))]
+    .map((k) => byKey.get(k))
+    .filter((h): h is Hit => !!h);
+  // Dva štítky mířící do stejného místa nejsou spor.
+  const unikatni = [...new Map(hits.map((h) => [`${h.projectId}:${h.subProjectId ?? ""}`, h])).values()];
+
+  if (unikatni.length === 1) {
+    const h = unikatni[0];
+    return { projectId: h.projectId, subProjectId: h.subProjectId, note: `Zařazeno podle štítku „${h.label}".` };
+  }
+  if (unikatni.length > 1)
     return {
-      projectId: null,
-      note: `Štítky odpovídají víc projektům (${hits.map((p) => p!.name).join(", ")}) – vyber projekt ručně.`,
+      ...prazdne,
+      note: `Štítky míří na víc míst (${unikatni.map((h) => h.label).join(", ")}) – vyber zařazení ručně.`,
     };
-  return { projectId: null, note: null };
+  return prazdne;
 }
 
 /** Kdo poštu dostane: uživatel se shodným e-mailem, jinak dodavatel → jeho majitel. */
@@ -111,14 +136,19 @@ async function resolveOwner(fromAddress: string) {
  * Projekty a otevřené poptávky majitele – podklad pro zařazení. Když je
  * projekt určený štítkem, vrátí se jen on a model řeší už jen poptávku.
  */
-async function routingContext(ownerId: string, onlyProjectId?: string | null) {
+async function routingContext(ownerId: string, forced?: { projectId?: string | null; subProjectId?: string | null }) {
+  const onlyProjectId = forced?.projectId ?? null;
+  const onlySubProjectId = forced?.subProjectId ?? null;
   const projects = await prisma.project.findMany({
     where: { ownerId, ...(onlyProjectId ? { id: onlyProjectId } : {}) },
     select: {
       id: true,
       name: true,
       requests: {
-        where: { status: { notIn: ["schvaleno", "zruseno"] } },
+        where: {
+          status: { notIn: ["schvaleno", "zruseno"] },
+          ...(onlySubProjectId ? { subProjectId: onlySubProjectId } : {}),
+        },
         select: { id: true, title: true, description: true },
         orderBy: { createdAt: "asc" },
       },
@@ -140,9 +170,13 @@ async function routingContext(ownerId: string, onlyProjectId?: string | null) {
 async function suggestRouting(
   mail: FetchedMail,
   ownerId: string,
-  forcedProjectId?: string | null,
+  forced?: { projectId: string | null; subProjectId: string | null },
 ): Promise<MailSuggestion | null> {
-  const ctx = await routingContext(ownerId, forcedProjectId);
+  let ctx = await routingContext(ownerId, forced);
+  // Složka bez otevřených poptávek by modelu nedala na výběr nic – pak se
+  // radši ptáme v rámci celého projektu.
+  if (forced?.subProjectId && ctx.every((p) => p.poptavky.length === 0))
+    ctx = await routingContext(ownerId, { projectId: forced.projectId });
   if (ctx.length === 0) return null;
   try {
     await assertBudget();
@@ -157,6 +191,9 @@ async function suggestRouting(
         {
           type: "input_text",
           text:
+            (forced?.projectId
+              ? "Projekt (a případně složka) je už určený štítkem v e-mailu – vrať jeho projectId a urči jen poptávku.\n"
+              : "") +
             `Projekty a otevřené poptávky:\n${JSON.stringify(ctx, null, 1)}\n\n` +
             `E-mail\nOd: ${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress}\n` +
             `Předmět: ${mail.subject}\n` +
@@ -225,7 +262,7 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
 
     // Štítek pojmenovaný jako projekt má přednost před odhadem z textu.
     const fromLabel = await projectFromLabels(mail.labels, owner.ownerId);
-    const suggestion = await suggestRouting(mail, owner.ownerId, fromLabel.projectId);
+    const suggestion = await suggestRouting(mail, owner.ownerId, fromLabel);
     const row = await prisma.inboundMail.create({
       data: {
         messageId: mail.messageId,
