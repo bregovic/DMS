@@ -6,8 +6,8 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { getProjectRole, isManager } from "@/server/access";
-import { requestFolder } from "@/server/document-files";
-import { createExtraction, extractable, runExtraction } from "@/server/extraction";
+import { createExtraction, runExtraction } from "@/server/extraction";
+import { fileInbound } from "@/server/inbound-file";
 import { ingestMailbox, reportIngest, suggestRouting } from "@/server/inbound";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -57,133 +57,28 @@ export async function runMailbox() {
   return { fetched: result.fetched, stored: result.stored, skipped: result.skipped.length };
 }
 
-/** Přesune soubor ze vstupní složky do cílové – ať neleží v R2 dvakrát. */
-async function moveFile(key: string, originalName: string, folder: string) {
-  const buf = await storage.read(key);
-  const newKey = await storage.save(buf, originalName, folder);
-  await storage.delete(key).catch(() => undefined);
-  return { newKey, size: buf.length };
-}
-
-/**
- * Založit z e-mailu dokumenty. Faktura a účtenka jdou mezi doklady projektu
- * (kde je čeká vytěžení), ostatní k vybrané žádance.
- */
 export async function fileMail(formData: FormData) {
   const { user, mail } = await mailCtx(String(formData.get("mailId")));
   if (mail.status === "zarazena") throw new Error("Tahle zpráva už je zařazená.");
 
   const projectId = String(formData.get("projectId") || "");
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, ownerId: true } });
-  if (!project) throw new Error("Vyber projekt.");
-  if (!isManager(await getProjectRole(project.id, user))) throw new Error("Do tohoto projektu nemáš přístup.");
+  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Do tohoto projektu nemáš přístup.");
 
-  // Nabídka od jednoho dodavatele bývá na víc věcí najednou, proto víc žádanek.
-  const requestIds = [...new Set(formData.getAll("requestIds").map(String).filter(Boolean))];
-  const platne = requestIds.length
-    ? await prisma.request.findMany({
-        where: { id: { in: requestIds }, projectId },
-        select: { id: true, title: true, subProjectId: true },
-      })
-    : [];
-  if (platne.length !== requestIds.length) throw new Error("Některá vybraná žádanka do projektu nepatří.");
-  // Hlavní žádanka nese dokument (vytěžení potřebuje na čem stát).
-  const requestId = platne[0]?.id ?? null;
-
-  const picked = mail.attachments.filter((a) => formData.get(`use_${a.id}`) === "1");
-  const withEmail = formData.get("withEmail") === "1" && !!mail.rawKey;
-  if (picked.length === 0 && !withEmail) throw new Error("Vyber aspoň jednu přílohu, nebo přilož e-mail.");
-
-  const summary = `${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress} · ${mail.subject}`;
-  const docIds: string[] = [];
-  let nabidkaDorazila = false;
-
-  // Samotný e-mail jako příloha žádanky (#32) – kontext, ze kterého nabídka přišla.
-  if (withEmail && requestId) {
-    const folder = `${requestFolder(project.ownerId, projectId, requestId)}/maily`;
-    const { newKey, size } = await moveFile(mail.rawKey!, `${mail.subject.slice(0, 60)}.eml`, folder);
-    await prisma.document.create({
-      data: {
-        projectId,
-        requestId,
-        summary: summary.slice(0, 500),
-        fileName: newKey,
-        originalName: `${mail.subject.slice(0, 60)}.eml`,
-        mimeType: "message/rfc822",
-        size,
-        type: "other",
-        uploadedById: user.id,
-      },
-    });
-    await prisma.inboundMail.update({ where: { id: mail.id }, data: { rawKey: null } });
-  }
-
-  for (const a of picked) {
-    // Typ se dá u každé přílohy přepsat – rozpoznání je jen návrh.
-    const kind = String(formData.get(`kind_${a.id}`) || a.kind);
-    const isDoc = kind === "invoice" || kind === "receipt";
-    const folder = isDoc
-      ? `${project.ownerId}/${projectId}/invoice`
-      : requestId
-        ? `${requestFolder(project.ownerId, projectId, requestId)}/nabidky`
-        : `${project.ownerId}/${projectId}/other`;
-    const { newKey, size } = await moveFile(a.fileName, a.originalName, folder);
-    const zaklad = {
-      projectId,
-      summary: summary.slice(0, 500),
-      // Soubor je v úložišti jeden; u víc žádanek na něj jen ukazuje víc
-      // záznamů. Smazání jednoho proto soubor nesmaže (viz deleteWithFiles).
-      fileName: newKey,
-      originalName: a.originalName,
-      mimeType: a.mimeType,
-      size,
-      type: isDoc ? "invoice" : kind === "offer" ? "offer" : "other",
-      uploadedById: user.id,
-    };
-    // Faktura patří mezi doklady projektu, ostatní ke všem vybraným žádankám.
-    const cile: (string | null)[] = isDoc ? [null] : platne.length ? platne.map((r) => r.id) : [null];
-    let prvni: string | null = null;
-    for (const cil of cile) {
-      const doc = await prisma.document.create({ data: { ...zaklad, requestId: cil }, select: { id: true } });
-      if (!prvni) prvni = doc.id;
-    }
-    await prisma.inboundAttachment.update({
-      where: { id: a.id },
-      data: { fileName: newKey, documentId: prvni, kind },
-    });
-    // Vytěžení stačí pustit jednou; propagační materiál se nevytěžuje.
-    if (prvni && !isDoc && kind !== "marketing" && requestId && extractable(a.mimeType, a.originalName))
-      docIds.push(prvni);
-    if (!isDoc && kind === "offer") nabidkaDorazila = true;
-  }
-
-  // Došla nabídka → žádanka se posouvá z Poptávky na Nabídku. Dál rozpracované
-  // stavy (Vyhovuje, Objednáno, Schváleno) se nevracejí zpátky.
-  if (nabidkaDorazila && platne.length)
-    await prisma.request.updateMany({
-      where: { id: { in: platne.map((r) => r.id) }, status: "poptavka" },
-      data: { status: "nabidka" },
-    });
-
-  await prisma.inboundMail.update({
-    where: { id: mail.id },
-    data: {
-      status: "zarazena",
-      projectId,
-      requestId,
-      note: [
-        `Zařazeno ${new Date().toLocaleString("cs-CZ")} – ${picked.length} příloh.`,
-        platne.length ? `Žádanky: ${platne.map((r) => r.title).join(", ")}.` : null,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    },
+  const res = await fileInbound({
+    mailId: mail.id,
+    userId: user.id,
+    projectId,
+    requestIds: [...new Set(formData.getAll("requestIds").map(String).filter(Boolean))],
+    attachments: mail.attachments
+      .filter((a) => formData.get(`use_${a.id}`) === "1")
+      .map((a) => ({ id: a.id, kind: String(formData.get(`kind_${a.id}`) || a.kind) })),
+    withEmail: formData.get("withEmail") === "1",
   });
 
   // Zpracování nabídek pustit na pozadí, jednu po druhé (limity souběhu).
-  if (docIds.length && formData.get("extract") === "1") {
+  if (res.extractable.length && formData.get("extract") === "1") {
     after(async () => {
-      for (const id of docIds) {
+      for (const id of res.extractable) {
         try {
           const ex = await createExtraction(id, user.id);
           await runExtraction(ex);
@@ -196,7 +91,7 @@ export async function fileMail(formData: FormData) {
 
   revalidatePath("/posta");
   revalidatePath(`/projects/${projectId}`);
-  return { documents: picked.length, extracting: docIds.length, requests: platne.length };
+  return { documents: res.documents, extracting: res.extractable.length, requests: res.requests.length };
 }
 
 /**
@@ -218,7 +113,6 @@ export async function resuggestMail(formData: FormData) {
       receivedAt: true,
       projectId: true,
       subProjectId: true,
-      note: true,
       attachments: { select: { id: true, fileName: true, originalName: true, mimeType: true, size: true } },
     },
   });

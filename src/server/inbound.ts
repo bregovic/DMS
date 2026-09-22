@@ -2,7 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { fetchUnseen, mailboxConfigured, type FetchedMail } from "@/lib/mailbox";
 import { mailTemplate, para, sendMail } from "@/lib/mailer";
-import { assertBudget, callModel, extractable, filePart, AI_MODEL } from "@/server/extraction";
+import {
+  assertBudget,
+  callModel,
+  createExtraction,
+  extractable,
+  filePart,
+  runExtraction,
+  AI_MODEL,
+} from "@/server/extraction";
+import { alreadyFiled, fileInbound } from "@/server/inbound-file";
+import { applyExtractionCore, matchVendor } from "@/server/extraction-apply";
+import type { ExtractionResult } from "@/server/extraction";
 import { notifyUsers } from "@/server/notify";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -272,14 +283,28 @@ export type IngestResult = {
   stored: number;
   skipped: { subject: string; reason: string }[];
   mails: { id: string; subject: string; from: string; attachments: number; suggestion: string }[];
+  /** Co se založilo samo, co čeká na potvrzení a co selhalo. */
+  filed: { subject: string; vendor: string | null; requests: string[]; offers: number; vendorCreated: boolean }[];
+  waiting: { subject: string; reason: string }[];
+  failed: { subject: string; reason: string }[];
 };
+
+/** Prázdný přehled běhu – ať ho nemusí skládat každý volající zvlášť. */
+export function emptyIngest(fetched = 0): IngestResult {
+  return { fetched, stored: 0, skipped: [], mails: [], filed: [], waiting: [], failed: [] };
+}
+
+/**
+ * Od jaké jistoty se pošta zakládá sama. Pod tím počká v Doručené poště.
+ */
+const AUTO_MIN_CONFIDENCE = Number(process.env.MAIL_AUTO_MIN_CONFIDENCE || 75);
 
 /**
  * Vybere schránku a uloží novou poštu do vstupní složky. Vrací přehled,
  * který se pak posílá zpět e-mailem.
  */
 export async function ingestMailbox(): Promise<IngestResult> {
-  const res: IngestResult = { fetched: 0, stored: 0, skipped: [], mails: [] };
+  const res = emptyIngest();
   if (!mailboxConfigured()) throw new Error("Schránka pro příjem pošty není nastavená.");
 
   const mails = await fetchUnseen();
@@ -366,6 +391,7 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
     });
 
     res.stored++;
+    await autoFile(row.id, owner.ownerId, mail, fromLabel, suggestion, res);
     res.mails.push({
       id: row.id,
       subject: mail.subject,
@@ -383,31 +409,178 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
   }
 }
 
-/** Zpráva o zpracování pošty – co dorazilo, co se uložilo a co ne. */
+/**
+ * Založit zprávu bez ptaní, když je zařazení jisté (#41).
+ *
+ * Podmínky: projekt určil štítek (tedy člověk), rozpoznání našlo aspoň
+ * jednu poptávku a je si dost jisté. Cokoli nejasného počká v Doručené
+ * poště – radši práce navíc než příloha u špatné žádanky.
+ *
+ * Nic z toho nesmí shodit příjem pošty: když zakládání selže, zpráva
+ * prostě zůstane čekat a důvod se objeví v souhrnu.
+ */
+async function autoFile(
+  mailId: string,
+  ownerId: string,
+  mail: FetchedMail,
+  fromLabel: { projectId: string | null; subProjectId: string | null },
+  suggestion: MailSuggestion | null,
+  res: IngestResult,
+) {
+  const predmet = mail.subject;
+  if (!fromLabel.projectId) {
+    res.waiting.push({ subject: predmet, reason: "štítek neurčil projekt" });
+    return;
+  }
+  if (!suggestion || suggestion.requestIds.length === 0) {
+    res.waiting.push({ subject: predmet, reason: "nelze určit žádanku" });
+    return;
+  }
+  if ((suggestion.confidence ?? 0) < AUTO_MIN_CONFIDENCE) {
+    res.waiting.push({ subject: predmet, reason: `nízká jistota zařazení (${Math.round(suggestion.confidence)} %)` });
+    return;
+  }
+
+  // Dvakrát přeposlaný e-mail je nová zpráva, ale příloha je tatáž.
+  const prilohy = await prisma.inboundAttachment.findMany({
+    where: { mailId },
+    select: { id: true, originalName: true, size: true, kind: true },
+  });
+  const nove: { id: string; kind: string }[] = [];
+  for (const a of prilohy) {
+    if (a.kind === "marketing") continue; // katalogy se nezakládají
+    const uz = await alreadyFiled(fromLabel.projectId, a.originalName, a.size);
+    if (uz) {
+      res.skipped.push({
+        subject: predmet,
+        reason: `příloha „${a.originalName}" už je založená (${uz.createdAt.toLocaleString("cs-CZ")})`,
+      });
+      continue;
+    }
+    nove.push({ id: a.id, kind: a.kind });
+  }
+  if (nove.length === 0) {
+    await prisma.inboundMail.update({
+      where: { id: mailId },
+      data: { status: "odmitnuta", note: "Přílohy už jsou v evidenci z dřívějška." },
+    });
+    return;
+  }
+
+  try {
+    const filed = await fileInbound({
+      mailId,
+      userId: ownerId,
+      projectId: fromLabel.projectId,
+      requestIds: suggestion.requestIds,
+      attachments: nove,
+      withEmail: true,
+    });
+
+    // Vytěžení a rovnou i potvrzení – dodavatel se podle nastavení zakládá.
+    let offers = 0;
+    let vendorCreated = false;
+    let vendor: string | null = suggestion.vendorName ?? null;
+    for (const docId of filed.extractable) {
+      try {
+        const exId = await createExtraction(docId, ownerId);
+        await runExtraction(exId);
+        const ex = await prisma.extraction.findUnique({
+          where: { id: exId },
+          select: { status: true, result: true, projectId: true },
+        });
+        if (ex?.status !== "ready" || !ex.result) continue;
+        const r = ex.result as unknown as ExtractionResult;
+        const known = await matchVendor(ownerId, r.vendor);
+        if (r.vendor.name) vendor = r.vendor.name;
+        const parts = r.parts
+          .map((p, i) => ({ index: i, requestId: p.requestId ?? "", price: null }))
+          .filter((x) => x.requestId);
+        if (parts.length === 0) continue;
+        const out = await applyExtractionCore({
+          extractionId: exId,
+          userId: ownerId,
+          vendorId: known?.id ?? null,
+          createVendor: true,
+          parts,
+        });
+        offers += out.offers;
+        vendorCreated = vendorCreated || out.vendorCreated;
+      } catch (err) {
+        res.failed.push({
+          subject: predmet,
+          reason: `zpracování přílohy selhalo: ${err instanceof Error ? err.message : "neznámá chyba"}`,
+        });
+      }
+    }
+
+    res.filed.push({ subject: predmet, vendor, requests: filed.requests, offers, vendorCreated });
+  } catch (err) {
+    res.failed.push({
+      subject: predmet,
+      reason: err instanceof Error ? err.message : "založení selhalo",
+    });
+  }
+}
+
+/**
+ * Zpráva o zpracování pošty: co se založilo, co čeká na potvrzení,
+ * co se přeskočilo a co selhalo. Posílá se po každém běhu, ve kterém
+ * se něco stalo.
+ */
 export async function reportIngest(result: IngestResult, to: string, baseUrl: string) {
   if (!to) return { sent: false };
+  const neco = result.filed.length + result.waiting.length + result.skipped.length + result.failed.length;
+  if (neco === 0) return { sent: false }; // nic nepřišlo, nespamovat
+
   const lines: string[] = [];
-  if (result.stored === 0 && result.skipped.length === 0) return { sent: false }; // nic nepřišlo, nespamovat
+  const sekce = (nadpis: string, radky: string[]) => {
+    if (!radky.length) return;
+    lines.push(`<b>${nadpis} (${radky.length})</b>`);
+    for (const r of radky) lines.push(para(`• ${r}`));
+  };
 
-  if (result.stored > 0) {
-    lines.push(`<b>Uloženo do Doručené pošty: ${result.stored}</b>`);
-    for (const m of result.mails)
-      lines.push(
-        para(
-          `• ${m.subject} — od ${m.from}, ${m.attachments === 0 ? "bez příloh" : `příloh: ${m.attachments}`}\n   ${m.suggestion}`,
-        ),
-      );
-  }
-  if (result.skipped.length > 0) {
-    lines.push(`<b>Nezpracováno: ${result.skipped.length}</b>`);
-    for (const s of result.skipped) lines.push(para(`• ${s.subject} — ${s.reason}`));
-  }
-  lines.push("Nic se nezaložilo samo – zařazení potvrď v DMS.");
+  sekce(
+    "Založeno",
+    result.filed.map((f) => {
+      const co = [
+        f.vendor ?? "dodavatel neurčen",
+        f.requests.length ? `→ ${f.requests.join(", ")}` : null,
+        f.offers ? `${f.offers} ${f.offers === 1 ? "nabídka" : f.offers < 5 ? "nabídky" : "nabídek"}` : "bez nabídky",
+        f.vendorCreated ? "nový dodavatel v evidenci" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return `${f.subject}\n   ${co}`;
+    }),
+  );
+  sekce(
+    "Čeká na tebe",
+    result.waiting.map((w) => `${w.subject}\n   ${w.reason}`),
+  );
+  sekce(
+    "Přeskočeno",
+    result.skipped.map((s) => `${s.subject}\n   ${s.reason}`),
+  );
+  sekce(
+    "Selhalo",
+    result.failed.map((f) => `${f.subject}\n   ${f.reason}`),
+  );
 
+  const cekajici = result.waiting.length;
   const { html, text } = mailTemplate({
-    title: `Doručená pošta: ${result.stored} ${result.stored === 1 ? "zpráva" : result.stored < 5 ? "zprávy" : "zpráv"}`,
+    title:
+      result.filed.length > 0
+        ? `Zpracováno ${result.filed.length} ${result.filed.length === 1 ? "nabídka" : result.filed.length < 5 ? "nabídky" : "nabídek"}`
+        : "Doručená pošta",
     lines,
-    action: { label: "Otevřít Doručenou poštu", href: `${baseUrl}/posta` },
+    action: cekajici
+      ? { label: "Otevřít Doručenou poštu", href: `${baseUrl}/posta` }
+      : { label: "Otevřít projekt", href: `${baseUrl}/` },
   });
-  return sendMail({ to, subject: `DMS – doručená pošta (${result.stored})`, html, text });
+  const predmet =
+    result.filed.length > 0
+      ? `DMS – zpracováno ${result.filed.length}${cekajici ? `, ${cekajici} čeká` : ""}`
+      : `DMS – doručená pošta${cekajici ? ` (${cekajici} čeká)` : ""}`;
+  return sendMail({ to, subject: predmet, html, text });
 }

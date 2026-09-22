@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
-import type { Prisma } from "@/generated/prisma/client";
 import {
   createBundleComparison,
   createComparison,
@@ -16,6 +15,7 @@ import {
   runExtraction,
   type ExtractionResult,
 } from "@/server/extraction";
+import { applyExtractionCore } from "@/server/extraction-apply";
 
 async function docCtx(documentId: string) {
   const user = await requireUser();
@@ -112,19 +112,17 @@ export async function applyExtraction(formData: FormData) {
   const id = String(formData.get("id"));
   const ex = await prisma.extraction.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, result: true, appliedParts: true, document: { select: { originalName: true } } },
+    select: { id: true, projectId: true, result: true },
   });
-  if (!ex || !ex.result) throw new Error("Návrh nenalezen.");
-  if (ex.status === "applied") throw new Error("Všechny části návrhu už jsou založené.");
-  const role = await getProjectRole(ex.projectId, user);
-  if (!isManager(role)) throw new Error("Návrh potvrzuje správce projektu.");
+  if (!ex?.result) throw new Error("Návrh nenalezen.");
+  if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Návrh potvrzuje správce projektu.");
   const project = await prisma.project.findUnique({ where: { id: ex.projectId }, select: { ownerId: true } });
   if (!project) throw new Error("Projekt nenalezen.");
   const result = ex.result as unknown as ExtractionResult;
 
-  // Dodavatel
-  let vendorId: string | null = null;
+  // Dodavatel: vybraný z evidence, nebo nový z vytěžených údajů.
   const vendorMode = String(formData.get("vendorMode") || "new");
+  let vendorId: string | null = null;
   if (vendorMode === "existing") {
     const v = await prisma.vendor.findFirst({
       where: { id: String(formData.get("vendorId") || ""), ownerId: project.ownerId },
@@ -157,109 +155,38 @@ export async function applyExtraction(formData: FormData) {
             phone: String(formData.get("vendorPhone") || "").trim() || null,
             address: result.vendor.address,
             bankAccount: result.vendor.bankAccount,
-            description: [result.vendor.contactPerson && `Kontakt: ${result.vendor.contactPerson}`, result.vendor.web]
-              .filter(Boolean)
-              .join(" · ") || null,
+            description:
+              [result.vendor.contactPerson && `Kontakt: ${result.vendor.contactPerson}`, result.vendor.web]
+                .filter(Boolean)
+                .join(" · ") || null,
           },
           select: { id: true },
         })
       ).id;
   }
 
-  // Nabídky – jen zaškrtnuté části s platnou žádankou tohoto projektu
-  const validReq = new Set(
-    (await prisma.request.findMany({ where: { projectId: ex.projectId }, select: { id: true } })).map((r) => r.id),
-  );
-  const head = [
-    result.offerNumber && `Nabídka ${result.offerNumber}`,
-    result.offerDate && `ze dne ${result.offerDate.split("-").reverse().join(".")}`,
-    result.validUntil && `platná do ${result.validUntil.split("-").reverse().join(".")}`,
-    result.paymentTerms && `· platba: ${result.paymentTerms}`,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const vybrane = result.parts
-    .map((p, i) => ({ p, i }))
-    .filter(({ i }) => formData.get(`use_${i}`) === "1" && !ex.appliedParts.includes(i))
-    .map(({ p, i }) => {
-      const requestId = String(formData.get(`req_${i}`) || "");
+  const parts = result.parts
+    .map((_, i) => i)
+    .filter((i) => formData.get(`use_${i}`) === "1")
+    .map((i) => {
       const priceRaw = String(formData.get(`price_${i}`) || "").replace(/\s/g, "").replace(",", ".");
       const price = priceRaw ? Number(priceRaw) : null;
-      return { p, i, requestId, price: price != null && !isNaN(price) ? price : null };
-    })
-    .filter((o) => validReq.has(o.requestId));
-  if (vybrane.length === 0) throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
+      return {
+        index: i,
+        requestId: String(formData.get(`req_${i}`) || ""),
+        price: price != null && !isNaN(price) ? price : null,
+      };
+    });
 
-  /**
-   * Části mířící na stejnou žádanku patří do jedné nabídky. Dodavatel často
-   * rozepíše nabídku po kusech (okno koupelna, okno ložnice…), ale poptávka
-   * je jedna – bez sloučení by u ní vznikla řada nabídek téže firmy
-   * s dílčími cenami a porovnání by ji vidělo několikrát pod cenou.
-   */
-  const skupiny = new Map<string, typeof vybrane>();
-  for (const o of vybrane) skupiny.set(o.requestId, [...(skupiny.get(o.requestId) ?? []), o]);
-
-  const soucet = (hodnoty: (number | null)[]) => {
-    const znama = hodnoty.filter((x): x is number => x != null);
-    return znama.length ? znama.reduce((a, b) => a + b, 0) : null;
-  };
-  const kc = (x: number) => `${x.toLocaleString("cs-CZ")} Kč`;
-
-  const offers = [...skupiny.entries()].map(([requestId, casti]) => {
-    const p = casti[0].p;
-    const bezDph = soucet(casti.map((x) => x.p.priceWithoutVat));
-    const sDph = soucet(casti.map((x) => x.p.priceWithVat));
-    const polozky = casti.flatMap((x) => (casti.length > 1 ? [x.p.label, ...x.p.items] : x.p.items));
-    const rozpory = [...new Set(casti.flatMap((x) => x.p.mismatches ?? []))];
-    return {
-      requestId,
-      indexy: casti.map((x) => x.i),
-      // Ručně zadaná cena má přednost; jinak součet částí (s DPH, jinak bez).
-      price: soucet(casti.map((x) => x.price)) ?? sDph ?? bezDph,
-      planTasks: casti.flatMap((x) => x.p.tasks ?? []),
-      mismatch: rozpory.length ? rozpory.join("\n") : null,
-      note: [
-        casti.length > 1 ? `${casti.length} položky nabídky sloučeny do jedné` : p.label,
-        polozky.length ? polozky.map((x) => `• ${x}`).join("\n") : null,
-        bezDph != null || sDph != null
-          ? `Celkem${bezDph != null ? ` bez DPH ${kc(bezDph)}` : ""}${sDph != null ? ` / s DPH ${kc(sDph)}` : ""}`
-          : null,
-        casti.map((x) => x.p.leadTime).find(Boolean) && `Dodání: ${casti.map((x) => x.p.leadTime).find(Boolean)}`,
-        casti.map((x) => x.p.note).filter(Boolean).join(" "),
-        [head, `(${ex.document.originalName}, zpracováno z přílohy)`].filter(Boolean).join(" "),
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
+  const res = await applyExtractionCore({
+    extractionId: ex.id,
+    userId: user.id,
+    vendorId,
+    createVendor: false,
+    parts,
   });
-
-  const applied = [...new Set([...ex.appliedParts, ...vybrane.map((o) => o.i)])];
-  const allDone = result.parts.every((_, i) => applied.includes(i));
-
-  await prisma.$transaction([
-    ...offers.map((o) =>
-      prisma.offer.create({
-        data: {
-          requestId: o.requestId,
-          extractionId: ex.id,
-          extractionPart: o.indexy[0],
-          planTasks: o.planTasks as unknown as Prisma.InputJsonValue,
-          vendorId,
-          vendorName: vendorId ? null : result.vendor.name,
-          price: o.price,
-          mismatch: o.mismatch,
-          createdById: user.id,
-          note: o.note,
-        },
-      }),
-    ),
-    prisma.extraction.update({
-      where: { id: ex.id },
-      data: { status: allDone ? "applied" : "partial", appliedParts: applied },
-    }),
-  ]);
   revalidatePath(`/projects/${ex.projectId}`);
-  return { offers: offers.length };
+  return { offers: res.offers };
 }
 
 export async function dismissExtraction(formData: FormData) {

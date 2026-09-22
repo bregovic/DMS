@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { storeMail, reportIngest, type IngestResult } from "@/server/inbound";
+import { storeMail, reportIngest, emptyIngest } from "@/server/inbound";
 import type { FetchedMail } from "@/lib/mailbox";
 
 /**
@@ -97,12 +97,12 @@ export async function POST(req: NextRequest) {
     attachments,
   };
 
-  const res: IngestResult = { fetched: 1, stored: 0, skipped: [], mails: [] };
+  const res = emptyIngest(1);
   await storeMail(mail, res);
 
-  // Zpráva o zpracování jen když se něco doopravdy uložilo nebo zadrhlo.
+  // Zpráva o zpracování jen když se něco doopravdy stalo.
   const to = process.env.MAIL_REPORT_TO;
-  if (to && (res.stored > 0 || res.skipped.length > 0))
+  if (to && (res.stored > 0 || res.skipped.length > 0 || res.failed.length > 0))
     await reportIngest(res, to, process.env.APP_URL || "https://dokumenty.up.railway.app").catch(() => {});
 
   return Response.json({
