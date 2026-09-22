@@ -30,8 +30,9 @@
  *  6. Spouštěče (ikona budíku) → Přidat spouštěč:
  *       funkce `zpracujPostu`, časový, každých 5 minut
  *
- * Zpracované zprávy dostanou štítek „DMS hotovo", takže se neposílají
- * podruhé; druhou pojistkou je Message-ID, které si DMS hlídá u sebe.
+ * Zpracovaná zpráva dostane štítek „DMS hotovo" a projektový štítek se jí
+ * sundá – ve štítku projektu tak zůstane jen to, co ještě neprošlo.
+ * Druhou pojistkou proti dvojímu odeslání je Message-ID, které si hlídá DMS.
  */
 
 /** Štítek, kterým se značí hotové zprávy. */
@@ -104,15 +105,23 @@ function zpracujPostu() {
 
   for (var i = 0; i < vlakna.length; i++) {
     var vlakno = vlakna[i];
-    var jmenaStitku = vlakno.getLabels().map(function (l) { return l.getName(); });
+    var stitkyVlakna = vlakno.getLabels();
+    var jmenaStitku = stitkyVlakna.map(function (l) { return l.getName(); });
     var zpravy = vlakno.getMessages();
     var vseOk = true;
 
     for (var j = 0; j < zpravy.length; j++) {
       if (!posliZpravu(zpravy[j], jmenaStitku, n)) vseOk = false;
     }
-    // Štítek až když prošly všechny zprávy vlákna – jinak se to zkusí znovu.
-    if (vseOk) vlakno.addLabel(hotovo);
+    // Štítky až když prošly všechny zprávy vlákna – jinak se to zkusí znovu.
+    if (vseOk) {
+      vlakno.addLabel(hotovo);
+      // Projektový štítek sundat, ať v něm zůstane jen nevyřízená pošta.
+      // Názvy míst chodí z DMS, proto se porovnávají proti nim, ne napevno.
+      for (var k = 0; k < stitkyVlakna.length; k++) {
+        if (stitky.indexOf(stitkyVlakna[k].getName()) !== -1) vlakno.removeLabel(stitkyVlakna[k]);
+      }
+    }
   }
 }
 

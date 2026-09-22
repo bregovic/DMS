@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { deleteWithFiles, bundleFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
+import { dropComparisons } from "@/server/comparisons";
 
 /**
  * Poptávkové balíčky (#40) – sdružení žádanek a společná nabídka na celek.
@@ -109,7 +110,10 @@ export async function setRequestsBundle(formData: FormData) {
     const b = await prisma.requestBundle.findFirst({ where: { id: bundleId, projectId }, select: { id: true } });
     if (!b) throw new Error("Balíček nenalezen.");
   }
+  // Složení balíčku se změnilo – porovnání za celek i u žádanek neplatí.
+  await dropComparisons({ requestIds: ids, bundleIds: bundleId ? [bundleId] : [] });
   await prisma.request.updateMany({ where: { id: { in: ids }, projectId }, data: { bundleId } });
+  await dropComparisons({ requestIds: ids });
   revalidatePath(`/projects/${projectId}`);
   return { moved: ids.length };
 }
@@ -185,6 +189,7 @@ export async function createBundleOffer(formData: FormData) {
     select: { id: true, status: true },
   });
   await syncParts(offer.id, parts, { vendorId, vendorName, status: offer.status, createdById: user.id });
+  await dropComparisons({ bundleIds: [bundle.id], requestIds: parts.map((p) => p.requestId) });
   revalidatePath(`/projects/${bundle.projectId}`);
   return { id: offer.id };
 }
@@ -227,6 +232,7 @@ export async function updateBundleOffer(formData: FormData) {
     },
   });
   await syncParts(offer.id, parts, { vendorId, vendorName, status: offer.status, createdById: user.id });
+  await dropComparisons({ bundleIds: [offer.bundleId], requestIds: parts.map((p) => p.requestId) });
   revalidatePath(`/projects/${projectId}`);
 }
 
@@ -248,6 +254,7 @@ export async function deleteBundleOffer(formData: FormData) {
     { OR: [{ bundleOfferId: offer.id }, { offer: { bundleOfferId: offer.id } }] },
     () => prisma.bundleOffer.delete({ where: { id: offer.id } }),
   );
+  await dropComparisons({ bundleIds: [offer.bundleId] });
   revalidatePath(`/projects/${projectId}`);
 }
 

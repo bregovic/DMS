@@ -7,6 +7,7 @@ import { notifyTaskAssigned } from "@/server/notify";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { deleteWithFiles, requestFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
+import { dropComparisons } from "@/server/comparisons";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -70,6 +71,7 @@ export async function createOffer(formData: FormData) {
   const dateStr = String(formData.get("deliveryDate") || "");
   const deliveryDate = dateStr ? new Date(dateStr) : null;
 
+  await dropComparisons({ requestIds: [requestId] });
   await prisma.offer.create({
     data: {
       requestId,
@@ -189,6 +191,7 @@ export async function setOfferStatus(formData: FormData) {
   const { offer, projectId, canEdit } = await offerCtx(id);
   if (!canEdit) throw new Error("Stav nabídky nemůžeš měnit.");
   await prisma.offer.update({ where: { id: offer.id }, data: { status } });
+  await dropComparisons({ requestIds: [offer.requestId] });
   revalidatePath(`/projects/${projectId}`);
 }
 
@@ -199,6 +202,7 @@ export async function deleteOffer(formData: FormData) {
   await deleteWithFiles({ offerId: offer.id }, () =>
     prisma.offer.delete({ where: { id: offer.id } }),
   );
+  await dropComparisons({ requestIds: [offer.requestId] });
   revalidatePath(`/projects/${projectId}`);
 }
 

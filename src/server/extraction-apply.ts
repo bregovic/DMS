@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { dropComparisons } from "@/server/comparisons";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ExtractedPart, ExtractionResult } from "@/server/extraction";
 
@@ -197,6 +198,9 @@ export async function applyExtractionCore(input: ApplyInput): Promise<ApplyResul
       data: { status: allDone ? "applied" : "partial", appliedParts: applied },
     }),
   ]);
+
+  // Nabídky se změnily – starý report by mluvil o jiné skutečnosti.
+  await dropComparisons({ requestIds: offers.map((o) => o.requestId) });
 
   const nazvy = await prisma.request.findMany({
     where: { id: { in: offers.map((o) => o.requestId) } },
