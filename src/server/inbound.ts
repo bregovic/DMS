@@ -54,8 +54,10 @@ const ROUTE_SCHEMA = obj({
 const ROUTE_INSTRUCTIONS = `Jsi asistent stavebníka. Přišel přeposlaný e-mail od dodavatele. Urči, kam v evidenci patří.
 kind: "offer" = cenová nabídka, "invoice" = faktura nebo zálohová faktura, "technical" = technický list / výkres / specifikace bez cen, "other" = ostatní.
 projectId: id projektu ze seznamu, kterého se e-mail týká. Když to z obsahu nejde poznat, vrať null – nehádej.
-requestId: id poptávky, které se e-mail týká především. Když se nedá určit, vrať null.
-requestIds: id **všech** poptávek, které dokument pokrývá – nabídka od jednoho dodavatele bývá na víc věcí najednou (okna + dveře + portál). Porovnávej i rozměry a počty ve specifikaci poptávky s tím, co je v dokumentu. Co dokument nepokrývá, nevracej; když nepokrývá nic, vrať prázdné pole.
+requestIds: id **všech** poptávek, které dokument pokrývá. Tohle je to podstatné – nabídka od jednoho dodavatele bývá na víc věcí najednou (okna + dveře + portál) a každá z nich je samostatná poptávka. Projdi poptávky jednu po druhé a porovnej jejich název, rozměry a počty s položkami v dokumentu; co v dokumentu najdeš, to do pole patří.
+Pole nech prázdné **jen** když dokument nepokrývá žádnou poptávku ze seznamu. Pokrývá-li jedinou, vrať pole s jedním prvkem. Nikdy nevracej prázdné pole s odůvodněním, že poptávek je víc – v tom je právě smysl toho pole.
+Vracej přesná id ze seznamu, ne názvy.
+requestId: první z requestIds, tedy ta hlavní. Když je requestIds prázdné, vrať null.
 attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, jeden typ ze stejného číselníku jako kind.
 confidence: 0–100, jak jistý si zařazením jsi. Když je projekt i poptávka null, dej nízkou hodnotu.
 reason: jedna krátká věta česky, podle čeho ses rozhodl (např. "nabídka na okna od firmy, která je u poptávky Okna v evidenci").`;
@@ -197,7 +199,7 @@ async function suggestRouting(
           type: "input_text",
           text:
             (forced?.projectId
-              ? "Projekt (a případně složka) je už určený štítkem v e-mailu – vrať jeho projectId a urči jen poptávku.\n"
+              ? "Projekt (a případně složka) je už určený štítkem v e-mailu – vrať jeho projectId a soustřeď se na to, které **všechny** poptávky dokument pokrývá.\n"
               : "") +
             `Projekty a otevřené poptávky:\n${JSON.stringify(ctx, null, 1)}\n\n` +
             `E-mail\nOd: ${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress}\n` +
@@ -208,7 +210,7 @@ async function suggestRouting(
       ],
       "mail-routing",
       ROUTE_SCHEMA,
-      { effort: "low", maxOutput: 2_000 },
+      { effort: "medium", maxOutput: 3_000 },
     );
     // Vymyšlená id zahodit – radši bez návrhu než špatně zařazené.
     const project = ctx.find((p) => p.projectId === data.projectId) ?? null;
