@@ -89,11 +89,26 @@ export type ExtractionResult = {
   summary: string;
   warnings: string[];
 };
+export type VendorScore = {
+  offer: string;
+  /** Celkem 0–100 a dílčí známky 0–5. */
+  total: number;
+  price: number;
+  match: number;
+  terms: number;
+  completeness: number;
+  /** Co se o firmě našlo – nebo „nenalezeno“. Nikdy odhad. */
+  reputation: string;
+  reputationSources: string[];
+  summary: string;
+};
+
 export type ComparisonResult = {
   headline: string;
   columns: string[];
   rows: { offer: string; cells: string[] }[];
   pros: { offer: string; pros: string[]; cons: string[] }[];
+  scores: VendorScore[];
   recommendation: string;
   questions: string[];
 };
@@ -144,6 +159,20 @@ const COMPARE_SCHEMA = obj({
   columns: strArr,
   rows: { type: "array", items: obj({ offer: { type: "string" }, cells: strArr }) },
   pros: { type: "array", items: obj({ offer: { type: "string" }, pros: strArr, cons: strArr }) },
+  scores: {
+    type: "array",
+    items: obj({
+      offer: { type: "string" },
+      total: { type: "number" },
+      price: { type: "number" },
+      match: { type: "number" },
+      terms: { type: "number" },
+      completeness: { type: "number" },
+      reputation: { type: "string" },
+      reputationSources: strArr,
+      summary: { type: "string" },
+    }),
+  },
   recommendation: { type: "string" },
   questions: strArr,
 });
@@ -172,7 +201,19 @@ Nabídka označená castSpolecneNabidky je část společné nabídky na víc po
 pros: u každé nabídky 1–3 plusy a 1–3 minusy.
 recommendation: 2–3 věty, kterou vybrat a proč; když se nedá rozhodnout, co chybí.
 questions: co si ověřit u dodavatelů před objednáním (max 5).
-headline: jedna věta shrnutí. Pokyn uživatele má přednost (co je pro něj důležité).`;
+headline: jedna věta shrnutí. Pokyn uživatele má přednost (co je pro něj důležité).
+scores: hodnocení každé firmy. total 0–100, dílčí známky 0–5 (5 = nejlepší):
+- price: cena proti ostatním nabídkám v tomhle srovnání,
+- match: soulad se specifikací poptávky – rozměry, počty, provedení; rozpory známku snižují,
+- terms: podmínky – co je v ceně (montáž, doprava, demontáž), záruka, dodací lhůta, platnost, zálohy,
+- completeness: úplnost nabídky – rozepsané položky, IČO, bankovní spojení, platební podmínky, co chybí.
+summary: jedna věta, proč taková známka.
+reputation: co se o firmě dá **doložit** z webu. Pravidla, která nesmíš porušit:
+- uveď jen to, co jsi opravdu našel, a ke každému tvrzení zdroj (doména nebo název registru) do reputationSources,
+- když nic použitelného nenajdeš, napiš přesně „nenalezeno“ a nech reputationSources prázdné,
+- **nikdy si nevymýšlej** hvězdičky, počty recenzí ani roky působení; raději méně údajů než odhad,
+- reputace smí posunout total nejvýš o 10 bodů; zbytek stojí na nabídce samotné.
+`;
 
 const BUNDLE_COMPARE_INSTRUCTIONS = `Jsi nezávislý poradce stavebníka. Porovnej nabídky na poptávkový balíček – několik poptávek, o kterých se rozhoduje společně (např. okna, dveře, portál). Odpovídej česky.
 Firmy odpovídají různě: některá pošle jednu společnou cenu za celý balíček (i bez rozpadu na jednotlivé poptávky), jiná samostatné nabídky jen na část. To je v pořádku – právě proto se porovnává za celek.
@@ -186,7 +227,19 @@ pros: u každé firmy 1–3 plusy a 1–3 minusy; pokrytí balíčku (co nenabí
 recommendation: 3–5 vět. Vždy porovnej dvě varianty: (a) nejlevnější **jedna firma** na celý balíček, (b) nejlevnější **kombinace** firem po poptávkách. Napiš rozdíl v Kč a jestli se balíčková cena vyplatí i proti kombinaci – a připomeň, co kombinace stojí navíc (víc smluv, dělená odpovědnost za montáž a návaznost na stavbu). Spočítané součty dostaneš na vstupu, neměň je.
 questions: co si ověřit před objednáním (max 5) – zvlášť u firem, které cenu nerozepsaly.
 headline: jedna věta shrnutí.
-Pokyn uživatele má přednost.`;
+Pokyn uživatele má přednost.
+scores: hodnocení každé firmy. total 0–100, dílčí známky 0–5 (5 = nejlepší):
+- price: cena proti ostatním nabídkám v tomhle srovnání,
+- match: soulad se specifikací poptávky – rozměry, počty, provedení; rozpory známku snižují,
+- terms: podmínky – co je v ceně (montáž, doprava, demontáž), záruka, dodací lhůta, platnost, zálohy,
+- completeness: úplnost nabídky – rozepsané položky, IČO, bankovní spojení, platební podmínky, co chybí.
+summary: jedna věta, proč taková známka.
+reputation: co se o firmě dá **doložit** z webu. Pravidla, která nesmíš porušit:
+- uveď jen to, co jsi opravdu našel, a ke každému tvrzení zdroj (doména nebo název registru) do reputationSources,
+- když nic použitelného nenajdeš, napiš přesně „nenalezeno“ a nech reputationSources prázdné,
+- **nikdy si nevymýšlej** hvězdičky, počty recenzí ani roky působení; raději méně údajů než odhad,
+- reputace smí posunout total nejvýš o 10 bodů; zbytek stojí na nabídce samotné.
+`;
 
 /** Útrata za AI od daného okamžiku (USD) – vytěžení, porovnání i plány. */
 async function aiSpendSince(since: Date) {
@@ -486,21 +539,31 @@ export async function runExtraction(extractionId: string) {
 // Porovnání nabídek
 // ---------------------------------------------------------------------------
 
-export async function createComparison(requestId: string, userId: string, prompt?: string | null) {
+export async function createComparison(
+  requestId: string,
+  userId: string,
+  prompt?: string | null,
+  webSearch = false,
+) {
   const offers = await prisma.offer.count({ where: { requestId } });
   if (offers === 0) throw new Error("Žádanka zatím nemá žádnou nabídku.");
   await assertBudget(userId);
   const busy = await prisma.offerComparison.findFirst({ where: { requestId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
-    data: { requestId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    data: { requestId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId, webSearch },
     select: { id: true },
   });
   return c.id;
 }
 
 /** Porovnání za celý poptávkový balíček (#40). */
-export async function createBundleComparison(bundleId: string, userId: string, prompt?: string | null) {
+export async function createBundleComparison(
+  bundleId: string,
+  userId: string,
+  prompt?: string | null,
+  webSearch = false,
+) {
   const [offers, parts] = await Promise.all([
     prisma.bundleOffer.count({ where: { bundleId } }),
     prisma.offer.count({ where: { request: { bundleId } } }),
@@ -510,7 +573,7 @@ export async function createBundleComparison(bundleId: string, userId: string, p
   const busy = await prisma.offerComparison.findFirst({ where: { bundleId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
-    data: { bundleId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    data: { bundleId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId, webSearch },
     select: { id: true },
   });
   return c.id;
@@ -520,7 +583,7 @@ export async function runBundleComparison(comparisonId: string) {
   try {
     const c = await prisma.offerComparison.findUnique({
       where: { id: comparisonId },
-      select: { id: true, bundleId: true, prompt: true, model: true },
+      select: { id: true, bundleId: true, prompt: true, model: true, webSearch: true },
     });
     if (!c?.bundleId) return;
     const { evaluateBundle } = await import("@/server/bundles");
@@ -572,7 +635,7 @@ export async function runBundleComparison(comparisonId: string) {
       ],
       "comparison",
       COMPARE_SCHEMA,
-      { effort: "low", maxOutput: 8_000 },
+      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch },
     );
     await prisma.offerComparison.update({
       where: { id: c.id },
@@ -592,7 +655,7 @@ export async function runComparison(comparisonId: string) {
   try {
     const c = await prisma.offerComparison.findUnique({
       where: { id: comparisonId },
-      select: { id: true, requestId: true, prompt: true, model: true },
+      select: { id: true, requestId: true, prompt: true, model: true, webSearch: true },
     });
     if (!c?.requestId) return;
     const req = await prisma.request.findUnique({
@@ -607,10 +670,11 @@ export async function runComparison(comparisonId: string) {
           select: {
             id: true,
             vendorName: true,
-            vendor: { select: { name: true } },
+            vendor: { select: { name: true, ico: true } },
             price: true,
             deliveryDate: true,
             note: true,
+            mismatch: true,
             rating: true,
             score: true,
             status: true,
@@ -638,6 +702,8 @@ export async function runComparison(comparisonId: string) {
       const part = r && o.extractionPart != null ? r.parts[o.extractionPart] : null;
       return {
         vendor: o.vendor?.name ?? o.vendorName ?? "neznámý dodavatel",
+        ico: o.vendor?.ico ?? null,
+        nesedi: o.mismatch ?? null,
         priceCzk: o.price != null ? Number(o.price) : null,
         deliveryDate: o.deliveryDate?.toISOString().slice(0, 10) ?? null,
         note: o.note,
@@ -685,7 +751,7 @@ export async function runComparison(comparisonId: string) {
       ],
       "comparison",
       COMPARE_SCHEMA,
-      { effort: "low", maxOutput: 8_000 },
+      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch },
     );
     await prisma.offerComparison.update({
       where: { id: c.id },

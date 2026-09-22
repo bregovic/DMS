@@ -307,7 +307,12 @@ export async function startComparison(formData: FormData) {
   });
   if (!req) throw new Error("Žádanka nenalezena.");
   if (!isManager(await getProjectRole(req.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
-  const id = await createComparison(req.id, user.id, String(formData.get("prompt") || ""));
+  const id = await createComparison(
+    req.id,
+    user.id,
+    String(formData.get("prompt") || ""),
+    formData.get("webSearch") === "1",
+  );
   after(() => runComparison(id));
   revalidatePath(`/projects/${req.projectId}`);
 }
@@ -321,7 +326,12 @@ export async function startBundleComparison(formData: FormData) {
   });
   if (!b) throw new Error("Balíček nenalezen.");
   if (!isManager(await getProjectRole(b.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
-  const id = await createBundleComparison(b.id, user.id, String(formData.get("prompt") || ""));
+  const id = await createBundleComparison(
+    b.id,
+    user.id,
+    String(formData.get("prompt") || ""),
+    formData.get("webSearch") === "1",
+  );
   after(() => runBundleComparison(id));
   revalidatePath(`/projects/${b.projectId}`);
 }

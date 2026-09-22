@@ -7,6 +7,12 @@ import { startBundleComparison, startComparison } from "@/server/actions/extract
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import type { ComparisonResult } from "@/server/extraction";
 
+/** Dílčí známka 0–5 jako hvězdičky. */
+const znamka = (n: number) => {
+  const x = Math.max(0, Math.min(5, Math.round(n)));
+  return "★".repeat(x) + "☆".repeat(5 - x);
+};
+
 export type ComparisonView = {
   id: string;
   status: string;
@@ -116,6 +122,36 @@ export function OfferComparison({
               </tbody>
             </table>
           </div>
+          {(r.scores ?? []).length > 0 && (
+            <div className="space-y-2">
+              <p className="kicker">Hodnocení</p>
+              {[...r.scores]
+                .sort((a, b) => b.total - a.total)
+                .map((sc, i) => (
+                  <div key={i} className="border border-stone-200 p-2 text-xs">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="font-medium text-stone-950">{sc.offer}</p>
+                      <p className="font-mono text-stone-950">{Math.round(sc.total)}/100</p>
+                    </div>
+                    <p className="mt-0.5 text-stone-600">{sc.summary}</p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-stone-500">
+                      <span>Cena {znamka(sc.price)}</span>
+                      <span>Soulad {znamka(sc.match)}</span>
+                      <span>Podmínky {znamka(sc.terms)}</span>
+                      <span>Úplnost {znamka(sc.completeness)}</span>
+                    </div>
+                    {sc.reputation && (
+                      <p className="mt-1 text-[11px] text-stone-500">
+                        Reference: {sc.reputation}
+                        {(sc.reputationSources ?? []).length > 0 && (
+                          <span className="text-stone-400"> · {sc.reputationSources.join(", ")}</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
           <div className="grid gap-2 sm:grid-cols-2">
             {r.pros.map((p, i) => (
               <div key={i} className="border border-stone-100 p-2 text-xs">
@@ -172,7 +208,7 @@ export function OfferComparison({
             )}
             <p className="text-sm text-stone-600">
               Porovnám {offerCount} {offerCount === 1 ? "nabídku" : offerCount < 5 ? "nabídky" : "nabídek"} a připravím
-              stručný podklad pro výběr.
+              stručný podklad pro výběr a hodnocení každé firmy.
               {bundleId ? " Porovnám i nejlevnější jednu firmu proti nejlevnější kombinaci firem." : ""}
             </p>
             <label className="block text-xs text-stone-500">
@@ -185,6 +221,10 @@ export function OfferComparison({
                 placeholder="Např. důraz na tepelnou izolaci (Uw) a záruku; montáž musí být v ceně; rozpočet do 200 tis."
                 className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
               />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-700">
+              <input type="checkbox" name="webSearch" value="1" defaultChecked className="size-4 cursor-pointer accent-stone-900" />
+              Ověřit dodavatele na webu
             </label>
             {err && <p className="text-xs text-red-600">{err}</p>}
             <DialogFooter>

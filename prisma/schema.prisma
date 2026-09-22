@@ -841,6 +841,8 @@ model OfferComparison {
   requestId   String?
   bundleId    String?
   prompt      String?
+  /** Ověřit dodavatele i na webu (stojí navíc, proto na povel). */
+  webSearch   Boolean  @default(false)
   status      String   @default("running") // running | ready | error
   result      Json?
   error       String?
