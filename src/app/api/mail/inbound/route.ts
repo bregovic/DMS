@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { storeMail, reportIngest, emptyIngest } from "@/server/inbound";
+import { after } from "next/server";
+import { storeMail, reportIngest, emptyIngest, autoFile } from "@/server/inbound";
 import type { FetchedMail } from "@/lib/mailbox";
 
 /**
@@ -98,12 +99,20 @@ export async function POST(req: NextRequest) {
   };
 
   const res = emptyIngest(1);
-  await storeMail(mail, res);
+  // Uložit a hned odpovědět. Zakládání a vytěžení trvá i minuty; skript
+  // v Gmailu má na celý běh šest minut, takže čekat na to nesmí.
+  const stored = await storeMail(mail, res, { auto: false });
 
-  // Zpráva o zpracování jen když se něco doopravdy stalo.
-  const to = process.env.MAIL_REPORT_TO;
-  if (to && (res.stored > 0 || res.skipped.length > 0 || res.failed.length > 0))
-    await reportIngest(res, to, process.env.APP_URL || "https://dokumenty.up.railway.app").catch(() => {});
+  after(async () => {
+    try {
+      if (stored) await autoFile(stored, mail, res);
+    } catch {
+      // Chyba zpracování nesmí nic shodit – zůstane v Doručené poště.
+    }
+    const to = process.env.MAIL_REPORT_TO;
+    if (to && (res.stored > 0 || res.skipped.length > 0 || res.failed.length > 0))
+      await reportIngest(res, to, process.env.APP_URL || "https://dokumenty.up.railway.app").catch(() => {});
+  });
 
   return Response.json({
     stored: res.stored,

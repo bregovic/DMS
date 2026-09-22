@@ -318,7 +318,18 @@ export async function ingestMailbox(): Promise<IngestResult> {
  * Sdílené pro obě cesty, kterými pošta přichází: vybrání schránky přes IMAP
  * a skript v Gmailu, který zprávu pošle rovnou do DMS (#41).
  */
-export async function storeMail(mail: FetchedMail, res: IngestResult) {
+export type StoredMail = {
+  mailId: string;
+  ownerId: string;
+  fromLabel: { projectId: string | null; subProjectId: string | null };
+  suggestion: MailSuggestion | null;
+};
+
+export async function storeMail(
+  mail: FetchedMail,
+  res: IngestResult,
+  opts: { auto?: boolean } = {},
+): Promise<StoredMail | null> {
   try {
     const dup = await prisma.inboundMail.findUnique({
       where: { messageId: mail.messageId },
@@ -326,12 +337,12 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
     });
     if (dup) {
       res.skipped.push({ subject: mail.subject, reason: "už byl zpracovaný dřív" });
-      return;
+      return null;
     }
     const owner = await resolveOwner(mail.fromAddress);
     if (!owner) {
       res.skipped.push({ subject: mail.subject, reason: `neznámý odesílatel ${mail.fromAddress}` });
-      return;
+      return null;
     }
 
     // Štítek pojmenovaný jako projekt má přednost před odhadem z textu.
@@ -391,7 +402,10 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
     });
 
     res.stored++;
-    await autoFile(row.id, owner.ownerId, mail, fromLabel, suggestion, res);
+    const stored: StoredMail = { mailId: row.id, ownerId: owner.ownerId, fromLabel, suggestion };
+    // Volající, který na odpověď čeká (skript v Gmailu), si zpracování
+    // vyzvedne až po odeslání odpovědi – jinak mu vyprší limit běhu.
+    if (opts.auto !== false) await autoFile(stored, mail, res);
     res.mails.push({
       id: row.id,
       subject: mail.subject,
@@ -401,11 +415,13 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
         ? `${fromLabel.note}${suggestion?.reason ? ` ${suggestion.reason}` : ""}`
         : (suggestion?.reason ?? "zařazení se nepodařilo určit"),
     });
+    return stored;
   } catch (err) {
     res.skipped.push({
       subject: mail.subject,
       reason: err instanceof Error ? err.message : "neznámá chyba",
     });
+    return null;
   }
 }
 
@@ -419,14 +435,8 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
  * Nic z toho nesmí shodit příjem pošty: když zakládání selže, zpráva
  * prostě zůstane čekat a důvod se objeví v souhrnu.
  */
-async function autoFile(
-  mailId: string,
-  ownerId: string,
-  mail: FetchedMail,
-  fromLabel: { projectId: string | null; subProjectId: string | null },
-  suggestion: MailSuggestion | null,
-  res: IngestResult,
-) {
+export async function autoFile(stored: StoredMail, mail: FetchedMail, res: IngestResult) {
+  const { mailId, ownerId, fromLabel, suggestion } = stored;
   const predmet = mail.subject;
   if (!fromLabel.projectId) {
     res.waiting.push({ subject: predmet, reason: "štítek neurčil projekt" });
