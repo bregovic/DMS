@@ -18,6 +18,9 @@ import { RequestStatusSelect } from "@/components/requests/request-status-select
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { RequestAttachments } from "@/components/requests/request-attachments";
 import { OfferComparison } from "@/components/requests/offer-comparison";
+import { BundlePanel } from "@/components/requests/bundle-panel";
+import { BundleManager } from "@/components/requests/bundle-manager";
+import { bundleViews } from "@/server/bundles";
 import { PlanAi } from "@/components/planning/plan-ai";
 import { planAiProps } from "@/server/plan-ai";
 import type { ComparisonResult } from "@/server/extraction";
@@ -829,6 +832,17 @@ export default async function ProjectDetailPage({
   const statusColor = (st: string) => taskColorMap.get(st) ?? "stone";
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
+  // Poptávkové balíčky (#40) – matice firem × žádanek a porovnání za celek.
+  // Načítají se jen pro záložku Žádanky, ať zbytek stránky nezdržují.
+  const bundles =
+    tab === "zadanky"
+      ? await bundleViews(project.id, {
+          userId: user.id,
+          isManager,
+          canWrite: role === "owner" || role === "active" || role === "member",
+        })
+      : [];
+
   // Dodavatel se stejným e-mailem jako přihlášený uživatel → předvyplní se u výdaje.
   // (myEmail je definováno výše.)
   const myVendorId = myEmail
@@ -1434,16 +1448,39 @@ export default async function ProjectDetailPage({
           </h2>
         }
         actions={
-          canAdd && (
-            <NewRequestForm
-              projectId={project.id}
-              subProjectId={sub ?? undefined}
-              vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
-              categories={categories}
-            />
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {isManager && (
+              <BundleManager
+                projectId={project.id}
+                requests={levelRequests.map((r) => ({ id: r.id, title: r.title, bundleId: r.bundleId }))}
+                bundles={bundles.map((b) => ({ id: b.id, name: b.name }))}
+              />
+            )}
+            {canAdd && (
+              <NewRequestForm
+                projectId={project.id}
+                subProjectId={sub ?? undefined}
+                vendors={accountVendors.map((v) => ({ id: v.id, name: v.name }))}
+                categories={categories}
+              />
+            )}
+          </div>
         }
       >
+        {/* Balíčky – rozhoduje se o nich za celek, proto jsou nad seznamem. */}
+        {bundles
+          .filter((b) => b.requests.some((r) => levelRequests.some((x) => x.id === r.id)))
+          .map((b) => (
+            <BundlePanel
+              key={b.id}
+              bundle={b}
+              projectId={project.id}
+              vendors={offerVendorItems}
+              isManager={isManager}
+              canAdd={canAdd}
+            />
+          ))}
+
         {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
         ) : (
@@ -1503,6 +1540,7 @@ export default async function ProjectDetailPage({
                         : ""}
                       {catMap.get(r.category) ?? r.category}
                       {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
+                      {r.bundleId ? ` · balíček ${bundles.find((b) => b.id === r.bundleId)?.name ?? ""}` : ""}
                       {r.price != null ? ` · ${formatCurrency(Number(r.price))}` : ""}
                       {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
                       {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
@@ -1651,9 +1689,30 @@ export default async function ProjectDetailPage({
           <section>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="kicker">Vykázaná práce · {workExpenses.length}</h2>
-              <span className="text-sm text-stone-600">
-                celkem <span className="font-mono text-stone-950">{formatCurrency(workExpenses.reduce((a, e) => a + Number(e.amount), 0))}</span>
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-stone-600">
+                  celkem <span className="font-mono text-stone-950">{formatCurrency(workExpenses.reduce((a, e) => a + Number(e.amount), 0))}</span>
+                </span>
+                {canAdd && (
+                  <NewExpenseForm
+                    projectId={project.id}
+                    subProjectId={sub ?? undefined}
+                    subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+                    myVendorId={myVendorId}
+                    titleSuggestions={titleSuggestions}
+                    vendors={accountVendors.map((v) => ({
+                      id: v.id,
+                      name: v.name,
+                      hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+                    }))}
+                    categories={categories}
+                    docTypes={docTypes}
+                    statuses={expenseStatuses}
+                    defaults={{ kind: "work", category: project.defaultCategory, currency: project.defaultCurrency }}
+                    triggerLabel="Přidat výkaz"
+                  />
+                )}
+              </div>
             </div>
             {workExpenses.length === 0 ? (
               <p className="text-sm text-stone-500">Zatím tu není vykázaná práce.</p>

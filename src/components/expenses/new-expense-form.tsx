@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export function NewExpenseForm({
   statuses,
   defaults,
   triggerClassName,
+  triggerLabel,
 }: {
   projectId: string;
   subProjectId?: string;
@@ -58,7 +60,10 @@ export function NewExpenseForm({
     currency?: string | null;
   };
   triggerClassName?: string;
+  /** Popisek tlačítka – např. „Přidat výkaz“ v sekci Výkazy. */
+  triggerLabel?: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -87,7 +92,7 @@ export function NewExpenseForm({
     return (
       <Button onClick={() => setOpen(true)} className={`h-11 px-6 text-base ${triggerClassName ?? ""}`}>
         <Plus className="size-5" />
-        Přidat výdaj
+        {triggerLabel ?? "Přidat výdaj"}
       </Button>
     );
   }
@@ -132,6 +137,9 @@ export function NewExpenseForm({
             setRate("");
             setSaving(false);
             setOpen(false);
+            // Seznam se musí překreslit hned – bez toho je nový záznam vidět
+            // až po ručním obnovení stránky.
+            router.refresh();
           }}
           className="space-y-5 p-5"
         >

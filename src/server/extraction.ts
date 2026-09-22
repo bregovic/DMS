@@ -72,8 +72,12 @@ export type ExtractionResult = {
     web: string | null;
     address: string | null;
     contactPerson: string | null;
+    /** Číslo účtu nebo IBAN – bývá až v patičce nebo na poslední straně. */
+    bankAccount: string | null;
   };
   offerNumber: string | null;
+  /** Platební podmínky: záloha, splatnost, způsob úhrady. */
+  paymentTerms: string | null;
   offerDate: string | null;
   validUntil: string | null;
   totalWithoutVat: number | null;
@@ -104,8 +108,9 @@ const obj = (properties: Record<string, unknown>) => ({
 
 const EXTRACT_SCHEMA = obj({
   documentKind: { type: "string", enum: ["offer", "technical", "other"] },
-  vendor: obj({ name: str, ico: str, dic: str, email: str, phone: str, web: str, address: str, contactPerson: str }),
+  vendor: obj({ name: str, ico: str, dic: str, email: str, phone: str, web: str, address: str, contactPerson: str, bankAccount: str }),
   offerNumber: str,
+  paymentTerms: str,
   offerDate: str,
   validUntil: str,
   totalWithoutVat: n,
@@ -149,6 +154,8 @@ U nabídky rozděl položky na části:
 Ke každé části navrhni tasks = úkoly do stavebního plánu po výběru této nabídky, v pořadí, jak jdou po sobě:
 kind "order" (objednat/zálohovat, 1 den), "work" (práce na stavbě: zaměření, montáž, zapravení – odhad dní podle rozsahu), "wait" (výroba/dodací lhůta – dny podle nabídky, např. 6–12 týdnů = 63). Názvy krátce česky, např. "Objednat okna – Macek", "Zaměření oken", "Výroba a dodání oken", "Montáž oken".
 U technického dokumentu nech parts prázdné a do technicalSpecs dej klíčové parametry (rozměry, U-hodnoty, materiály, barvy, požadavky na stavební připravenost).
+vendor.bankAccount = číslo účtu dodavatele (formát 123456789/0100) nebo IBAN – hledej i v patičce, v hlavičce a na poslední straně; když tam není, vrať null.
+paymentTerms = platební podmínky textem: záloha (kolik %, kdy), splatnost, způsob úhrady. Když nejsou uvedené, vrať null.
 Ceny jako čísla v Kč (bez mezer), data YYYY-MM-DD, leadTime textem (např. "6–12 týdnů").
 summary česky 2–4 věty: co dokument obsahuje, co je v ceně a co ne, záruky, platnost.
 warnings: rozpory se specifikací poptávky, chybějící montáž/doprava, krátká platnost, nejasnosti.
@@ -157,10 +164,25 @@ Pokyn uživatele (pokud je) má přednost.`;
 const COMPARE_INSTRUCTIONS = `Jsi nezávislý poradce stavebníka. Porovnej nabídky k jedné poptávce a připrav stručný, přehledný podklad pro výběr, česky.
 columns: 4–7 nejdůležitějších srovnávacích hledisek (vždy "Cena s DPH" a "Dodání"; dál podle poptávky a pokynu – např. profil, Uw/Ug, záruka, montáž v ceně, co chybí).
 rows: jeden řádek na nabídku, offer = název dodavatele, cells ve stejném pořadí jako columns, krátce (max ~6 slov), neznámé = "?".
+Nabídka označená castSpolecneNabidky je část společné nabídky na víc poptávek: když u ní chybí cena, nepiš "?" ani ji neber jako nejdražší – napiš "v ceně balíčku" a v poznámkách upozorni, že se dá srovnat jen za celý balíček.
 pros: u každé nabídky 1–3 plusy a 1–3 minusy.
 recommendation: 2–3 věty, kterou vybrat a proč; když se nedá rozhodnout, co chybí.
 questions: co si ověřit u dodavatelů před objednáním (max 5).
 headline: jedna věta shrnutí. Pokyn uživatele má přednost (co je pro něj důležité).`;
+
+const BUNDLE_COMPARE_INSTRUCTIONS = `Jsi nezávislý poradce stavebníka. Porovnej nabídky na poptávkový balíček – několik poptávek, o kterých se rozhoduje společně (např. okna, dveře, portál). Odpovídej česky.
+Firmy odpovídají různě: některá pošle jednu společnou cenu za celý balíček (i bez rozpadu na jednotlivé poptávky), jiná samostatné nabídky jen na část. To je v pořádku – právě proto se porovnává za celek.
+columns: první sloupce = názvy poptávek v pořadí, jak přijdou na vstupu, pak "Celkem" a "Dodání"; případně 1–2 další zásadní hlediska.
+rows: jeden řádek na firmu, offer = název firmy, cells ve stejném pořadí jako columns.
+- cena za poptávku, kterou firma rozepsala → číslo v Kč,
+- poptávka krytá společnou cenou bez rozpadu → "v ceně balíčku",
+- poptávka, kterou firma vůbec nenabídla → "nenabídla",
+- neznámý údaj → "?".
+pros: u každé firmy 1–3 plusy a 1–3 minusy; pokrytí balíčku (co nenabídla) patří mezi minusy.
+recommendation: 3–5 vět. Vždy porovnej dvě varianty: (a) nejlevnější **jedna firma** na celý balíček, (b) nejlevnější **kombinace** firem po poptávkách. Napiš rozdíl v Kč a jestli se balíčková cena vyplatí i proti kombinaci – a připomeň, co kombinace stojí navíc (víc smluv, dělená odpovědnost za montáž a návaznost na stavbu). Spočítané součty dostaneš na vstupu, neměň je.
+questions: co si ověřit před objednáním (max 5) – zvlášť u firem, které cenu nerozepsaly.
+headline: jedna věta shrnutí.
+Pokyn uživatele má přednost.`;
 
 /** Útrata za AI od daného okamžiku (USD) – vytěžení, porovnání i plány. */
 async function aiSpendSince(since: Date) {
@@ -473,13 +495,102 @@ export async function createComparison(requestId: string, userId: string, prompt
   return c.id;
 }
 
+/** Porovnání za celý poptávkový balíček (#40). */
+export async function createBundleComparison(bundleId: string, userId: string, prompt?: string | null) {
+  const [offers, parts] = await Promise.all([
+    prisma.bundleOffer.count({ where: { bundleId } }),
+    prisma.offer.count({ where: { request: { bundleId } } }),
+  ]);
+  if (offers + parts === 0) throw new Error("Balíček zatím nemá žádnou nabídku.");
+  await assertBudget(userId);
+  const busy = await prisma.offerComparison.findFirst({ where: { bundleId, status: "running" }, select: { id: true } });
+  if (busy) throw new Error("Porovnání už běží.");
+  const c = await prisma.offerComparison.create({
+    data: { bundleId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    select: { id: true },
+  });
+  return c.id;
+}
+
+export async function runBundleComparison(comparisonId: string) {
+  try {
+    const c = await prisma.offerComparison.findUnique({
+      where: { id: comparisonId },
+      select: { id: true, bundleId: true, prompt: true, model: true },
+    });
+    if (!c?.bundleId) return;
+    const { evaluateBundle } = await import("@/server/bundles");
+    const ev = await evaluateBundle(c.bundleId);
+    if (!ev) return;
+
+    const czk = (x: number | null) => (x == null ? null : Math.round(x));
+    const vendors = ev.vendors.map((v) => ({
+      firma: v.name,
+      celkem: czk(v.total),
+      spolecnaCenaZaBalicek: czk(v.bundlePrice),
+      kryjeCelyBalicek: v.full,
+      dodani: v.deliveryDate?.toISOString().slice(0, 10) ?? null,
+      poznamka: v.note,
+      poPoptavkach: ev.requests.map((r) => {
+        const cell = v.cells[r.id];
+        if (!cell?.covered) return { poptavka: r.title, stav: "nenabídla" };
+        return {
+          poptavka: r.title,
+          stav: cell.price != null ? "cena" : cell.source === "bundle" ? "v ceně balíčku" : "bez ceny",
+          cena: czk(cell.price),
+        };
+      }),
+    }));
+
+    const { data, costUsd } = await callModel<ComparisonResult>(
+      c.model,
+      BUNDLE_COMPARE_INSTRUCTIONS,
+      [
+        {
+          type: "input_text",
+          text:
+            `Balíček: ${ev.name}` +
+            (ev.note ? `\nPoznámka: ${ev.note}` : "") +
+            `\nPoptávky v balíčku (v tomhle pořadí dělej sloupce): ${ev.requests.map((r) => r.title).join(", ")}` +
+            `\n\nNabídky:\n${JSON.stringify(vendors, null, 1)}` +
+            `\n\nSpočítané součty (neměň je):\n` +
+            (ev.bestSingle
+              ? `- nejlevnější jedna firma na celý balíček: ${ev.bestSingle.name}, ${Math.round(ev.bestSingle.total)} Kč\n`
+              : `- celý balíček zatím nepokrývá žádná jedna firma\n`) +
+            (ev.bestCombo
+              ? `- nejlevnější kombinace: ${Math.round(ev.bestCombo.total)} Kč (${ev.bestCombo.picks
+                  .map((p) => `${ev.requests.find((r) => r.id === p.requestId)?.title}: ${p.vendorName} ${Math.round(p.price)} Kč`)
+                  .join("; ")})\n`
+              : `- kombinaci nelze spočítat, u některé poptávky chybí rozepsaná cena\n`) +
+            (ev.comboSaving != null ? `- rozdíl kombinace vs. jedna firma: ${Math.round(ev.comboSaving)} Kč\n` : "") +
+            (c.prompt ? `\nPokyn uživatele: ${c.prompt}` : ""),
+        },
+      ],
+      "comparison",
+      COMPARE_SCHEMA,
+      { effort: "low", maxOutput: 8_000 },
+    );
+    await prisma.offerComparison.update({
+      where: { id: c.id },
+      data: { status: "ready", result: data as unknown as Prisma.InputJsonValue, costUsd },
+    });
+  } catch (err) {
+    await prisma.offerComparison
+      .update({
+        where: { id: comparisonId },
+        data: { status: "error", error: err instanceof Error ? err.message.slice(0, 500) : "Neznámá chyba" },
+      })
+      .catch(() => {});
+  }
+}
+
 export async function runComparison(comparisonId: string) {
   try {
     const c = await prisma.offerComparison.findUnique({
       where: { id: comparisonId },
       select: { id: true, requestId: true, prompt: true, model: true },
     });
-    if (!c) return;
+    if (!c?.requestId) return;
     const req = await prisma.request.findUnique({
       where: { id: c.requestId },
       select: {
@@ -502,6 +613,9 @@ export async function runComparison(comparisonId: string) {
             selected: true,
             extractionId: true,
             extractionPart: true,
+            bundleOffer: {
+              select: { price: true, bundle: { select: { name: true } }, offers: { select: { requestId: true } } },
+            },
           },
         },
       },
@@ -527,6 +641,15 @@ export async function runComparison(comparisonId: string) {
         score: o.score,
         status: o.status,
         selected: o.selected || undefined,
+        // Část společné nabídky na balíček: cena tady klidně chybí, platná je
+        // celková cena za balíček – porovnání to nesmí brát jako „bez ceny“.
+        castSpolecneNabidky: o.bundleOffer
+          ? {
+              balicek: o.bundleOffer.bundle.name,
+              poptavekVBalicku: o.bundleOffer.offers.length,
+              celkemZaBalicek: o.bundleOffer.price != null ? Number(o.bundleOffer.price) : null,
+            }
+          : undefined,
         fromDocument: r
           ? {
               items: part?.items,

@@ -155,6 +155,8 @@ export async function applyDocScan(formData: FormData) {
   const ico = String(formData.get("supplierIco") || "").replace(/\D/g, "") || null;
   const dic = String(formData.get("supplierDic") || "").trim() || null;
   const supplierName = String(formData.get("supplierName") || "").trim();
+  // Účet z dokladu – doplní se novému dodavateli, i tomu, kdo ho ještě nemá.
+  const bankAccount = String(formData.get("supplierBankAccount") || "").trim() || null;
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId === "__new") vendorId = null;
   const createVendor = formData.get("createVendor") === "1";
@@ -164,9 +166,11 @@ export async function applyDocScan(formData: FormData) {
         ownerId: project.ownerId,
         OR: [...(ico ? [{ ico }] : []), ...(supplierName ? [{ name: { equals: supplierName, mode: "insensitive" as const } }] : [])],
       },
-      select: { id: true },
+      select: { id: true, bankAccount: true },
     });
     vendorId = found?.id ?? null;
+    if (found && bankAccount && !found.bankAccount)
+      await prisma.vendor.update({ where: { id: found.id }, data: { bankAccount } });
   }
   if (!vendorId && createVendor && (ico || supplierName)) {
     const ares = ico ? await fetchAres(ico) : null;
@@ -179,6 +183,7 @@ export async function applyDocScan(formData: FormData) {
         ico,
         dic: dic ?? ares?.dic ?? null,
         address: ares?.address ?? null,
+        bankAccount,
       },
       select: { id: true },
     });

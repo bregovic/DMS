@@ -7,8 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import type { Prisma } from "@/generated/prisma/client";
 import {
+  createBundleComparison,
   createComparison,
   createExtraction,
+  runBundleComparison,
   runComparison,
   extractable,
   runExtraction,
@@ -126,10 +128,13 @@ export async function applyExtraction(formData: FormData) {
   if (vendorMode === "existing") {
     const v = await prisma.vendor.findFirst({
       where: { id: String(formData.get("vendorId") || ""), ownerId: project.ownerId },
-      select: { id: true },
+      select: { id: true, bankAccount: true },
     });
     if (!v) throw new Error("Vyber dodavatele.");
     vendorId = v.id;
+    // Účet z nabídky doplnit, jen když ho dodavatel ještě nemá (nepřepisovat).
+    if (result.vendor.bankAccount && !v.bankAccount)
+      await prisma.vendor.update({ where: { id: v.id }, data: { bankAccount: result.vendor.bankAccount } });
   } else if (vendorMode === "new") {
     const name = String(formData.get("vendorName") || "").trim();
     const email = String(formData.get("vendorEmail") || "").trim().toLowerCase();
@@ -151,6 +156,7 @@ export async function applyExtraction(formData: FormData) {
             dic: result.vendor.dic,
             phone: String(formData.get("vendorPhone") || "").trim() || null,
             address: result.vendor.address,
+            bankAccount: result.vendor.bankAccount,
             description: [result.vendor.contactPerson && `Kontakt: ${result.vendor.contactPerson}`, result.vendor.web]
               .filter(Boolean)
               .join(" · ") || null,
@@ -168,6 +174,7 @@ export async function applyExtraction(formData: FormData) {
     result.offerNumber && `Nabídka ${result.offerNumber}`,
     result.offerDate && `ze dne ${result.offerDate.split("-").reverse().join(".")}`,
     result.validUntil && `platná do ${result.validUntil.split("-").reverse().join(".")}`,
+    result.paymentTerms && `· platba: ${result.paymentTerms}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -269,6 +276,20 @@ export async function startComparison(formData: FormData) {
   const id = await createComparison(req.id, user.id, String(formData.get("prompt") || ""));
   after(() => runComparison(id));
   revalidatePath(`/projects/${req.projectId}`);
+}
+
+/** Porovnání nabídek za celý poptávkový balíček (#40). Běží na pozadí. */
+export async function startBundleComparison(formData: FormData) {
+  const user = await requireUser();
+  const b = await prisma.requestBundle.findUnique({
+    where: { id: String(formData.get("bundleId")) },
+    select: { id: true, projectId: true },
+  });
+  if (!b) throw new Error("Balíček nenalezen.");
+  if (!isManager(await getProjectRole(b.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
+  const id = await createBundleComparison(b.id, user.id, String(formData.get("prompt") || ""));
+  after(() => runBundleComparison(id));
+  revalidatePath(`/projects/${b.projectId}`);
 }
 
 /**

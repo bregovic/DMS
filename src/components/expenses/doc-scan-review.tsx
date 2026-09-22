@@ -62,6 +62,7 @@ export function DocScanReview({
         supplierName: r.supplier.name ?? "",
         supplierIco: r.supplier.ico ?? "",
         supplierDic: r.supplier.dic ?? "",
+        supplierBankAccount: r.supplier.bankAccount ?? "",
         customerName: r.customer?.name ?? "",
         customerIco: r.customer?.ico ?? "",
         customerDic: r.customer?.dic ?? "",
@@ -278,6 +279,15 @@ export function DocScanReview({
                 </Field>
                 <Field label="DIČ" htmlFor="ds-dic">
                   <input id="ds-dic" className={input} value={form.supplierDic ?? ""} onChange={(e) => set("supplierDic", e.target.value)} />
+                </Field>
+                <Field label="Účet" htmlFor="ds-acc">
+                  <input
+                    id="ds-acc"
+                    className={input}
+                    value={form.supplierBankAccount ?? ""}
+                    onChange={(e) => set("supplierBankAccount", e.target.value)}
+                    placeholder="123456789/0100"
+                  />
                 </Field>
               </FormGrid>
               <FormGrid>

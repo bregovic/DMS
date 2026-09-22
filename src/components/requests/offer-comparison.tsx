@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Scale } from "lucide-react";
-import { startComparison } from "@/server/actions/extraction";
+import { startBundleComparison, startComparison } from "@/server/actions/extraction";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import type { ComparisonResult } from "@/server/extraction";
 
@@ -17,17 +17,20 @@ export type ComparisonView = {
 } | null;
 
 /**
- * AI porovnání nabídek u žádanky (#33): stručný report pro výběr –
- * srovnávací tabulka, plusy a minusy, doporučení a co si ověřit.
- * Hlediska volí AI podle poptávky a pokynu („důraz na Uw a záruku“…).
+ * Porovnání nabídek – u jedné žádanky (#33), nebo za celý poptávkový
+ * balíček (#40, `bundleId`). Stručný report pro výběr: srovnávací tabulka,
+ * plusy a minusy, doporučení a co si ověřit. U balíčku porovnává i
+ * nejlevnější jednu firmu proti nejlevnější kombinaci firem.
  */
 export function OfferComparison({
   requestId,
+  bundleId,
   offerCount,
   comparison,
   canRun,
 }: {
-  requestId: string;
+  requestId?: string;
+  bundleId?: string;
   offerCount: number;
   comparison: ComparisonView;
   canRun: boolean;
@@ -59,7 +62,7 @@ export function OfferComparison({
             className="flex cursor-pointer items-center gap-1.5 border border-stone-300 px-2 py-1 text-[11px] text-stone-700 hover:border-stone-950 disabled:opacity-50"
           >
             <Scale className="size-3.5" />
-            {comparison ? "Porovnat znovu" : "Porovnat nabídky"}
+            {comparison ? "Porovnat znovu" : bundleId ? "Porovnat za celý balíček" : "Porovnat nabídky"}
           </button>
         )}
         {running && (
@@ -91,7 +94,7 @@ export function OfferComparison({
             <table className="w-full min-w-[480px] border-collapse text-xs">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">
-                  <th className="py-1.5 pr-3 font-medium">Nabídka</th>
+                  <th className="py-1.5 pr-3 font-medium">{bundleId ? "Firma" : "Nabídka"}</th>
                   {r.columns.map((c, i) => (
                     <th key={i} className="py-1.5 pr-3 font-medium">
                       {c}
@@ -145,13 +148,14 @@ export function OfferComparison({
       )}
 
       {ask && (
-        <Dialog title="Porovnání nabídek" size="md" onClose={() => setAsk(false)}>
+        <Dialog title={bundleId ? "Porovnání nabídek za balíček" : "Porovnání nabídek"} size="md" onClose={() => setAsk(false)}>
           <form
             action={async (fd) => {
               setBusy(true);
               setErr(null);
               try {
-                await startComparison(fd);
+                if (bundleId) await startBundleComparison(fd);
+                else await startComparison(fd);
                 setAsk(false);
                 setOpen(true);
               } catch (e) {
@@ -161,10 +165,15 @@ export function OfferComparison({
             }}
             className="space-y-3 p-5"
           >
-            <input type="hidden" name="requestId" value={requestId} />
+            {bundleId ? (
+              <input type="hidden" name="bundleId" value={bundleId} />
+            ) : (
+              <input type="hidden" name="requestId" value={requestId} />
+            )}
             <p className="text-sm text-stone-600">
               Porovnám {offerCount} {offerCount === 1 ? "nabídku" : offerCount < 5 ? "nabídky" : "nabídek"} a připravím
               stručný podklad pro výběr.
+              {bundleId ? " Porovnám i nejlevnější jednu firmu proti nejlevnější kombinaci firem." : ""}
             </p>
             <label className="block text-xs text-stone-500">
               Na co se zaměřit (volitelné)

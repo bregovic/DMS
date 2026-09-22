@@ -29,3 +29,8 @@ export async function deleteWithFiles(
 export function requestFolder(ownerId: string, projectId: string, requestId: string) {
   return `${ownerId}/${projectId}/zadanky/${requestId}`;
 }
+
+/** Složka poptávkového balíčku – přílohy společných nabídek (#40). */
+export function bundleFolder(ownerId: string, projectId: string, bundleId: string) {
+  return `${ownerId}/${projectId}/balicky/${bundleId}`;
+}

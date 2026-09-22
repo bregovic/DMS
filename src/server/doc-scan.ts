@@ -24,7 +24,7 @@ export type ScanItem = {
 };
 export type ScanResult = {
   docType: "receipt" | "invoice" | "proforma" | "credit_note" | "other";
-  supplier: { name: string | null; ico: string | null; dic: string | null; address: string | null };
+  supplier: { name: string | null; ico: string | null; dic: string | null; address: string | null; bankAccount: string | null };
   customer: { name: string | null; ico: string | null; dic: string | null };
   number: string | null;
   issueDate: string | null; // YYYY-MM-DD
@@ -61,7 +61,7 @@ const obj = (properties: Record<string, unknown>) => ({
 });
 const SCHEMA = obj({
   docType: { type: "string", enum: ["receipt", "invoice", "proforma", "credit_note", "other"] },
-  supplier: obj({ name: str, ico: str, dic: str, address: str }),
+  supplier: obj({ name: str, ico: str, dic: str, address: str, bankAccount: str }),
   customer: obj({ name: str, ico: str, dic: str }),
   number: str,
   issueDate: str,
@@ -90,6 +90,7 @@ const SCHEMA = obj({
 const INSTRUCTIONS = `Jsi účetní. Ze snímku nebo PDF účtenky či faktury přečti údaje přesně tak, jak jsou na dokladu. Nic nedopočítávej odhadem.
 - docType: receipt = účtenka/paragon, invoice = faktura (daňový doklad), proforma = zálohová faktura, credit_note = dobropis.
 - supplier = kdo doklad vystavil (prodávající). ico = 8 číslic bez mezer, dic například CZ12345678. customer = odběratel, pokud je uveden.
+- supplier.bankAccount = číslo účtu (123456789/0100) nebo IBAN, na který se platí – bývá v hlavičce, v patičce nebo u platebních údajů. Když na dokladu není, vrať null.
 - number = číslo dokladu, issueDate = datum vystavení, taxDate = DUZP (datum uskutečnění zdanitelného plnění; na účtence je to datum prodeje), dueDate = splatnost. Datumy ve formátu YYYY-MM-DD.
 - total = celkem k úhradě s DPH, totalBase = základ celkem, totalVat = daň celkem – v měně dokladu.
 - currency = měna dokladu (CZK, EUR, USD…). Je-li doklad v cizí měně: exchangeRate = kurz uvedený na dokladu (kolik Kč za 1 jednotku měny), totalCzk = celková částka v Kč, pokud ji doklad uvádí (u českých dokladů v EUR bývá rekapitulace DPH i v Kč). Když kurz ani částka v Kč na dokladu nejsou, vrať null.
