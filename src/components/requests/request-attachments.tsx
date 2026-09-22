@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
 import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
+import { formatDate } from "@/lib/utils";
 import { startExtraction, startRequestExtractions } from "@/server/actions/extraction";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ExtractionDialog } from "@/components/requests/extraction-dialog";
@@ -12,9 +13,12 @@ import { Dialog, DialogFooter } from "@/components/ui/dialog";
 export type RequestDoc = {
   id: string;
   originalName: string;
+  /** Dodavatel (u nabídky) nebo odesílatel a předmět (u e-mailu). */
   summary: string | null;
   isEmail: boolean;
   size: number;
+  /** ISO datum založení – v seznamu se ukazuje pod názvem. */
+  createdAt?: string | null;
   canDelete: boolean;
   /** Poslední vytěžení přes AI (#33). */
   ai?: { id: string; status: string; error: string | null } | null;
@@ -238,13 +242,13 @@ export function RequestAttachments({
                 className="min-w-0 flex-1"
               >
                 <span className="block truncate text-stone-900 underline-offset-4 group-hover:underline">
-                  {d.summary ?? d.originalName}
+                  {d.summary ? `${d.summary} – ${d.originalName}` : d.originalName}
                 </span>
-                {d.summary && (
-                  <span className="block truncate text-[11px] text-stone-400">
-                    {d.originalName} · {formatBytes(d.size)}
-                  </span>
-                )}
+                <span className="block truncate text-[11px] text-stone-400">
+                  {[d.createdAt ? formatDate(new Date(d.createdAt)) : null, formatBytes(d.size)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </a>
               <AiChip d={d} onOpen={setAiOpen} />
               {d.canDelete && (

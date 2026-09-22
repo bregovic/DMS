@@ -155,6 +155,7 @@ export default async function ProjectDetailPage({
                 summary: true,
                 mimeType: true,
                 size: true,
+                createdAt: true,
                 uploadedById: true,
                 extractions: {
                   orderBy: { createdAt: "desc" },
@@ -1631,6 +1632,7 @@ export default async function ProjectDetailPage({
                     id: d.id,
                     originalName: d.originalName,
                     summary: d.summary,
+                    createdAt: d.createdAt.toISOString(),
                     isEmail:
                       d.mimeType === "message/rfc822" ||
                       d.mimeType === "application/vnd.ms-outlook",

@@ -60,6 +60,7 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
       fromName: true,
       fromAddress: true,
       rawKey: true,
+      suggestion: true,
       attachments: { select: { id: true, fileName: true, originalName: true, mimeType: true, size: true, kind: true } },
     },
   });
@@ -86,7 +87,12 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
   const withEmail = t.withEmail && !!mail.rawKey;
   if (vybrane.length === 0 && !withEmail) throw new Error("Vyber aspoň jednu přílohu, nebo přilož e-mail.");
 
-  const summary = `${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress} · ${mail.subject}`;
+  // U přeposlané pošty je odesílatel sám uživatel, proto se k příloze
+  // píše dodavatel zjištěný z obsahu. E-mail si nechá odesílatele a předmět.
+  const navrh = (mail.suggestion ?? null) as { vendorName?: string | null } | null;
+  const dodavatel = navrh?.vendorName?.trim() || null;
+  const odesilatel = `${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress} · ${mail.subject}`;
+  const summary = dodavatel ?? odesilatel;
   const docIds: string[] = [];
   let nabidkaDorazila = false;
   let zalozeno = 0;
@@ -100,7 +106,7 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
       data: {
         projectId: t.projectId,
         requestId,
-        summary: summary.slice(0, 500),
+        summary: odesilatel.slice(0, 500),
         fileName: newKey,
         originalName: nazev,
         mimeType: "message/rfc822",
