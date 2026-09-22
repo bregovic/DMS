@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Paperclip, Pencil, Plus } from "lucide-react";
+import { Check, FileText, Paperclip, Pencil, Plus } from "lucide-react";
 import {
   createOffer,
   updateOffer,
@@ -37,6 +37,9 @@ export type OfferView = {
   bundleName?: string | null;
   /** Rozpory proti specifikaci žádanky, po řádcích. */
   mismatch?: string | null;
+  /** Dokument, ze kterého nabídka vznikla – ať jde otevřít PDF od nabídky. */
+  sourceDocId?: string | null;
+  sourceDocName?: string | null;
   /** Úkoly do plánu navržené AI – založí se po výběru nabídky (#33). */
   planTaskCount?: number;
   tasksCreated?: boolean;
@@ -241,6 +244,18 @@ export function OffersPanel({
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
                 </p>
                 {o.note && <p className="mt-0.5 text-xs text-stone-500">{o.note}</p>}
+                {o.sourceDocId && (
+                  <a
+                    href={`/api/documents/${o.sourceDocId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={o.sourceDocName ?? undefined}
+                    className="mt-0.5 inline-flex items-center gap-1 text-xs text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline"
+                  >
+                    <FileText className="size-3.5" />
+                    Zobrazit nabídku
+                  </a>
+                )}
                 {o.mismatch && (
                   <div className="mt-1 border-l-2 border-amber-400 pl-2 text-xs text-amber-800">
                     <p className="font-medium">Nesedí se specifikací</p>

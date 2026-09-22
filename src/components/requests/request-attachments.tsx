@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
+import { ChevronDown, Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
 import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
 import { startExtraction, startRequestExtractions } from "@/server/actions/extraction";
 import { DeleteButton } from "@/components/ui/delete-button";
@@ -149,6 +149,9 @@ export function RequestAttachments({
   const [dragOver, setDragOver] = useState(false);
   const [aiOpen, setAiOpen] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
+  // Seznam příloh je rozbalovací – u žádanky s víc nabídkami zabíral
+  // půl obrazovky. Rozbalí se sám, když je něco rozpracovaného.
+  const [open, setOpen] = useState(false);
   // Přílohy, které jdou zpracovat a ještě zpracované nebyly.
   const unprocessed = docs.filter((d) => d.canExtract && !d.ai).length;
   const router = useRouter();
@@ -208,6 +211,18 @@ export function RequestAttachments({
       }`}
     >
       {docs.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 text-xs text-stone-600 hover:text-stone-950"
+        >
+          <Paperclip className="size-3.5" />
+          Přílohy · {docs.length}
+          <ChevronDown className={`size-3.5 transition-transform ${open || running ? "rotate-180" : ""}`} />
+        </button>
+      )}
+
+      {docs.length > 0 && (open || running) && (
         <ul className="mb-1.5 space-y-1">
           {docs.map((d) => (
             <li key={d.id} className="group flex items-start gap-2 text-sm">

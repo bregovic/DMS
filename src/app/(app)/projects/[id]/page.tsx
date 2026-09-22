@@ -837,6 +837,19 @@ export default async function ProjectDetailPage({
   const statusColor = (st: string) => taskColorMap.get(st) ?? "stone";
   const offerVendorItems = accountVendors.map((v) => ({ id: v.id, label: v.name }));
 
+  // Zdrojové PDF u nabídky: nabídka si drží id vytěžení, vytěžení dokument.
+  // Než se dokument přesune přímo k nabídce (#42), spojí se to takhle.
+  const exIds = [
+    ...new Set(project.requests.flatMap((r) => r.offers.map((o) => o.extractionId)).filter((x): x is string => !!x)),
+  ];
+  const exDocs = exIds.length
+    ? await prisma.extraction.findMany({
+        where: { id: { in: exIds } },
+        select: { id: true, documentId: true, document: { select: { originalName: true } } },
+      })
+    : [];
+  const exDocMap = new Map(exDocs.map((e) => [e.id, { id: e.documentId, name: e.document.originalName }]));
+
   // Poptávkové balíčky (#40) – matice firem × žádanek a porovnání za celek.
   // Načítají se jen pro záložku Žádanky, ať zbytek stránky nezdržují.
   const bundles =
@@ -1648,6 +1661,8 @@ export default async function ProjectDetailPage({
                       : null,
                     note: o.note,
                     mismatch: o.mismatch,
+                    sourceDocId: o.extractionId ? (exDocMap.get(o.extractionId)?.id ?? null) : null,
+                    sourceDocName: o.extractionId ? (exDocMap.get(o.extractionId)?.name ?? null) : null,
                     rating: o.rating,
                     score: o.score,
                     status: o.status,
