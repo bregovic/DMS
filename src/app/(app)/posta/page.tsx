@@ -64,11 +64,6 @@ export default async function MailPage() {
 
       <MailInbox mails={view} projects={projects} configured={mailboxConfigured()} />
 
-      <p className="mt-8 text-[11px] text-stone-400">
-        Pošta chodí ze štítků v Gmailu: e-mail přetažený pod štítek pojmenovaný jako projekt nebo
-        složka se sem do pár minut objeví a zařadí se tam. Přijme se jen od adresy, kterou DMS zná –
-        od tebe nebo od dodavatele v evidenci. Nic se nezakládá samo.
-      </p>
     </div>
   );
 }

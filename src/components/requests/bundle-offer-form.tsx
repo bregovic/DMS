@@ -155,8 +155,7 @@ export function BundleOfferForm({
             })}
           </ul>
           <p className="text-xs text-stone-400">
-            Když firma pošle jednu sumu za všechno, nech ceny u jednotlivých položek prázdné a vyplň jen Celkem.
-            Porovnání s tím počítá.
+            Bez rozpisu po žádankách vyplň jen Celkem.
           </p>
         </div>
 

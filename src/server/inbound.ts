@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { fetchUnseen, mailboxConfigured, type FetchedMail } from "@/lib/mailbox";
 import { mailTemplate, para, sendMail } from "@/lib/mailer";
-import { assertBudget, callModel, AI_MODEL } from "@/server/extraction";
+import { assertBudget, callModel, extractable, filePart, AI_MODEL } from "@/server/extraction";
 import { notifyUsers } from "@/server/notify";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -24,7 +24,7 @@ export type MailSuggestion = {
   requestId: string | null;
   /** Všechny poptávky, které nabídka pokrývá – jedna nabídka bývá na víc věcí. */
   requestIds: string[];
-  /** offer | invoice | technical | other – co přišlo. */
+  /** offer | invoice | technical | marketing | other – co přišlo. */
   kind: string;
   /** Jistota 0–100 a krátké zdůvodnění česky. */
   confidence: number;
@@ -45,20 +45,23 @@ const ROUTE_SCHEMA = obj({
   projectId: str,
   requestId: str,
   requestIds: { type: "array", items: { type: "string" } },
-  kind: { type: "string", enum: ["offer", "invoice", "technical", "other"] },
+  kind: { type: "string", enum: ["offer", "invoice", "technical", "marketing", "other"] },
   confidence: { type: "number" },
   reason: { type: "string" },
-  attachmentKinds: { type: "array", items: { type: "string", enum: ["offer", "invoice", "technical", "other"] } },
+  attachmentKinds: {
+    type: "array",
+    items: { type: "string", enum: ["offer", "invoice", "technical", "marketing", "other"] },
+  },
 });
 
 const ROUTE_INSTRUCTIONS = `Jsi asistent stavebníka. Přišel přeposlaný e-mail od dodavatele. Urči, kam v evidenci patří.
-kind: "offer" = cenová nabídka, "invoice" = faktura nebo zálohová faktura, "technical" = technický list / výkres / specifikace bez cen, "other" = ostatní.
+kind: "offer" = cenová nabídka ke konkrétní poptávce, "invoice" = faktura nebo zálohová faktura, "technical" = technický list / výkres / specifikace bez cen, "marketing" = obecný katalog sortimentu, ceník, leták, reference, podmínky záruky – tedy materiál, který se neváže na tuhle poptávku, "other" = ostatní.
 projectId: id projektu ze seznamu, kterého se e-mail týká. Když to z obsahu nejde poznat, vrať null – nehádej.
 requestIds: id **všech** poptávek, které dokument pokrývá. Tohle je to podstatné – nabídka od jednoho dodavatele bývá na víc věcí najednou (okna + dveře + portál) a každá z nich je samostatná poptávka. Projdi poptávky jednu po druhé a porovnej jejich název, rozměry a počty s položkami v dokumentu; co v dokumentu najdeš, to do pole patří.
 Pole nech prázdné **jen** když dokument nepokrývá žádnou poptávku ze seznamu. Pokrývá-li jedinou, vrať pole s jedním prvkem. Nikdy nevracej prázdné pole s odůvodněním, že poptávek je víc – v tom je právě smysl toho pole.
 Vracej přesná id ze seznamu, ne názvy.
 requestId: první z requestIds, tedy ta hlavní. Když je requestIds prázdné, vrať null.
-attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, jeden typ ze stejného číselníku jako kind.
+attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, jeden typ ze stejného číselníku jako kind. Katalog sortimentu nebo leták přiložený k nabídce označ jako "marketing", i když přišel spolu s ní.
 confidence: 0–100, jak jistý si zařazením jsi. Když je projekt i poptávka null, dej nízkou hodnotu.
 reason: jedna krátká věta česky, podle čeho ses rozhodl (např. "nabídka na okna od firmy, která je u poptávky Okna v evidenci").`;
 
@@ -173,7 +176,14 @@ async function routingContext(ownerId: string, forced?: { projectId?: string | n
   }));
 }
 
-/** Návrh zařazení. Když AI není k dispozici, vrátí prázdný návrh – není to chyba. */
+/**
+ * Návrh zařazení. Když AI není k dispozici, vrátí prázdný návrh – není to chyba.
+ *
+ * Dvě kola: nejdřív levné, jen z předmětu a textu e-mailu. Dodavatelé ale
+ * obvykle píšou „nabídku naleznete v příloze“, takže když první kolo žádnou
+ * poptávku nenajde, přečtou se i přílohy. Ty stojí víc, proto se sahá jen
+ * tam, kde je to opravdu potřeba.
+ */
 export async function suggestRouting(
   mail: FetchedMail,
   ownerId: string,
@@ -185,48 +195,69 @@ export async function suggestRouting(
   if (forced?.subProjectId && ctx.every((p) => p.poptavky.length === 0))
     ctx = await routingContext(ownerId, { projectId: forced.projectId });
   if (ctx.length === 0) return null;
+
+  const popis =
+    (forced?.projectId
+      ? "Projekt (a případně složka) je už určený štítkem v e-mailu – vrať jeho projectId a soustřeď se na to, které **všechny** poptávky dokument pokrývá.\n"
+      : "") +
+    `Projekty a otevřené poptávky:\n${JSON.stringify(ctx, null, 1)}\n\n` +
+    `E-mail\nOd: ${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress}\n` +
+    `Předmět: ${mail.subject}\n` +
+    `Přílohy: ${mail.attachments.map((a) => a.originalName).join(", ") || "žádné"}\n\n` +
+    `Text:\n${(mail.bodyText ?? "").slice(0, 6000)}`;
+
+  const znama = new Set(ctx.flatMap((p) => p.poptavky).map((r) => r.requestId));
+  const uprav = (data: MailSuggestion): MailSuggestion => {
+    const project = ctx.find((p) => p.projectId === data.projectId) ?? null;
+    const request = data.requestId && znama.has(data.requestId) ? data.requestId : null;
+    const requestIds = [...new Set([...(data.requestIds ?? []), ...(request ? [request] : [])])].filter((id) =>
+      znama.has(id),
+    );
+    return { ...data, projectId: project?.projectId ?? null, requestId: request ?? requestIds[0] ?? null, requestIds };
+  };
+
+  const zeptejSe = async (obsah: unknown[]) => {
+    const { data } = await callModel<MailSuggestion>(AI_MODEL, ROUTE_INSTRUCTIONS, obsah, "mail-routing", ROUTE_SCHEMA, {
+      effort: "medium",
+      maxOutput: 3_000,
+    });
+    return uprav(data);
+  };
+
   try {
     await assertBudget();
   } catch {
     return null; // limity nebo vypnuté zpracování – pošta se uloží bez návrhu
   }
+
+  let vysledek: MailSuggestion | null = null;
   try {
-    const { data } = await callModel<MailSuggestion>(
-      AI_MODEL,
-      ROUTE_INSTRUCTIONS,
-      [
-        {
-          type: "input_text",
-          text:
-            (forced?.projectId
-              ? "Projekt (a případně složka) je už určený štítkem v e-mailu – vrať jeho projectId a soustřeď se na to, které **všechny** poptávky dokument pokrývá.\n"
-              : "") +
-            `Projekty a otevřené poptávky:\n${JSON.stringify(ctx, null, 1)}\n\n` +
-            `E-mail\nOd: ${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress}\n` +
-            `Předmět: ${mail.subject}\n` +
-            `Přílohy: ${mail.attachments.map((a) => a.originalName).join(", ") || "žádné"}\n\n` +
-            `Text:\n${(mail.bodyText ?? "").slice(0, 6000)}`,
-        },
-      ],
-      "mail-routing",
-      ROUTE_SCHEMA,
-      { effort: "medium", maxOutput: 3_000 },
-    );
-    // Vymyšlená id zahodit – radši bez návrhu než špatně zařazené.
-    const project = ctx.find((p) => p.projectId === data.projectId) ?? null;
-    const znama = new Set((project?.poptavky ?? ctx.flatMap((p) => p.poptavky)).map((r) => r.requestId));
-    const request = data.requestId && znama.has(data.requestId) ? data.requestId : null;
-    const requestIds = [...new Set([...(data.requestIds ?? []), ...(request ? [request] : [])])].filter((id) =>
-      znama.has(id),
-    );
-    return {
-      ...data,
-      projectId: project?.projectId ?? null,
-      requestId: request ?? requestIds[0] ?? null,
-      requestIds,
-    };
+    vysledek = await zeptejSe([{ type: "input_text", text: popis }]);
   } catch {
     return null;
+  }
+  if (vysledek.requestIds.length > 0) return vysledek;
+
+  // Druhé kolo s přílohami – tam bývá rozpis položek, rozměry a počty.
+  const citelne = mail.attachments.filter((a) => a.content?.length && extractable(a.mimeType, a.originalName)).slice(0, 2);
+  if (citelne.length === 0) return vysledek;
+  try {
+    await assertBudget();
+    const casti = [];
+    for (const a of citelne) {
+      try {
+        casti.push(await filePart(a.content, a.originalName, a.mimeType));
+      } catch {
+        // nečitelná příloha (poškozený .doc, moc velký soubor) – přeskočit
+      }
+    }
+    if (casti.length === 0) return vysledek;
+    return await zeptejSe([
+      { type: "input_text", text: `${popis}\n\nObsah příloh je níž – porovnej jejich položky, rozměry a počty s poptávkami.` },
+      ...casti,
+    ]);
+  } catch {
+    return vysledek; // limit nebo chyba – platí výsledek z prvního kola
   }
 }
 

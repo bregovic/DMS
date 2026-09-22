@@ -45,10 +45,7 @@ export default async function SettingsPage() {
 
       <section className="mt-12">
         <h2 className="kicker mb-2">Oznámení</h2>
-        <p className="mb-4 max-w-sm text-sm text-stone-500">
-          Přidělený úkol, výdaj od ostatních, připomínky a žádosti o úhradu chodí do zvonečku.
-          Můžou chodit i na e-mail.
-        </p>
+        <p className="mb-4 max-w-sm text-sm text-stone-500">Oznámení z aplikace i na e-mail.</p>
         <NotifySettings
           enabled={!!dbUser?.notifyByEmail}
           address={dbUser?.notifyEmail ?? null}

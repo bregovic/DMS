@@ -119,9 +119,7 @@ export function BundleManager({
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-stone-400">
-                Žádanka patří vždy jen do jednoho balíčku – zařazením do jiného se z původního vyřadí.
-              </p>
+              <p className="text-xs text-stone-400">Žádanka může být jen v jednom balíčku.</p>
             </div>
 
             {err && <p className="text-xs text-red-600">{err}</p>}

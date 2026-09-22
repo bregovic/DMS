@@ -190,6 +190,7 @@ export async function fileMail(formData: FormData) {
         mimeType: a.mimeType,
         size,
         type: isDoc ? "invoice" : kind === "offer" ? "offer" : "other",
+        // Propagační materiál se nevytěžuje, jen se uloží.
         uploadedById: user.id,
       },
       select: { id: true },
@@ -198,7 +199,8 @@ export async function fileMail(formData: FormData) {
       where: { id: a.id },
       data: { fileName: newKey, documentId: doc.id, kind },
     });
-    if (!isDoc && requestId && extractable(a.mimeType, a.originalName)) docIds.push(doc.id);
+    if (!isDoc && kind !== "marketing" && requestId && extractable(a.mimeType, a.originalName))
+      docIds.push(doc.id);
   }
 
   await prisma.inboundMail.update({
@@ -255,7 +257,7 @@ export async function resuggestMail(formData: FormData) {
       projectId: true,
       subProjectId: true,
       note: true,
-      attachments: { select: { originalName: true, mimeType: true, size: true } },
+      attachments: { select: { fileName: true, originalName: true, mimeType: true, size: true } },
     },
   });
   if (!row) throw new Error("Zpráva nenalezena.");
@@ -268,12 +270,15 @@ export async function resuggestMail(formData: FormData) {
       subject: row.subject,
       receivedAt: row.receivedAt,
       bodyText: row.bodyText,
-      attachments: row.attachments.map((a) => ({
-        originalName: a.originalName,
-        mimeType: a.mimeType,
-        size: a.size,
-        content: Buffer.alloc(0), // k návrhu stačí názvy příloh
-      })),
+      // Přílohy i s obsahem – rozpis položek bývá v nich, ne v těle e-mailu.
+      attachments: await Promise.all(
+        row.attachments.map(async (a) => ({
+          originalName: a.originalName,
+          mimeType: a.mimeType,
+          size: a.size,
+          content: await storage.read(a.fileName).catch(() => Buffer.alloc(0)),
+        })),
+      ),
     },
     row.ownerId,
     { projectId: row.projectId, subProjectId: row.subProjectId },

@@ -173,7 +173,7 @@ export function BundlePanel({
       <div className="px-4 py-3">
         {offerCount === 0 ? (
           <p className="text-sm text-stone-500">
-            Zatím žádná nabídka. Společnou nabídku přidej sem, nabídky jen na jednu žádanku rovnou u ní – v matici se sejdou.
+Zatím žádná nabídka.
           </p>
         ) : (
           <div className="-mx-4 overflow-x-auto px-4">

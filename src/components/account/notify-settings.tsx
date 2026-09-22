@@ -62,14 +62,13 @@ export function NotifySettings({
           disabled={!on}
         />
         <p className="text-xs text-stone-400">
-          Prázdné = přihlašovací e-mail{loginEmail ? ` (${loginEmail})` : ""}.
+          Prázdné: {loginEmail ?? "přihlašovací e-mail"}
         </p>
       </div>
 
       {!configured && (
         <p className="border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-          Odesílání e-mailů zatím není nastavené (chybí <code>RESEND_API_KEY</code>) – oznámení se
-          uloží do zvonečku, ale neodešlou.
+          Odesílání e-mailů není nastavené.
         </p>
       )}
       {err && <p className="text-xs text-red-600">{err}</p>}

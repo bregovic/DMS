@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, Mail, Paperclip, RefreshCw, Sparkle, X } from "lucide-react";
+import { Check, Download, Loader2, Mail, Paperclip, RefreshCw, Sparkle, X } from "lucide-react";
 import { deleteMail, dismissMail, fileMail, projectOptions, resuggestMail, runMailbox } from "@/server/actions/inbound";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,12 @@ const KINDS = [
   { value: "offer", label: "Nabídka" },
   { value: "invoice", label: "Faktura" },
   { value: "technical", label: "Technický list" },
+  { value: "marketing", label: "Propagační materiál" },
   { value: "other", label: "Ostatní" },
 ];
+
+/** Katalogy a letáky se do evidence obvykle nezakládají. */
+const NEZAJIMAVE = ["marketing"];
 
 const kindLabel = (k: string) => KINDS.find((x) => x.value === k)?.label ?? "Ostatní";
 /** Server actions berou FormData – tohle ušetří psaní u akcí z tlačítka. */
@@ -229,9 +233,7 @@ function FileDialog({
               className={selectClass}
             />
             <p className="text-xs text-stone-500">
-              Vybrané žádanky ({picked.length}) se sdruží do poptávkového balíčku a příloha se založí jako
-              společná nabídka – soubor bude jeden a uvidíš ho u všech. Ceny a dodavatele doplní zpracování.
-              Když některá žádanka už v balíčku je, použije se ten.
+              {picked.length} žádanek se sdruží do balíčku; příloha se založí jako společná nabídka.
             </p>
           </div>
         )}
@@ -246,7 +248,7 @@ function FileDialog({
                     type="checkbox"
                     name={`use_${a.id}`}
                     value="1"
-                    defaultChecked
+                    defaultChecked={!NEZAJIMAVE.includes(a.kind)}
                     className="size-4 shrink-0 cursor-pointer accent-stone-900"
                   />
                   <span className="truncate" title={a.originalName}>
@@ -267,18 +269,16 @@ function FileDialog({
               <li className="px-3 py-2 text-sm text-stone-500">E-mail nemá přílohy.</li>
             )}
           </ul>
-          <p className="text-xs text-stone-400">
-            Faktura půjde mezi doklady projektu, ostatní k vybrané žádance.
-          </p>
+          <p className="text-xs text-stone-400">Faktury jdou mezi doklady projektu, ostatní k žádance.</p>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
           <input type="checkbox" name="withEmail" value="1" defaultChecked className="size-4 cursor-pointer accent-stone-900" />
-          Přiložit i samotný e-mail (jen když vybereš žádanku)
+Přiložit e-mail k žádance
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
           <input type="checkbox" name="extract" value="1" defaultChecked className="size-4 cursor-pointer accent-stone-900" />
-          Rovnou zpracovat nabídky do návrhu
+Po založení zpracovat přílohy
         </label>
 
         {err && <p className="text-xs text-red-600">{err}</p>}
@@ -313,23 +313,27 @@ export function MailInbox({
   const [open, setOpen] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // Přepočet návrhu trvá desítky sekund; blokuje se jen ten jeden řádek.
+  const [busyId, setBusyId] = useState<string | null>(null);
   const active = mails.find((m) => m.id === open) ?? null;
 
-  const resuggest = (id: string) =>
-    start(async () => {
-      setMsg(null);
-      try {
-        const r = await resuggestMail(formDataOf({ mailId: id }));
-        setMsg(
-          r.requests === 0
-            ? "Nabídka nesedí na žádnou otevřenou žádanku."
-            : `Navrženo ${r.requests} ${r.requests === 1 ? "žádanka" : r.requests < 5 ? "žádanky" : "žádanek"}.`,
-        );
-        router.refresh();
-      } catch (e) {
-        setMsg(e instanceof Error ? e.message : "Přepočet návrhu selhal.");
-      }
-    });
+  const resuggest = async (id: string) => {
+    setBusyId(id);
+    setMsg(null);
+    try {
+      const r = await resuggestMail(formDataOf({ mailId: id }));
+      setMsg(
+        r.requests === 0
+          ? "Žádanku nelze určit. Vyber ji ručně."
+          : `Navrženo ${r.requests} ${r.requests === 1 ? "žádanka" : r.requests < 5 ? "žádanky" : "žádanek"}.`,
+      );
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Přepočet návrhu selhal.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const fetchNow = () =>
     start(async () => {
@@ -370,8 +374,7 @@ export function MailInbox({
 
       {mails.length === 0 ? (
         <p className="border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
-          Vstupní složka je prázdná. Přetáhni v Gmailu nabídku nebo fakturu pod štítek pojmenovaný
-          jako projekt nebo složka – do pár minut bude tady.
+Žádná nepřiřazená pošta.
         </p>
       ) : (
         <ul className="border-t border-stone-200">
@@ -440,13 +443,22 @@ export function MailInbox({
                       </button>
                       <button
                         type="button"
-                        onClick={() => resuggest(m.id)}
-                        disabled={pending}
-                        title="Spočítat návrh žádanek znovu (např. když mezitím přibyly)"
+                        onClick={() => void resuggest(m.id)}
+                        disabled={busyId !== null}
+                        title="Spočítat návrh žádanek znovu"
                         className="inline-flex cursor-pointer items-center gap-1 border border-stone-300 px-2 py-1 text-[11px] text-stone-600 hover:border-stone-950 disabled:opacity-50"
                       >
-                        <Sparkle className="size-3" />
-                        Navrhnout znovu
+                        {busyId === m.id ? (
+                          <>
+                            <Loader2 className="size-3 animate-spin" />
+                            Počítám…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkle className="size-3" />
+                            Navrhnout znovu
+                          </>
+                        )}
                       </button>
                       <form action={dismissMail}>
                         <input type="hidden" name="mailId" value={m.id} />
