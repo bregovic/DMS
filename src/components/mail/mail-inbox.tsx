@@ -29,6 +29,8 @@ export type MailView = {
   projectId: string | null;
   subProjectId: string | null;
   requestId: string | null;
+  /** Poptávky navržené z obsahu – nabídka jich bývá na víc. */
+  requestIds: string[];
   reason: string | null;
   confidence: number | null;
   attachments: { id: string; originalName: string; size: number; kind: string; documentId: string | null }[];
@@ -60,7 +62,8 @@ function FileDialog({
   const router = useRouter();
   const [projectId, setProjectId] = useState(mail.projectId ?? projects[0]?.id ?? "");
   const [subProjectId, setSubProjectId] = useState(mail.subProjectId ?? "");
-  const [requestId, setRequestId] = useState(mail.requestId ?? "");
+  const [picked, setPicked] = useState<string[]>(mail.requestIds ?? []);
+  const [bundleName, setBundleName] = useState("");
   const [loaded, setLoaded] = useState<{ projectId: string; opts: ProjectOptions } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -74,7 +77,8 @@ function FileDialog({
       .then((o) => {
         if (!platne) return;
         setLoaded({ projectId, opts: o });
-        setRequestId((cur) => (o.requests.some((r) => r.id === cur) ? cur : ""));
+        // Návrh se udrží jen pro žádanky, které v projektu opravdu jsou.
+        setPicked((cur) => cur.filter((id) => o.requests.some((r) => r.id === id)));
         setSubProjectId((cur) => (o.folders.some((f) => f.id === cur) ? cur : ""));
       })
       .catch(() => {
@@ -171,24 +175,59 @@ function FileDialog({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="m-request">Žádanka</Label>
-          <select
-            id="m-request"
-            name="requestId"
-            value={requestId}
-            onChange={(e) => setRequestId(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">— bez žádanky —</option>
-            {viditelne.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.title}
-                {!subProjectId && r.subProjectId ? ` · ${folderName(r.subProjectId) ?? ""}` : ""}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-stone-400">{hint}</p>
+          <Label>Žádanky, kterých se nabídka týká</Label>
+          <ul className="max-h-56 overflow-y-auto border border-stone-200">
+            {viditelne.map((r) => {
+              const navrzena = (mail.requestIds ?? []).includes(r.id);
+              return (
+                <li key={r.id} className="border-b border-stone-100 last:border-b-0">
+                  <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-stone-900">
+                    <input
+                      type="checkbox"
+                      name="requestIds"
+                      value={r.id}
+                      checked={picked.includes(r.id)}
+                      onChange={(e) =>
+                        setPicked((cur) => (e.target.checked ? [...cur, r.id] : cur.filter((x) => x !== r.id)))
+                      }
+                      className="size-4 shrink-0 cursor-pointer accent-stone-900"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                    {!subProjectId && r.subProjectId && (
+                      <span className="shrink-0 text-[11px] text-stone-400">{folderName(r.subProjectId)}</span>
+                    )}
+                    {navrzena && (
+                      <span className="shrink-0 border border-stone-300 px-1.5 text-[10px] uppercase tracking-wide text-stone-500">
+                        návrh
+                      </span>
+                    )}
+                  </label>
+                </li>
+              );
+            })}
+            {viditelne.length === 0 && <li className="px-3 py-2 text-sm text-stone-500">{hint}</li>}
+          </ul>
+          {viditelne.length > 0 && <p className="text-xs text-stone-400">{hint}</p>}
         </div>
+
+        {picked.length > 1 && (
+          <div className="space-y-1.5 border border-stone-200 bg-stone-50 p-3">
+            <Label htmlFor="m-bundle">Název balíčku</Label>
+            <input
+              id="m-bundle"
+              name="bundleName"
+              value={bundleName}
+              onChange={(e) => setBundleName(e.target.value)}
+              placeholder="Např. Výplně otvorů"
+              className={selectClass}
+            />
+            <p className="text-xs text-stone-500">
+              Vybrané žádanky ({picked.length}) se sdruží do poptávkového balíčku a příloha se založí jako
+              společná nabídka – soubor bude jeden a uvidíš ho u všech. Ceny a dodavatele doplní zpracování.
+              Když některá žádanka už v balíčku je, použije se ten.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label>Co založit</Label>

@@ -41,12 +41,14 @@ export default async function MailPage() {
   ]);
 
   const view: MailView[] = mails.map((m) => {
-    const s = (m.suggestion ?? null) as { reason?: string; confidence?: number } | null;
+    const s = (m.suggestion ?? null) as { reason?: string; confidence?: number; requestIds?: string[] } | null;
     return {
       ...m,
       receivedAt: m.receivedAt.toISOString(),
       reason: s?.reason ?? null,
       confidence: typeof s?.confidence === "number" ? s.confidence : null,
+      // Navržené poptávky: celý seznam, ne jen ta hlavní.
+      requestIds: Array.isArray(s?.requestIds) ? s.requestIds : m.requestId ? [m.requestId] : [],
     };
   });
   const waiting = view.filter((m) => m.status === "nova").length;

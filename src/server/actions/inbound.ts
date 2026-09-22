@@ -77,11 +77,17 @@ export async function fileMail(formData: FormData) {
   if (!project) throw new Error("Vyber projekt.");
   if (!isManager(await getProjectRole(project.id, user))) throw new Error("Do tohoto projektu nemáš přístup.");
 
-  const requestId = String(formData.get("requestId") || "") || null;
-  if (requestId) {
-    const r = await prisma.request.findFirst({ where: { id: requestId, projectId }, select: { id: true } });
-    if (!r) throw new Error("Vybraná žádanka do projektu nepatří.");
-  }
+  // Nabídka od jednoho dodavatele bývá na víc věcí najednou, proto víc žádanek.
+  const requestIds = [...new Set(formData.getAll("requestIds").map(String).filter(Boolean))];
+  const platne = requestIds.length
+    ? await prisma.request.findMany({
+        where: { id: { in: requestIds }, projectId },
+        select: { id: true, title: true, subProjectId: true },
+      })
+    : [];
+  if (platne.length !== requestIds.length) throw new Error("Některá vybraná žádanka do projektu nepatří.");
+  // Hlavní žádanka nese dokument (vytěžení potřebuje na čem stát).
+  const requestId = platne[0]?.id ?? null;
 
   const picked = mail.attachments.filter((a) => formData.get(`use_${a.id}`) === "1");
   const withEmail = formData.get("withEmail") === "1" && !!mail.rawKey;
@@ -89,6 +95,54 @@ export async function fileMail(formData: FormData) {
 
   const summary = `${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress} · ${mail.subject}`;
   const docIds: string[] = [];
+
+  /**
+   * Nabídka na víc žádanek se zakládá jako společná nabídka poptávkového
+   * balíčku (#40): soubor leží jednou a je dostupný u všech jeho žádanek.
+   * Balíček se použije existující (když už v něm vybrané žádanky jsou),
+   * jinak vznikne nový pod zadaným názvem.
+   */
+  let bundleOfferId: string | null = null;
+  if (platne.length > 1) {
+    const stavajici = await prisma.request.findFirst({
+      where: { id: { in: platne.map((r) => r.id) }, bundleId: { not: null } },
+      select: { bundleId: true },
+    });
+    let bundleId = stavajici?.bundleId ?? null;
+    if (!bundleId) {
+      const nazev = String(formData.get("bundleName") || "").trim() || "Společná poptávka";
+      bundleId = (
+        await prisma.requestBundle.create({
+          data: { projectId, name: nazev.slice(0, 200), createdById: user.id },
+          select: { id: true },
+        })
+      ).id;
+    }
+    await prisma.request.updateMany({ where: { id: { in: platne.map((r) => r.id) } }, data: { bundleId } });
+
+    const offer = await prisma.bundleOffer.create({
+      data: {
+        bundleId,
+        // Dodavatele i ceny doplní vytěžení nebo uživatel – teď známe jen odesílatele.
+        vendorName: mail.fromName?.slice(0, 200) ?? mail.fromAddress,
+        note: `Z e-mailu: ${mail.subject}`.slice(0, 500),
+        createdById: user.id,
+      },
+      select: { id: true, status: true },
+    });
+    bundleOfferId = offer.id;
+    for (const r of platne) {
+      await prisma.offer.create({
+        data: {
+          requestId: r.id,
+          bundleOfferId: offer.id,
+          vendorName: offer.status === "nova" ? (mail.fromName ?? mail.fromAddress) : null,
+          status: offer.status,
+          createdById: user.id,
+        },
+      });
+    }
+  }
 
   // Samotný e-mail jako příloha žádanky (#32) – kontext, ze kterého nabídka přišla.
   if (withEmail && requestId) {
@@ -126,6 +180,9 @@ export async function fileMail(formData: FormData) {
         // Faktura patří mezi doklady projektu (bez vazby na žádanku),
         // ostatní k žádance – tam na ně navazuje zpracování nabídky.
         requestId: isDoc ? null : requestId,
+        // U nabídky na víc žádanek navíc vazba na společnou nabídku, aby
+        // byl tentýž soubor dostupný u celého balíčku.
+        bundleOfferId: isDoc ? null : bundleOfferId,
         summary: summary.slice(0, 500),
         fileName: newKey,
         originalName: a.originalName,
@@ -149,7 +206,12 @@ export async function fileMail(formData: FormData) {
       status: "zarazena",
       projectId,
       requestId,
-      note: `Zařazeno ${new Date().toLocaleString("cs-CZ")} – ${picked.length} příloh.`,
+      note: [
+        `Zařazeno ${new Date().toLocaleString("cs-CZ")} – ${picked.length} příloh.`,
+        platne.length > 1 ? `Společná nabídka na ${platne.length} žádanek: ${platne.map((r) => r.title).join(", ")}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
     },
   });
 
@@ -169,7 +231,7 @@ export async function fileMail(formData: FormData) {
 
   revalidatePath("/posta");
   revalidatePath(`/projects/${projectId}`);
-  return { documents: picked.length, extracting: docIds.length };
+  return { documents: picked.length, extracting: docIds.length, bundled: platne.length > 1 };
 }
 
 export async function dismissMail(formData: FormData) {

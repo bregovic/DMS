@@ -22,6 +22,8 @@ import type { Prisma } from "@/generated/prisma/client";
 export type MailSuggestion = {
   projectId: string | null;
   requestId: string | null;
+  /** Všechny poptávky, které nabídka pokrývá – jedna nabídka bývá na víc věcí. */
+  requestIds: string[];
   /** offer | invoice | technical | other – co přišlo. */
   kind: string;
   /** Jistota 0–100 a krátké zdůvodnění česky. */
@@ -42,6 +44,7 @@ const obj = (properties: Record<string, unknown>) => ({
 const ROUTE_SCHEMA = obj({
   projectId: str,
   requestId: str,
+  requestIds: { type: "array", items: { type: "string" } },
   kind: { type: "string", enum: ["offer", "invoice", "technical", "other"] },
   confidence: { type: "number" },
   reason: { type: "string" },
@@ -51,7 +54,8 @@ const ROUTE_SCHEMA = obj({
 const ROUTE_INSTRUCTIONS = `Jsi asistent stavebníka. Přišel přeposlaný e-mail od dodavatele. Urči, kam v evidenci patří.
 kind: "offer" = cenová nabídka, "invoice" = faktura nebo zálohová faktura, "technical" = technický list / výkres / specifikace bez cen, "other" = ostatní.
 projectId: id projektu ze seznamu, kterého se e-mail týká. Když to z obsahu nejde poznat, vrať null – nehádej.
-requestId: id poptávky, ke které e-mail patří. Když pokrývá víc poptávek nebo se nedá určit, vrať null.
+requestId: id poptávky, které se e-mail týká především. Když se nedá určit, vrať null.
+requestIds: id **všech** poptávek, které dokument pokrývá – nabídka od jednoho dodavatele bývá na víc věcí najednou (okna + dveře + portál). Porovnávej i rozměry a počty ve specifikaci poptávky s tím, co je v dokumentu. Co dokument nepokrývá, nevracej; když nepokrývá nic, vrať prázdné pole.
 attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, jeden typ ze stejného číselníku jako kind.
 confidence: 0–100, jak jistý si zařazením jsi. Když je projekt i poptávka null, dej nízkou hodnotu.
 reason: jedna krátká věta česky, podle čeho ses rozhodl (např. "nabídka na okna od firmy, která je u poptávky Okna v evidenci").`;
@@ -208,11 +212,16 @@ async function suggestRouting(
     );
     // Vymyšlená id zahodit – radši bez návrhu než špatně zařazené.
     const project = ctx.find((p) => p.projectId === data.projectId) ?? null;
-    const request = project?.poptavky.find((r) => r.requestId === data.requestId) ?? null;
+    const znama = new Set((project?.poptavky ?? ctx.flatMap((p) => p.poptavky)).map((r) => r.requestId));
+    const request = data.requestId && znama.has(data.requestId) ? data.requestId : null;
+    const requestIds = [...new Set([...(data.requestIds ?? []), ...(request ? [request] : [])])].filter((id) =>
+      znama.has(id),
+    );
     return {
       ...data,
       projectId: project?.projectId ?? null,
-      requestId: request?.requestId ?? null,
+      requestId: request ?? requestIds[0] ?? null,
+      requestIds,
     };
   } catch {
     return null;
