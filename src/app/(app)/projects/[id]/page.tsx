@@ -76,8 +76,13 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** Uzavřené žádanky – převedené na výdaj nebo zrušené; výchozí filtr je schová. */
-const REQUEST_CLOSED_STATUSES = ["schvaleno", "zruseno"];
+/**
+ * Žádanky, o kterých je rozhodnuto – objednané, převedené na výdaj nebo
+ * zrušené. Výchozí filtr je schová, ať v přehledu zůstane jen to, co se
+ * ještě řeší; po přepnutí na Objednáno tak řádek z výpisu zmizí.
+ * Ve forecastu zůstávají (REQUEST_FORECAST_STATUSES), jen nejsou v seznamu.
+ */
+const REQUEST_CLOSED_STATUSES = ["objednano", "schvaleno", "zruseno"];
 
 export default async function ProjectDetailPage({
   params,
