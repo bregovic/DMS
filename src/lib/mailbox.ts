@@ -32,7 +32,8 @@ export type FetchedMail = {
   subject: string;
   receivedAt: Date;
   bodyText: string | null;
-  raw: Buffer;
+  /** Originál .eml. Skript v Gmailu ho neposílá, proto nepovinný. */
+  raw?: Buffer | null;
   attachments: FetchedAttachment[];
 };
 

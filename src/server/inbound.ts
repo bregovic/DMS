@@ -154,76 +154,81 @@ export async function ingestMailbox(): Promise<IngestResult> {
 
   const mails = await fetchUnseen();
   res.fetched = mails.length;
+  for (const mail of mails) await storeMail(mail, res);
+  return res;
+}
 
-  for (const mail of mails) {
-    try {
-      const dup = await prisma.inboundMail.findUnique({
-        where: { messageId: mail.messageId },
-        select: { id: true },
-      });
-      if (dup) {
-        res.skipped.push({ subject: mail.subject, reason: "už byl zpracovaný dřív" });
-        continue;
-      }
-      const owner = await resolveOwner(mail.fromAddress);
-      if (!owner) {
-        res.skipped.push({ subject: mail.subject, reason: `neznámý odesílatel ${mail.fromAddress}` });
-        continue;
-      }
+/**
+ * Uložit jednu zprávu do vstupní složky a zapsat výsledek do přehledu.
+ * Sdílené pro obě cesty, kterými pošta přichází: vybrání schránky přes IMAP
+ * a skript v Gmailu, který zprávu pošle rovnou do DMS (#41).
+ */
+export async function storeMail(mail: FetchedMail, res: IngestResult) {
+  try {
+    const dup = await prisma.inboundMail.findUnique({
+      where: { messageId: mail.messageId },
+      select: { id: true },
+    });
+    if (dup) {
+      res.skipped.push({ subject: mail.subject, reason: "už byl zpracovaný dřív" });
+      return;
+    }
+    const owner = await resolveOwner(mail.fromAddress);
+    if (!owner) {
+      res.skipped.push({ subject: mail.subject, reason: `neznámý odesílatel ${mail.fromAddress}` });
+      return;
+    }
 
-      const suggestion = await suggestRouting(mail, owner.ownerId);
-      const row = await prisma.inboundMail.create({
+    const suggestion = await suggestRouting(mail, owner.ownerId);
+    const row = await prisma.inboundMail.create({
+      data: {
+        messageId: mail.messageId,
+        fromName: mail.fromName,
+        fromAddress: mail.fromAddress,
+        subject: mail.subject.slice(0, 500),
+        receivedAt: mail.receivedAt,
+        bodyText: mail.bodyText?.slice(0, 20_000) ?? null,
+        ownerId: owner.ownerId,
+        projectId: suggestion?.projectId ?? null,
+        requestId: suggestion?.requestId ?? null,
+        suggestion: (suggestion ?? undefined) as unknown as Prisma.InputJsonValue,
+        note: `Přijato od ${owner.via}.`,
+      },
+      select: { id: true },
+    });
+
+    const folder = `${owner.ownerId}/posta/${row.id}`;
+    // Originál e-mailu je nepovinný – skript v Gmailu ho nemusí poslat.
+    const rawKey = mail.raw ? await storage.save(mail.raw, "original.eml", folder).catch(() => null) : null;
+    for (const [i, a] of mail.attachments.entries()) {
+      const key = await storage.save(a.content, a.originalName, folder);
+      await prisma.inboundAttachment.create({
         data: {
-          messageId: mail.messageId,
-          fromName: mail.fromName,
-          fromAddress: mail.fromAddress,
-          subject: mail.subject.slice(0, 500),
-          receivedAt: mail.receivedAt,
-          bodyText: mail.bodyText?.slice(0, 20_000) ?? null,
-          ownerId: owner.ownerId,
-          projectId: suggestion?.projectId ?? null,
-          requestId: suggestion?.requestId ?? null,
-          suggestion: (suggestion ?? undefined) as unknown as Prisma.InputJsonValue,
-          note: `Přijato od ${owner.via}.`,
+          mailId: row.id,
+          fileName: key,
+          originalName: a.originalName.slice(0, 300),
+          mimeType: a.mimeType,
+          size: a.size,
+          kind: suggestion?.attachmentKinds?.[i] ?? suggestion?.kind ?? "other",
         },
-        select: { id: true },
-      });
-
-      const folder = `${owner.ownerId}/posta/${row.id}`;
-      const rawKey = await storage
-        .save(mail.raw, "original.eml", folder)
-        .catch(() => null);
-      for (const [i, a] of mail.attachments.entries()) {
-        const key = await storage.save(a.content, a.originalName, folder);
-        await prisma.inboundAttachment.create({
-          data: {
-            mailId: row.id,
-            fileName: key,
-            originalName: a.originalName.slice(0, 300),
-            mimeType: a.mimeType,
-            size: a.size,
-            kind: suggestion?.attachmentKinds?.[i] ?? suggestion?.kind ?? "other",
-          },
-        });
-      }
-      if (rawKey) await prisma.inboundMail.update({ where: { id: row.id }, data: { rawKey } });
-
-      res.stored++;
-      res.mails.push({
-        id: row.id,
-        subject: mail.subject,
-        from: mail.fromAddress,
-        attachments: mail.attachments.length,
-        suggestion: suggestion?.reason ?? "zařazení se nepodařilo určit",
-      });
-    } catch (err) {
-      res.skipped.push({
-        subject: mail.subject,
-        reason: err instanceof Error ? err.message : "neznámá chyba",
       });
     }
+    if (rawKey) await prisma.inboundMail.update({ where: { id: row.id }, data: { rawKey } });
+
+    res.stored++;
+    res.mails.push({
+      id: row.id,
+      subject: mail.subject,
+      from: mail.fromAddress,
+      attachments: mail.attachments.length,
+      suggestion: suggestion?.reason ?? "zařazení se nepodařilo určit",
+    });
+  } catch (err) {
+    res.skipped.push({
+      subject: mail.subject,
+      reason: err instanceof Error ? err.message : "neznámá chyba",
+    });
   }
-  return res;
 }
 
 /** Zpráva o zpracování pošty – co dorazilo, co se uložilo a co ne. */
