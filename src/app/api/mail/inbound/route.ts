@@ -10,8 +10,11 @@ import type { FetchedMail } from "@/lib/mailbox";
  * `CRON_SECRET` v hlavičce `Authorization: Bearer …`.
  *
  * Tělo (JSON):
- *   { messageId, from, fromName?, subject, date, body,
+ *   { messageId, from, fromName?, subject, date, body, labels?,
  *     attachments: [{ name, mimeType, data }] }   // data = base64
+ *
+ * `labels` jsou štítky zprávy z Gmailu: štítek pojmenovaný jako projekt
+ * určí zařazení napevno, bez hádání z textu.
  *
  * Zpracování je pak totožné s vybráním schránky: uloží se do vstupní složky,
  * navrhne se zařazení a nic se nezakládá bez potvrzení.
@@ -30,6 +33,8 @@ type Payload = {
   subject?: string;
   date?: string;
   body?: string;
+  /** Štítky z Gmailu – stejnojmenný štítek určí projekt. */
+  labels?: string[];
   attachments?: { name?: string; mimeType?: string; data?: string }[];
 };
 
@@ -87,6 +92,7 @@ export async function POST(req: NextRequest) {
     subject: String(p.subject || "(bez předmětu)"),
     receivedAt: isNaN(date.getTime()) ? new Date() : date,
     bodyText: String(p.body || "").trim() || null,
+    labels: Array.isArray(p.labels) ? p.labels.map(String).slice(0, 20) : [],
     raw: null,
     attachments,
   };

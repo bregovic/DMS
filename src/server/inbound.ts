@@ -55,6 +55,43 @@ attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, je
 confidence: 0–100, jak jistý si zařazením jsi. Když je projekt i poptávka null, dej nízkou hodnotu.
 reason: jedna krátká věta česky, podle čeho ses rozhodl (např. "nabídka na okna od firmy, která je u poptávky Okna v evidenci").`;
 
+/**
+ * Porovnání názvů štítku a projektu: bez ohledu na velikost písmen,
+ * diakritiku a mezery. U vnořeného štítku („DMS/Dům") platí poslední část.
+ */
+function labelKey(s: string) {
+  return s
+    .split("/")
+    .pop()!
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // diakritika rozložená normalizací
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Projekt podle stejnojmenného štítku z Gmailu (#41). Uživatel přetáhne
+ * e-mail pod štítek pojmenovaný jako projekt a tím určí zařazení sám –
+ * spolehlivěji než odhad z textu.
+ *
+ * Vrací i důvod, proč se projekt neurčil, ať je to vidět u zprávy:
+ * žádný štítek nesedí, nebo jich sedí víc a není jasné který.
+ */
+async function projectFromLabels(labels: string[] | undefined, ownerId: string) {
+  if (!labels?.length) return { projectId: null as string | null, note: null as string | null };
+  const projects = await prisma.project.findMany({ where: { ownerId }, select: { id: true, name: true } });
+  const byKey = new Map(projects.map((p) => [labelKey(p.name), p]));
+  const hits = [...new Set(labels.map(labelKey))].map((k) => byKey.get(k)).filter((p) => !!p);
+  if (hits.length === 1) return { projectId: hits[0]!.id, note: `Projekt podle štítku „${hits[0]!.name}".` };
+  if (hits.length > 1)
+    return {
+      projectId: null,
+      note: `Štítky odpovídají víc projektům (${hits.map((p) => p!.name).join(", ")}) – vyber projekt ručně.`,
+    };
+  return { projectId: null, note: null };
+}
+
 /** Kdo poštu dostane: uživatel se shodným e-mailem, jinak dodavatel → jeho majitel. */
 async function resolveOwner(fromAddress: string) {
   const user = await prisma.user.findFirst({
@@ -70,10 +107,13 @@ async function resolveOwner(fromAddress: string) {
   return null;
 }
 
-/** Projekty a otevřené poptávky majitele – podklad pro zařazení. */
-async function routingContext(ownerId: string) {
+/**
+ * Projekty a otevřené poptávky majitele – podklad pro zařazení. Když je
+ * projekt určený štítkem, vrátí se jen on a model řeší už jen poptávku.
+ */
+async function routingContext(ownerId: string, onlyProjectId?: string | null) {
   const projects = await prisma.project.findMany({
-    where: { ownerId },
+    where: { ownerId, ...(onlyProjectId ? { id: onlyProjectId } : {}) },
     select: {
       id: true,
       name: true,
@@ -97,8 +137,12 @@ async function routingContext(ownerId: string) {
 }
 
 /** Návrh zařazení. Když AI není k dispozici, vrátí prázdný návrh – není to chyba. */
-async function suggestRouting(mail: FetchedMail, ownerId: string): Promise<MailSuggestion | null> {
-  const ctx = await routingContext(ownerId);
+async function suggestRouting(
+  mail: FetchedMail,
+  ownerId: string,
+  forcedProjectId?: string | null,
+): Promise<MailSuggestion | null> {
+  const ctx = await routingContext(ownerId, forcedProjectId);
   if (ctx.length === 0) return null;
   try {
     await assertBudget();
@@ -179,7 +223,9 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
       return;
     }
 
-    const suggestion = await suggestRouting(mail, owner.ownerId);
+    // Štítek pojmenovaný jako projekt má přednost před odhadem z textu.
+    const fromLabel = await projectFromLabels(mail.labels, owner.ownerId);
+    const suggestion = await suggestRouting(mail, owner.ownerId, fromLabel.projectId);
     const row = await prisma.inboundMail.create({
       data: {
         messageId: mail.messageId,
@@ -189,10 +235,10 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
         receivedAt: mail.receivedAt,
         bodyText: mail.bodyText?.slice(0, 20_000) ?? null,
         ownerId: owner.ownerId,
-        projectId: suggestion?.projectId ?? null,
+        projectId: fromLabel.projectId ?? suggestion?.projectId ?? null,
         requestId: suggestion?.requestId ?? null,
         suggestion: (suggestion ?? undefined) as unknown as Prisma.InputJsonValue,
-        note: `Přijato od ${owner.via}.`,
+        note: [`Přijato od ${owner.via}.`, fromLabel.note].filter(Boolean).join(" "),
       },
       select: { id: true },
     });
@@ -221,7 +267,9 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
       subject: mail.subject,
       from: mail.fromAddress,
       attachments: mail.attachments.length,
-      suggestion: suggestion?.reason ?? "zařazení se nepodařilo určit",
+      suggestion: fromLabel.note
+        ? `${fromLabel.note}${suggestion?.reason ? ` ${suggestion.reason}` : ""}`
+        : (suggestion?.reason ?? "zařazení se nepodařilo určit"),
     });
   } catch (err) {
     res.skipped.push({

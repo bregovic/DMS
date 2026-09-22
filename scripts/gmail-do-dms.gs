@@ -2,77 +2,118 @@
  * Gmail → DMS (issue #41)
  *
  * Skript běží pod účtem schránky, takže nepotřebuje heslo aplikace ani IMAP.
- * Vezme označené zprávy a pošle je i s přílohami do DMS, kde spadnou do
- * Doručené pošty a počkají na potvrzení zařazení.
  *
- * Jde ho pustit i ve vlastní běžné schránce – bere jen zprávy se štítkem
- * „Do DMS" (viz DOTAZ níž), takže se osobní pošty nedotkne.
+ * ── Jak se to používá ──────────────────────────────────────────────────
+ * Ke každému projektu v DMS si v Gmailu založíš **stejnojmenný štítek**
+ * (např. „Dům", „Garáž"). Co do štítku přetáhneš, to se zpracuje – a rovnou
+ * do toho projektu. Skript se na nic jiného ve schránce nepodívá, takže ho
+ * jde bez obav pustit i ve vlastní běžné poště.
+ *
+ * Seznam projektů si skript stahuje z DMS sám. Když v DMS přibude projekt,
+ * stačí v Gmailu založit štítek téhož jména – do kódu se nesahá.
+ *
+ * Štítky můžou být i vnořené („DMS/Dům"); porovnává se poslední část,
+ * bez ohledu na velikost písmen a diakritiku.
  *
  * ── Nastavení (jednou) ─────────────────────────────────────────────────
  *  1. script.google.com → Nový projekt, přihlášený pod tou schránkou,
  *     ze které se má číst
  *  2. Sem vložit tenhle soubor
  *  3. Projekt → Nastavení projektu → Vlastnosti skriptu, přidat:
- *       DMS_URL     = https://dokumenty.up.railway.app/api/mail/inbound
+ *       DMS_URL     = https://dokumenty.up.railway.app
  *       DMS_SECRET  = <hodnota CRON_SECRET ze služby DMS na Railway>
- *  4. Spustit jednou ručně funkci `zpracujPostu` → Google se zeptá na
- *     oprávnění (čtení Gmailu a odesílání požadavků), potvrdit
- *  5. Spouštěče (ikona budíku) → Přidat spouštěč:
+ *  4. V Gmailu založit štítky pojmenované jako projekty v DMS
+ *  5. Spustit jednou ručně `otestujSpojeni` → Google se zeptá na oprávnění
+ *     (čtení Gmailu a odesílání požadavků), potvrdit; v Protokolu spuštění
+ *     se vypíše, jaké projekty DMS vrátil a které štítky k nim v Gmailu jsou
+ *  6. Spouštěče (ikona budíku) → Přidat spouštěč:
  *       funkce `zpracujPostu`, časový, každých 5 minut
- *  6. V Gmailu založit štítek „Do DMS" a označovat jím, co se má zpracovat
- *     (nebo si na to udělat filtr – např. od konkrétních dodavatelů)
  *
- * Zpracované zprávy dostanou štítek „DMS", takže se neposílají podruhé;
- * druhou pojistkou je Message-ID, které si DMS hlídá u sebe.
+ * Zpracované zprávy dostanou štítek „DMS hotovo", takže se neposílají
+ * podruhé; druhou pojistkou je Message-ID, které si DMS hlídá u sebe.
  */
 
 /** Štítek, kterým se značí hotové zprávy. */
-var STITEK = 'DMS';
-/**
- * Které zprávy skript vůbec bere. Výchozí nastavení je **bezpečné pro běžnou
- * schránku**: jde jen o to, co sám označíš štítkem „Do DMS".
- *
- *   'label:Do-DMS'  – jen ručně (nebo filtrem) označené zprávy  ← výchozí
- *   'in:inbox'      – všechno v doručené poště; POUŽÍVAT JEN ve vyhrazené
- *                     schránce, kam nechodí nic jiného než nabídky a faktury
- *
- * Ve své běžné poště tohle neměň. Do DMS by pak šly i výpisy z banky,
- * osobní pošta a přihlašovací kódy – obsah by se sice u neznámých
- * odesílatelů zahodil, ale zbytečně by se přenesl a předměty by ti chodily
- * v souhrnné zprávě.
- */
-var DOTAZ = 'label:Do-DMS';
+var STITEK_HOTOVO = 'DMS hotovo';
 /** Kolik zpráv nejvýš za jeden běh (spouštěč má limit 6 minut). */
 var MAX_ZPRAV = 10;
 /** Přílohy nad tenhle limit se nepošlou – DMS je stejně nezpracuje. */
 var MAX_PRILOHA_MB = 20;
 
-function zpracujPostu() {
+function nastaveni() {
   var v = PropertiesService.getScriptProperties();
-  var url = v.getProperty('DMS_URL');
+  var zaklad = (v.getProperty('DMS_URL') || '').replace(/\/+$/, '');
   var secret = v.getProperty('DMS_SECRET');
-  if (!url || !secret) {
+  if (!zaklad || !secret) {
     throw new Error('Chybí DMS_URL nebo DMS_SECRET ve vlastnostech skriptu.');
   }
+  // Starší nastavení mířilo rovnou na endpoint – ať to nerozbije upgrade.
+  zaklad = zaklad.replace(/\/api\/mail\/inbound$/, '');
+  return { zaklad: zaklad, secret: secret };
+}
 
-  var stitek = GmailApp.getUserLabelByName(STITEK) || GmailApp.createLabel(STITEK);
-  // Vybrané zprávy, které ještě nemají štítek hotovo.
-  var vlakna = GmailApp.search(DOTAZ + ' -label:' + STITEK, 0, MAX_ZPRAV);
+/** Názvy projektů z DMS – podle nich se hledají štítky. */
+function nactiProjekty(n) {
+  var odpoved = UrlFetchApp.fetch(n.zaklad + '/api/mail/projects', {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + n.secret },
+    muteHttpExceptions: true,
+  });
+  if (odpoved.getResponseCode() !== 200) {
+    throw new Error('Seznam projektů se nepodařilo načíst: ' + odpoved.getContentText());
+  }
+  return JSON.parse(odpoved.getContentText()).projects || [];
+}
+
+/** Štítky v Gmailu, jejichž název odpovídá některému projektu. */
+function najdiStitky(projekty) {
+  var klic = function (s) {
+    return s.split('/').pop().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  };
+  var hledane = {};
+  for (var i = 0; i < projekty.length; i++) hledane[klic(projekty[i])] = true;
+
+  var vysledek = [];
+  var vsechny = GmailApp.getUserLabels();
+  for (var j = 0; j < vsechny.length; j++) {
+    var jmeno = vsechny[j].getName();
+    if (jmeno === STITEK_HOTOVO) continue;
+    if (hledane[klic(jmeno)]) vysledek.push(jmeno);
+  }
+  return vysledek;
+}
+
+function zpracujPostu() {
+  var n = nastaveni();
+  var stitky = najdiStitky(nactiProjekty(n));
+  if (!stitky.length) {
+    Logger.log('Žádný štítek neodpovídá projektu v DMS – není co zpracovat.');
+    return;
+  }
+
+  var hotovo = GmailApp.getUserLabelByName(STITEK_HOTOVO) || GmailApp.createLabel(STITEK_HOTOVO);
+  // Jen zprávy pod projektovými štítky, které ještě nejsou hotové.
+  var dotaz =
+    '(' + stitky.map(function (s) { return 'label:"' + s + '"'; }).join(' OR ') + ')' +
+    ' -label:"' + STITEK_HOTOVO + '"';
+  var vlakna = GmailApp.search(dotaz, 0, MAX_ZPRAV);
+  Logger.log('Štítky: ' + stitky.join(', ') + ' → vláken ke zpracování: ' + vlakna.length);
 
   for (var i = 0; i < vlakna.length; i++) {
     var vlakno = vlakna[i];
+    var jmenaStitku = vlakno.getLabels().map(function (l) { return l.getName(); });
     var zpravy = vlakno.getMessages();
     var vseOk = true;
 
     for (var j = 0; j < zpravy.length; j++) {
-      if (!posliZpravu(zpravy[j], url, secret)) vseOk = false;
+      if (!posliZpravu(zpravy[j], jmenaStitku, n)) vseOk = false;
     }
     // Štítek až když prošly všechny zprávy vlákna – jinak se to zkusí znovu.
-    if (vseOk) vlakno.addLabel(stitek);
+    if (vseOk) vlakno.addLabel(hotovo);
   }
 }
 
-function posliZpravu(zprava, url, secret) {
+function posliZpravu(zprava, stitky, n) {
   try {
     var prilohy = [];
     var soubory = zprava.getAttachments({ includeInlineImages: false });
@@ -91,15 +132,16 @@ function posliZpravu(zprava, url, secret) {
       from: zprava.getFrom(),
       subject: zprava.getSubject(),
       date: zprava.getDate().toISOString(),
+      labels: stitky,
       // Přeposlaný e-mail má původní nabídku v těle – pošleme prostý text.
       body: zprava.getPlainBody().slice(0, 40000),
       attachments: prilohy,
     };
 
-    var odpoved = UrlFetchApp.fetch(url, {
+    var odpoved = UrlFetchApp.fetch(n.zaklad + '/api/mail/inbound', {
       method: 'post',
       contentType: 'application/json',
-      headers: { Authorization: 'Bearer ' + secret },
+      headers: { Authorization: 'Bearer ' + n.secret },
       payload: JSON.stringify(telo),
       muteHttpExceptions: true,
     });
@@ -118,25 +160,19 @@ function posliZpravu(zprava, url, secret) {
 }
 
 /**
- * Pomůcka na ruční ověření, že spojení a tajemství sedí. Spusť ji z editoru
- * a koukni do Protokolu spuštění – nic se přitom neposílá do evidence.
+ * Ověření nastavení. Vypíše projekty z DMS a štítky, které jim v Gmailu
+ * odpovídají – hned je vidět, jestli se někde liší název. Nic neodesílá.
  */
 function otestujSpojeni() {
-  var v = PropertiesService.getScriptProperties();
-  var odpoved = UrlFetchApp.fetch(v.getProperty('DMS_URL'), {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + v.getProperty('DMS_SECRET') },
-    payload: JSON.stringify({
-      messageId: 'test-' + new Date().getTime(),
-      from: 'test@example.com',
-      subject: 'Test spojení',
-      date: new Date().toISOString(),
-      body: 'Zkouška.',
-      attachments: [],
-    }),
-    muteHttpExceptions: true,
+  var n = nastaveni();
+  var projekty = nactiProjekty(n);
+  var stitky = najdiStitky(projekty);
+  Logger.log('Projekty v DMS: ' + (projekty.join(', ') || '(žádné)'));
+  Logger.log('Štítky v Gmailu, které jim odpovídají: ' + (stitky.join(', ') || '(žádné)'));
+
+  var chybi = projekty.filter(function (p) {
+    return stitky.map(function (s) { return s.split('/').pop().toLowerCase(); })
+      .indexOf(p.toLowerCase()) === -1;
   });
-  // Očekávaná odpověď: 200 a ve skipped „neznámý odesílatel test@example.com".
-  Logger.log(odpoved.getResponseCode() + ': ' + odpoved.getContentText());
+  if (chybi.length) Logger.log('Bez štítku v Gmailu: ' + chybi.join(', '));
 }

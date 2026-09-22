@@ -34,6 +34,8 @@ export type FetchedMail = {
   bodyText: string | null;
   /** Originál .eml. Skript v Gmailu ho neposílá, proto nepovinný. */
   raw?: Buffer | null;
+  /** Štítky z Gmailu – stejnojmenný štítek určí projekt (#41). */
+  labels?: string[];
   attachments: FetchedAttachment[];
 };
 
