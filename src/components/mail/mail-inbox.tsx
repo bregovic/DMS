@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Download, Mail, Paperclip, RefreshCw, X } from "lucide-react";
-import { deleteMail, dismissMail, fileMail, requestsForProject, runMailbox } from "@/server/actions/inbound";
+import { deleteMail, dismissMail, fileMail, projectOptions, runMailbox } from "@/server/actions/inbound";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { formatDate } from "@/lib/utils";
+
+type ProjectOptions = {
+  folders: { id: string; name: string }[];
+  requests: { id: string; title: string; subProjectId: string | null }[];
+};
+
+const PRAZDNE: ProjectOptions = { folders: [], requests: [] };
 
 export type MailView = {
   id: string;
@@ -20,6 +27,7 @@ export type MailView = {
   status: string;
   note: string | null;
   projectId: string | null;
+  subProjectId: string | null;
   requestId: string | null;
   reason: string | null;
   confidence: number | null;
@@ -39,7 +47,7 @@ const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} kB`;
 const selectClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none";
 
-/** Dialog zařazení: projekt, žádanka a které přílohy se mají založit. */
+/** Dialog zařazení: projekt, složka, žádanka a které přílohy se mají založit. */
 function FileDialog({
   mail,
   projects,
@@ -51,20 +59,50 @@ function FileDialog({
 }) {
   const router = useRouter();
   const [projectId, setProjectId] = useState(mail.projectId ?? projects[0]?.id ?? "");
-  const [requests, setRequests] = useState<{ id: string; title: string }[]>([]);
+  const [subProjectId, setSubProjectId] = useState(mail.subProjectId ?? "");
   const [requestId, setRequestId] = useState(mail.requestId ?? "");
-  const [loaded, setLoaded] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ projectId: string; opts: ProjectOptions } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Žádanky se dotáhnou až k vybranému projektu (a jen jednou pro každý).
-  if (projectId && loaded !== projectId) {
-    setLoaded(projectId);
-    void requestsForProject(projectId).then((r) => {
-      setRequests(r);
-      if (!r.some((x) => x.id === requestId)) setRequestId(mail.requestId ?? "");
-    });
-  }
+  // Složky a žádanky vybraného projektu. Výsledek se ukládá i s tím, pro který
+  // projekt platí – tím se samo pozná načítání a starší odpověď nepřebije novou.
+  useEffect(() => {
+    if (!projectId) return;
+    let platne = true;
+    projectOptions(projectId)
+      .then((o) => {
+        if (!platne) return;
+        setLoaded({ projectId, opts: o });
+        setRequestId((cur) => (o.requests.some((r) => r.id === cur) ? cur : ""));
+        setSubProjectId((cur) => (o.folders.some((f) => f.id === cur) ? cur : ""));
+      })
+      .catch(() => {
+        if (platne) setErr("Složky a žádanky projektu se nepodařilo načíst.");
+      });
+    return () => {
+      platne = false;
+    };
+  }, [projectId]);
+
+  const opts: ProjectOptions = loaded?.projectId === projectId ? loaded.opts : PRAZDNE;
+  const loading = !!projectId && loaded?.projectId !== projectId;
+
+  // Ve složce se nabízejí jen její žádanky; bez složky všechny.
+  const viditelne = subProjectId
+    ? opts.requests.filter((r) => r.subProjectId === subProjectId)
+    : opts.requests;
+  const folderName = (id: string | null) => opts.folders.find((f) => f.id === id)?.name;
+
+  const hint = loading
+    ? "Načítám žádanky…"
+    : !projectId
+      ? "Nejdřív vyber projekt."
+      : viditelne.length === 0
+        ? subProjectId
+          ? "V téhle složce nejsou otevřené žádanky – zkus celý projekt."
+          : "Projekt nemá otevřené žádanky."
+        : viditelne.length + " otevřených žádanek";
 
   return (
     <Dialog title="Zařadit do evidence" size="md" onClose={onClose}>
@@ -113,22 +151,43 @@ function FileDialog({
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="m-request">Žádanka</Label>
+            <Label htmlFor="m-folder">Složka</Label>
             <select
-              id="m-request"
-              name="requestId"
-              value={requestId}
-              onChange={(e) => setRequestId(e.target.value)}
+              id="m-folder"
+              name="subProjectId"
+              value={subProjectId}
+              onChange={(e) => setSubProjectId(e.target.value)}
               className={selectClass}
+              disabled={opts.folders.length === 0}
             >
-              <option value="">— bez žádanky —</option>
-              {requests.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
+              <option value="">— celý projekt —</option>
+              {opts.folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
                 </option>
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="m-request">Žádanka</Label>
+          <select
+            id="m-request"
+            name="requestId"
+            value={requestId}
+            onChange={(e) => setRequestId(e.target.value)}
+            className={selectClass}
+          >
+            <option value="">— bez žádanky —</option>
+            {viditelne.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.title}
+                {!subProjectId && r.subProjectId ? ` · ${folderName(r.subProjectId) ?? ""}` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-stone-400">{hint}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -232,22 +291,25 @@ export function MailInbox({
         <p className="kicker">{mails.length} ve vstupní složce</p>
         <div className="flex items-center gap-3">
           {msg && <span className="text-xs text-stone-500">{msg}</span>}
-          <button
-            type="button"
-            onClick={fetchNow}
-            disabled={pending || !configured}
-            title={configured ? "Vybrat schránku teď" : "Schránka není nastavená"}
-            className="inline-flex cursor-pointer items-center gap-1.5 border border-stone-300 px-2.5 py-1.5 text-xs text-stone-700 hover:border-stone-950 disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3.5 ${pending ? "animate-spin" : ""}`} />
-            {pending ? "Vybírám…" : "Vybrat poštu"}
-          </button>
+          {configured && (
+            <button
+              type="button"
+              onClick={fetchNow}
+              disabled={pending}
+              title="Vybrat schránku teď (IMAP)"
+              className="inline-flex cursor-pointer items-center gap-1.5 border border-stone-300 px-2.5 py-1.5 text-xs text-stone-700 hover:border-stone-950 disabled:opacity-50"
+            >
+              <RefreshCw className={`size-3.5 ${pending ? "animate-spin" : ""}`} />
+              {pending ? "Vybírám…" : "Vybrat poštu"}
+            </button>
+          )}
         </div>
       </div>
 
       {mails.length === 0 ? (
         <p className="border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
-          Vstupní složka je prázdná. Přepošli nabídku nebo fakturu na adresu schránky a dej „Vybrat poštu“.
+          Vstupní složka je prázdná. Přetáhni v Gmailu nabídku nebo fakturu pod štítek pojmenovaný
+          jako projekt nebo složka – do pár minut bude tady.
         </p>
       ) : (
         <ul className="border-t border-stone-200">

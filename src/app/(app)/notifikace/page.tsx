@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Bell, ClipboardList, Receipt, Wallet } from "lucide-react";
+import { AlertTriangle, Bell, ClipboardList, Mail, Receipt, Wallet } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { ensureReminders } from "@/server/notify";
@@ -14,6 +14,7 @@ const ICON: Record<string, typeof Bell> = {
   reminder: AlertTriangle,
   invoice_requested: Wallet,
   invoice_paid: Wallet,
+  mail_received: Mail,
 };
 
 /**

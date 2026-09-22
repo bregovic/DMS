@@ -9,10 +9,20 @@ import { mailTemplate, para, sendMail } from "@/lib/mailer";
  *
  * Druhy: task_assigned (přidělený úkol), expense_added (výdaj od někoho
  * jiného v mém projektu), reminder (po termínu, fáze se blíží, objednat do),
- * invoice_requested / invoice_paid (žádost o úhradu a její zaplacení).
+ * invoice_requested / invoice_paid (žádost o úhradu a její zaplacení),
+ * mail_received (nová pošta ve vstupní složce).
  * dedupeKey brání opakovanému založení téhož (unikátní s userId).
  */
-type N = { kind: string; title: string; body?: string | null; href?: string | null; projectId?: string | null; dedupeKey?: string | null };
+type N = {
+  kind: string;
+  title: string;
+  body?: string | null;
+  href?: string | null;
+  projectId?: string | null;
+  dedupeKey?: string | null;
+  /** false = jen do zvonečku. Pro věci, o kterých e-mail chodí zvlášť (#41). */
+  email?: boolean;
+};
 
 export async function notifyUsers(userIds: string[], n: N) {
   const ids = [...new Set(userIds.filter(Boolean))];
@@ -33,7 +43,7 @@ export async function notifyUsers(userIds: string[], n: N) {
     .catch(() => null);
   // dedupeKey zahodil duplicity – pak už není co posílat (připomínky by jinak
   // chodily každý den znovu).
-  if (created && created.count > 0) await emailNotification(ids, n);
+  if (created && created.count > 0 && n.email !== false) await emailNotification(ids, n);
 }
 
 /**

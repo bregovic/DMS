@@ -192,15 +192,28 @@ export async function deleteMail(formData: FormData) {
   revalidatePath("/posta");
 }
 
-/** Žádanky projektu pro rozbalovátko v dialogu zařazení. */
-export async function requestsForProject(projectId: string) {
+/**
+ * Složky a žádanky projektu pro rozbalovátka v dialogu zařazení.
+ * Žádanka si nese složku, ve které leží, aby šlo filtrovat i rozlišit
+ * stejně pojmenované položky ve dvou složkách.
+ */
+export async function projectOptions(projectId: string) {
   const user = await requireUser();
-  if (!isManager(await getProjectRole(projectId, user))) return [];
-  return prisma.request.findMany({
-    where: { projectId, status: { notIn: ["schvaleno", "zruseno"] } },
-    select: { id: true, title: true },
-    orderBy: { createdAt: "asc" },
-  });
+  if (!projectId) return { folders: [], requests: [] };
+  if (!isManager(await getProjectRole(projectId, user))) return { folders: [], requests: [] };
+  const [folders, requests] = await Promise.all([
+    prisma.subProject.findMany({
+      where: { projectId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.request.findMany({
+      where: { projectId, status: { notIn: ["schvaleno", "zruseno"] } },
+      select: { id: true, title: true, subProjectId: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+  return { folders, requests };
 }
 
 /** Nastavení e-mailových oznámení (Nastavení → Oznámení). */

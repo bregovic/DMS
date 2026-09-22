@@ -928,9 +928,10 @@ model InboundMail {
   /** nova | zarazena | odmitnuta | chyba */
   status      String   @default("nova")
   /** Návrh zařazení z obsahu (potvrzuje uživatel). */
-  projectId   String?
-  requestId   String?
-  suggestion  Json? // { projectId, requestId, kind, confidence, reason }
+  projectId    String?
+  subProjectId String? // složka určená štítkem („Garáž" pod projektem Dům)
+  requestId    String?
+  suggestion  Json? // { projectId, subProjectId, requestId, kind, confidence, reason }
   note        String? // co se stalo – i do zprávy o zpracování
   /** Původní .eml v úložišti (klíč), ať je vidět celý originál. */
   rawKey      String?

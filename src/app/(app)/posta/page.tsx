@@ -25,6 +25,7 @@ export default async function MailPage() {
         status: true,
         note: true,
         projectId: true,
+        subProjectId: true,
         requestId: true,
         suggestion: true,
         attachments: {
@@ -59,18 +60,12 @@ export default async function MailPage() {
         </p>
       </header>
 
-      {!mailboxConfigured() && (
-        <p className="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          Schránka pro příjem pošty zatím není nastavená. Doplň do prostředí <code>MAIL_IMAP_USER</code> a{" "}
-          <code>MAIL_IMAP_PASS</code> (u Gmailu heslo aplikace), pak půjde poštu vybírat.
-        </p>
-      )}
-
       <MailInbox mails={view} projects={projects} configured={mailboxConfigured()} />
 
       <p className="mt-8 text-[11px] text-stone-400">
-        Pošta se vybírá pravidelně na pozadí; tlačítkem jde vybrat i hned. Přijme se jen e-mail od
-        adresy, kterou DMS zná – od tebe nebo od dodavatele v evidenci. Nic se nezakládá samo.
+        Pošta chodí ze štítků v Gmailu: e-mail přetažený pod štítek pojmenovaný jako projekt nebo
+        složka se sem do pár minut objeví a zařadí se tam. Přijme se jen od adresy, kterou DMS zná –
+        od tebe nebo od dodavatele v evidenci. Nic se nezakládá samo.
       </p>
     </div>
   );

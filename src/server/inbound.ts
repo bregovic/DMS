@@ -3,6 +3,7 @@ import { storage } from "@/lib/storage";
 import { fetchUnseen, mailboxConfigured, type FetchedMail } from "@/lib/mailbox";
 import { mailTemplate, para, sendMail } from "@/lib/mailer";
 import { assertBudget, callModel, AI_MODEL } from "@/server/extraction";
+import { notifyUsers } from "@/server/notify";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -273,6 +274,7 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
         bodyText: mail.bodyText?.slice(0, 20_000) ?? null,
         ownerId: owner.ownerId,
         projectId: fromLabel.projectId ?? suggestion?.projectId ?? null,
+        subProjectId: fromLabel.subProjectId,
         requestId: suggestion?.requestId ?? null,
         suggestion: (suggestion ?? undefined) as unknown as Prisma.InputJsonValue,
         note: [`Přijato od ${owner.via}.`, fromLabel.note].filter(Boolean).join(" "),
@@ -297,6 +299,23 @@ export async function storeMail(mail: FetchedMail, res: IngestResult) {
       });
     }
     if (rawKey) await prisma.inboundMail.update({ where: { id: row.id }, data: { rawKey } });
+
+    // Do zvonečku; e-mailem chodí souhrn po každém vybrání, proto tady ne.
+    await notifyUsers([owner.ownerId], {
+      kind: "mail_received",
+      title: `Nová pošta: ${mail.subject.slice(0, 120)}`,
+      body: [
+        `Od ${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress}`,
+        mail.attachments.length ? `Příloh: ${mail.attachments.length}` : "Bez příloh",
+        fromLabel.note,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      href: "/posta",
+      projectId: fromLabel.projectId ?? suggestion?.projectId ?? null,
+      dedupeKey: `mail:${row.id}`,
+      email: false,
+    });
 
     res.stored++;
     res.mails.push({
