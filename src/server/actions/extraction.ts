@@ -178,7 +178,7 @@ export async function applyExtraction(formData: FormData) {
   ]
     .filter(Boolean)
     .join(" ");
-  const offers = result.parts
+  const vybrane = result.parts
     .map((p, i) => ({ p, i }))
     .filter(({ i }) => formData.get(`use_${i}`) === "1" && !ex.appliedParts.includes(i))
     .map(({ p, i }) => {
@@ -188,34 +188,68 @@ export async function applyExtraction(formData: FormData) {
       return { p, i, requestId, price: price != null && !isNaN(price) ? price : null };
     })
     .filter((o) => validReq.has(o.requestId));
-  if (offers.length === 0) throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
-  const applied = [...new Set([...ex.appliedParts, ...offers.map((o) => o.i)])];
+  if (vybrane.length === 0) throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
+
+  /**
+   * Části mířící na stejnou žádanku patří do jedné nabídky. Dodavatel často
+   * rozepíše nabídku po kusech (okno koupelna, okno ložnice…), ale poptávka
+   * je jedna – bez sloučení by u ní vznikla řada nabídek téže firmy
+   * s dílčími cenami a porovnání by ji vidělo několikrát pod cenou.
+   */
+  const skupiny = new Map<string, typeof vybrane>();
+  for (const o of vybrane) skupiny.set(o.requestId, [...(skupiny.get(o.requestId) ?? []), o]);
+
+  const soucet = (hodnoty: (number | null)[]) => {
+    const znama = hodnoty.filter((x): x is number => x != null);
+    return znama.length ? znama.reduce((a, b) => a + b, 0) : null;
+  };
+  const kc = (x: number) => `${x.toLocaleString("cs-CZ")} Kč`;
+
+  const offers = [...skupiny.entries()].map(([requestId, casti]) => {
+    const p = casti[0].p;
+    const bezDph = soucet(casti.map((x) => x.p.priceWithoutVat));
+    const sDph = soucet(casti.map((x) => x.p.priceWithVat));
+    const polozky = casti.flatMap((x) => (casti.length > 1 ? [x.p.label, ...x.p.items] : x.p.items));
+    const rozpory = [...new Set(casti.flatMap((x) => x.p.mismatches ?? []))];
+    return {
+      requestId,
+      indexy: casti.map((x) => x.i),
+      // Ručně zadaná cena má přednost; jinak součet částí (s DPH, jinak bez).
+      price: soucet(casti.map((x) => x.price)) ?? sDph ?? bezDph,
+      planTasks: casti.flatMap((x) => x.p.tasks ?? []),
+      mismatch: rozpory.length ? rozpory.join("\n") : null,
+      note: [
+        casti.length > 1 ? `${casti.length} položky nabídky sloučeny do jedné` : p.label,
+        polozky.length ? polozky.map((x) => `• ${x}`).join("\n") : null,
+        bezDph != null || sDph != null
+          ? `Celkem${bezDph != null ? ` bez DPH ${kc(bezDph)}` : ""}${sDph != null ? ` / s DPH ${kc(sDph)}` : ""}`
+          : null,
+        casti.map((x) => x.p.leadTime).find(Boolean) && `Dodání: ${casti.map((x) => x.p.leadTime).find(Boolean)}`,
+        casti.map((x) => x.p.note).filter(Boolean).join(" "),
+        [head, `(${ex.document.originalName}, zpracováno z přílohy)`].filter(Boolean).join(" "),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  });
+
+  const applied = [...new Set([...ex.appliedParts, ...vybrane.map((o) => o.i)])];
   const allDone = result.parts.every((_, i) => applied.includes(i));
 
   await prisma.$transaction([
-    ...offers.map(({ p, i, requestId, price }) =>
+    ...offers.map((o) =>
       prisma.offer.create({
         data: {
-          requestId,
+          requestId: o.requestId,
           extractionId: ex.id,
-          extractionPart: i,
-          planTasks: (p.tasks ?? []) as unknown as Prisma.InputJsonValue,
+          extractionPart: o.indexy[0],
+          planTasks: o.planTasks as unknown as Prisma.InputJsonValue,
           vendorId,
           vendorName: vendorId ? null : result.vendor.name,
-          price,
+          price: o.price,
+          mismatch: o.mismatch,
           createdById: user.id,
-          note: [
-            p.label,
-            p.items.length > 1 ? p.items.map((x) => `• ${x}`).join("\n") : null,
-            p.priceWithoutVat != null && p.priceWithVat != null
-              ? `bez DPH ${p.priceWithoutVat.toLocaleString("cs-CZ")} Kč / s DPH ${p.priceWithVat.toLocaleString("cs-CZ")} Kč`
-              : null,
-            p.leadTime && `Dodání: ${p.leadTime}`,
-            p.note,
-            [head, `(${ex.document.originalName}, zpracováno z přílohy)`].filter(Boolean).join(" "),
-          ]
-            .filter(Boolean)
-            .join("\n"),
+          note: o.note,
         },
       }),
     ),

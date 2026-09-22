@@ -35,6 +35,8 @@ export type OfferView = {
   canEdit: boolean;
   /** Část společné nabídky na balíček (#40) – cena tu klidně chybí. */
   bundleName?: string | null;
+  /** Rozpory proti specifikaci žádanky, po řádcích. */
+  mismatch?: string | null;
   /** Úkoly do plánu navržené AI – založí se po výběru nabídky (#33). */
   planTaskCount?: number;
   tasksCreated?: boolean;
@@ -239,6 +241,14 @@ export function OffersPanel({
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
                 </p>
                 {o.note && <p className="mt-0.5 text-xs text-stone-500">{o.note}</p>}
+                {o.mismatch && (
+                  <div className="mt-1 border-l-2 border-amber-400 pl-2 text-xs text-amber-800">
+                    <p className="font-medium">Nesedí se specifikací</p>
+                    {o.mismatch.split("\n").map((m, k) => (
+                      <p key={k}>{m}</p>
+                    ))}
+                  </div>
+                )}
 
                 {/* Přílohy nabídky */}
                 {(o.docs.length > 0 || o.canEdit) && (

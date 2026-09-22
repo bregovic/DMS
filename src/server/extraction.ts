@@ -59,6 +59,8 @@ export type ExtractedPart = {
   priceWithVat: number | null;
   leadTime: string | null;
   note: string | null;
+  /** Rozpory proti specifikaci poptávky: jiný rozměr, počet, provedení, chybějící kus. */
+  mismatches: string[];
   tasks: PlanTaskDraft[];
 };
 export type ExtractionResult = {
@@ -125,6 +127,7 @@ const EXTRACT_SCHEMA = obj({
       priceWithVat: n,
       leadTime: str,
       note: str,
+      mismatches: strArr,
       tasks: {
         type: "array",
         items: obj({ title: { type: "string" }, days: { type: "number" }, kind: { type: "string", enum: ["order", "wait", "work"] } }),
@@ -153,6 +156,7 @@ U nabídky rozděl položky na části:
 - co nepasuje k žádné poptávce, dej jako část s requestId null; poptávky, které dokument vůbec nepokrývá, nevracej.
 Ke každé části navrhni tasks = úkoly do stavebního plánu po výběru této nabídky, v pořadí, jak jdou po sobě:
 kind "order" (objednat/zálohovat, 1 den), "work" (práce na stavbě: zaměření, montáž, zapravení – odhad dní podle rozsahu), "wait" (výroba/dodací lhůta – dny podle nabídky, např. 6–12 týdnů = 63). Názvy krátce česky, např. "Objednat okna – Macek", "Zaměření oken", "Výroba a dodání oken", "Montáž oken".
+mismatches: porovnej položky té části se specifikací poptávky (pole specification a quantity) – rozměry, počty, provedení, materiál. Každý rozpor jednou krátkou větou česky, např. "okno ložnice 1530×1250 mm, nabídka uvádí 1500×1250 mm" nebo "poptávka žádá 5 ks, nabídka pokrývá 3 ks". Vypisuj jen rozdíly, ne shody. Když specifikace chybí nebo vše sedí, vrať prázdné pole.
 U technického dokumentu nech parts prázdné a do technicalSpecs dej klíčové parametry (rozměry, U-hodnoty, materiály, barvy, požadavky na stavební připravenost).
 vendor.bankAccount = číslo účtu dodavatele (formát 123456789/0100) nebo IBAN – hledej i v patičce, v hlavičce a na poslední straně; když tam není, vrať null.
 paymentTerms = platební podmínky textem: záloha (kolik %, kdy), splatnost, způsob úhrady. Když nejsou uvedené, vrať null.

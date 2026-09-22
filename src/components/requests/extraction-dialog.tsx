@@ -238,6 +238,14 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {(p.mismatches ?? []).length > 0 && (
+                  <div className="ml-6 mt-1 border-l-2 border-amber-400 pl-2 text-[11px] text-amber-800">
+                    <p className="font-medium">Nesedí se specifikací</p>
+                    {p.mismatches.map((m, k) => (
+                      <p key={k}>{m}</p>
+                    ))}
+                  </div>
+                )}
                 {(p.tasks ?? []).length > 0 && (
                   <p className="ml-6 text-[11px] text-stone-500">
                     Po výběru nabídky do plánu: {p.tasks.map((t) => `${t.title} (${t.days} d)`).join(" → ")}

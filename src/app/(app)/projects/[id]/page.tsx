@@ -1642,6 +1642,7 @@ export default async function ProjectDetailPage({
                       ? o.deliveryDate.toISOString().slice(0, 10)
                       : null,
                     note: o.note,
+                    mismatch: o.mismatch,
                     rating: o.rating,
                     score: o.score,
                     status: o.status,
