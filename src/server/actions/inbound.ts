@@ -96,54 +96,7 @@ export async function fileMail(formData: FormData) {
 
   const summary = `${mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress} · ${mail.subject}`;
   const docIds: string[] = [];
-
-  /**
-   * Nabídka na víc žádanek se zakládá jako společná nabídka poptávkového
-   * balíčku (#40): soubor leží jednou a je dostupný u všech jeho žádanek.
-   * Balíček se použije existující (když už v něm vybrané žádanky jsou),
-   * jinak vznikne nový pod zadaným názvem.
-   */
-  let bundleOfferId: string | null = null;
-  if (platne.length > 1) {
-    const stavajici = await prisma.request.findFirst({
-      where: { id: { in: platne.map((r) => r.id) }, bundleId: { not: null } },
-      select: { bundleId: true },
-    });
-    let bundleId = stavajici?.bundleId ?? null;
-    if (!bundleId) {
-      const nazev = String(formData.get("bundleName") || "").trim() || "Společná poptávka";
-      bundleId = (
-        await prisma.requestBundle.create({
-          data: { projectId, name: nazev.slice(0, 200), createdById: user.id },
-          select: { id: true },
-        })
-      ).id;
-    }
-    await prisma.request.updateMany({ where: { id: { in: platne.map((r) => r.id) } }, data: { bundleId } });
-
-    const offer = await prisma.bundleOffer.create({
-      data: {
-        bundleId,
-        // Dodavatele i ceny doplní vytěžení nebo uživatel – teď známe jen odesílatele.
-        vendorName: mail.fromName?.slice(0, 200) ?? mail.fromAddress,
-        note: `Z e-mailu: ${mail.subject}`.slice(0, 500),
-        createdById: user.id,
-      },
-      select: { id: true, status: true },
-    });
-    bundleOfferId = offer.id;
-    for (const r of platne) {
-      await prisma.offer.create({
-        data: {
-          requestId: r.id,
-          bundleOfferId: offer.id,
-          vendorName: offer.status === "nova" ? (mail.fromName ?? mail.fromAddress) : null,
-          status: offer.status,
-          createdById: user.id,
-        },
-      });
-    }
-  }
+  let nabidkaDorazila = false;
 
   // Samotný e-mail jako příloha žádanky (#32) – kontext, ze kterého nabídka přišla.
   if (withEmail && requestId) {
@@ -175,33 +128,42 @@ export async function fileMail(formData: FormData) {
         ? `${requestFolder(project.ownerId, projectId, requestId)}/nabidky`
         : `${project.ownerId}/${projectId}/other`;
     const { newKey, size } = await moveFile(a.fileName, a.originalName, folder);
-    const doc = await prisma.document.create({
-      data: {
-        projectId,
-        // Faktura patří mezi doklady projektu (bez vazby na žádanku),
-        // ostatní k žádance – tam na ně navazuje zpracování nabídky.
-        requestId: isDoc ? null : requestId,
-        // U nabídky na víc žádanek navíc vazba na společnou nabídku, aby
-        // byl tentýž soubor dostupný u celého balíčku.
-        bundleOfferId: isDoc ? null : bundleOfferId,
-        summary: summary.slice(0, 500),
-        fileName: newKey,
-        originalName: a.originalName,
-        mimeType: a.mimeType,
-        size,
-        type: isDoc ? "invoice" : kind === "offer" ? "offer" : "other",
-        // Propagační materiál se nevytěžuje, jen se uloží.
-        uploadedById: user.id,
-      },
-      select: { id: true },
-    });
+    const zaklad = {
+      projectId,
+      summary: summary.slice(0, 500),
+      // Soubor je v úložišti jeden; u víc žádanek na něj jen ukazuje víc
+      // záznamů. Smazání jednoho proto soubor nesmaže (viz deleteWithFiles).
+      fileName: newKey,
+      originalName: a.originalName,
+      mimeType: a.mimeType,
+      size,
+      type: isDoc ? "invoice" : kind === "offer" ? "offer" : "other",
+      uploadedById: user.id,
+    };
+    // Faktura patří mezi doklady projektu, ostatní ke všem vybraným žádankám.
+    const cile: (string | null)[] = isDoc ? [null] : platne.length ? platne.map((r) => r.id) : [null];
+    let prvni: string | null = null;
+    for (const cil of cile) {
+      const doc = await prisma.document.create({ data: { ...zaklad, requestId: cil }, select: { id: true } });
+      if (!prvni) prvni = doc.id;
+    }
     await prisma.inboundAttachment.update({
       where: { id: a.id },
-      data: { fileName: newKey, documentId: doc.id, kind },
+      data: { fileName: newKey, documentId: prvni, kind },
     });
-    if (!isDoc && kind !== "marketing" && requestId && extractable(a.mimeType, a.originalName))
-      docIds.push(doc.id);
+    // Vytěžení stačí pustit jednou; propagační materiál se nevytěžuje.
+    if (prvni && !isDoc && kind !== "marketing" && requestId && extractable(a.mimeType, a.originalName))
+      docIds.push(prvni);
+    if (!isDoc && kind === "offer") nabidkaDorazila = true;
   }
+
+  // Došla nabídka → žádanka se posouvá z Poptávky na Nabídku. Dál rozpracované
+  // stavy (Vyhovuje, Objednáno, Schváleno) se nevracejí zpátky.
+  if (nabidkaDorazila && platne.length)
+    await prisma.request.updateMany({
+      where: { id: { in: platne.map((r) => r.id) }, status: "poptavka" },
+      data: { status: "nabidka" },
+    });
 
   await prisma.inboundMail.update({
     where: { id: mail.id },
@@ -211,7 +173,7 @@ export async function fileMail(formData: FormData) {
       requestId,
       note: [
         `Zařazeno ${new Date().toLocaleString("cs-CZ")} – ${picked.length} příloh.`,
-        platne.length > 1 ? `Společná nabídka na ${platne.length} žádanek: ${platne.map((r) => r.title).join(", ")}.` : null,
+        platne.length ? `Žádanky: ${platne.map((r) => r.title).join(", ")}.` : null,
       ]
         .filter(Boolean)
         .join(" "),
@@ -234,7 +196,7 @@ export async function fileMail(formData: FormData) {
 
   revalidatePath("/posta");
   revalidatePath(`/projects/${projectId}`);
-  return { documents: picked.length, extracting: docIds.length, bundled: platne.length > 1 };
+  return { documents: picked.length, extracting: docIds.length, requests: platne.length };
 }
 
 /**
@@ -257,7 +219,7 @@ export async function resuggestMail(formData: FormData) {
       projectId: true,
       subProjectId: true,
       note: true,
-      attachments: { select: { fileName: true, originalName: true, mimeType: true, size: true } },
+      attachments: { select: { id: true, fileName: true, originalName: true, mimeType: true, size: true } },
     },
   });
   if (!row) throw new Error("Zpráva nenalezena.");
@@ -294,6 +256,13 @@ export async function resuggestMail(formData: FormData) {
       suggestion: suggestion as unknown as Prisma.InputJsonValue,
     },
   });
+  // Typy příloh se přepočítávají taky – jinak by u starší pošty zůstalo
+  // zařazení z doby, kdy rozpoznávání umělo míň.
+  const kinds = suggestion.attachmentKinds ?? [];
+  for (const [i, a] of row.attachments.entries()) {
+    if (kinds[i]) await prisma.inboundAttachment.update({ where: { id: a.id }, data: { kind: kinds[i] } });
+  }
+
   revalidatePath("/posta");
   return { requests: suggestion.requestIds.length };
 }

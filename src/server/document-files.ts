@@ -18,7 +18,18 @@ export async function deleteWithFiles(
 ) {
   const files = await prisma.document.findMany({ where: documents, select: { fileName: true } });
   await removeRows();
-  await Promise.all(files.map((f) => storage.delete(f.fileName).catch(() => undefined)));
+  // Tentýž soubor může být odkazovaný z víc žádanek (jedna nabídka na víc
+  // věcí). Smazat ho smíme, až na něj neukazuje žádný další dokument.
+  const klice = [...new Set(files.map((f) => f.fileName))];
+  if (klice.length === 0) return;
+  const zbyva = new Set(
+    (
+      await prisma.document.findMany({ where: { fileName: { in: klice } }, select: { fileName: true } })
+    ).map((d) => d.fileName),
+  );
+  await Promise.all(
+    klice.filter((k) => !zbyva.has(k)).map((k) => storage.delete(k).catch(() => undefined)),
+  );
 }
 
 /**

@@ -31,6 +31,9 @@ export type MailSuggestion = {
   reason: string;
   /** Typ pro jednotlivé přílohy, ve stejném pořadí, jak dorazily. */
   attachmentKinds: string[];
+  /** Dodavatel z přeposlané zprávy – odesílatel je uživatel, ne firma. */
+  vendorName: string | null;
+  vendorEmail: string | null;
 };
 
 const str = { type: ["string", "null"] };
@@ -48,6 +51,8 @@ const ROUTE_SCHEMA = obj({
   kind: { type: "string", enum: ["offer", "invoice", "technical", "marketing", "other"] },
   confidence: { type: "number" },
   reason: { type: "string" },
+  vendorName: str,
+  vendorEmail: str,
   attachmentKinds: {
     type: "array",
     items: { type: "string", enum: ["offer", "invoice", "technical", "marketing", "other"] },
@@ -63,6 +68,7 @@ Vracej přesná id ze seznamu, ne názvy.
 requestId: první z requestIds, tedy ta hlavní. Když je requestIds prázdné, vrať null.
 attachmentKinds: pro každou přílohu v pořadí, jak je uvedená na vstupu, jeden typ ze stejného číselníku jako kind. Katalog sortimentu nebo leták přiložený k nabídce označ jako "marketing", i když přišel spolu s ní.
 confidence: 0–100, jak jistý si zařazením jsi. Když je projekt i poptávka null, dej nízkou hodnotu.
+vendorName / vendorEmail: firma a její e-mail, od které nabídka pochází. Pozor: e-mail bývá **přeposlaný**, takže odesílatel je sám uživatel – skutečného dodavatele hledej v hlavičce uvnitř textu („---------- Forwarded message ---------", „Od:", „From:") nebo v podpisu. Když to nejde zjistit, vrať null.
 reason: jedna krátká věta česky, podle čeho ses rozhodl (např. "nabídka na okna od firmy, která je u poptávky Okna v evidenci").`;
 
 /**
