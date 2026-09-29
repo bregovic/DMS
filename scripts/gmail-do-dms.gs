@@ -53,6 +53,39 @@ function nastaveni() {
   return { zaklad: zaklad, secret: secret };
 }
 
+function mala(s) {
+  return String(s).toLowerCase();
+}
+
+/**
+ * Najde štítek, a teprve když opravdu není, založí ho.
+ *
+ * `getUserLabelByName` rozlišuje velikost písmen, ale Gmail při zakládání ne –
+ * při existujícím „DMS/hotovo“ by hledání minulo a založení spadlo na
+ * „Label name exists or conflicts“. Proto se porovnává bez ohledu na velikost
+ * a případný souběh se ošetří druhým pokusem o nalezení.
+ */
+function ziskejStitek(jmeno) {
+  var presny = GmailApp.getUserLabelByName(jmeno);
+  if (presny) return presny;
+  var najdi = function () {
+    var vsechny = GmailApp.getUserLabels();
+    for (var i = 0; i < vsechny.length; i++) {
+      if (mala(vsechny[i].getName()) === mala(jmeno)) return vsechny[i];
+    }
+    return null;
+  };
+  var podobny = najdi();
+  if (podobny) return podobny;
+  try {
+    return GmailApp.createLabel(jmeno);
+  } catch (e) {
+    var pozdeji = najdi();
+    if (pozdeji) return pozdeji;
+    throw e;
+  }
+}
+
 /**
  * Štítky, ze kterých se posílá: kořenový a všechny vnořené, kromě Hotovo.
  * Nic se nikam nepřekládá – názvy jsou věc uživatele.
@@ -60,10 +93,13 @@ function nastaveni() {
 function zdrojoveStitky() {
   var vysledek = [];
   var vsechny = GmailApp.getUserLabels();
+  var koren = mala(STITEK);
+  var hotovo = mala(STITEK_HOTOVO);
   for (var i = 0; i < vsechny.length; i++) {
     var jmeno = vsechny[i].getName();
-    if (jmeno !== STITEK && jmeno.indexOf(STITEK + '/') !== 0) continue;
-    if (jmeno === STITEK_HOTOVO || jmeno.indexOf(STITEK_HOTOVO + '/') === 0) continue;
+    var m = mala(jmeno);
+    if (m !== koren && m.indexOf(koren + '/') !== 0) continue;
+    if (m === hotovo || m.indexOf(hotovo + '/') === 0) continue;
     vysledek.push(jmeno);
   }
   return vysledek;
@@ -77,10 +113,10 @@ function zpracujPostu() {
     return;
   }
 
-  var hotovo = GmailApp.getUserLabelByName(STITEK_HOTOVO) || GmailApp.createLabel(STITEK_HOTOVO);
+  var hotovo = ziskejStitek(STITEK_HOTOVO);
   var dotaz =
     '(' + stitky.map(function (s) { return 'label:"' + s + '"'; }).join(' OR ') + ')' +
-    ' -label:"' + STITEK_HOTOVO + '"';
+    ' -label:"' + hotovo.getName() + '"';
   var vlakna = GmailApp.search(dotaz, 0, MAX_ZPRAV);
   Logger.log('Štítky: ' + stitky.join(', ') + ' → vláken ke zpracování: ' + vlakna.length);
 
@@ -159,9 +195,10 @@ function otestujSpojeni() {
   Logger.log('Štítky, ze kterých se posílá: ' + (stitky.join(', ') || '(žádné – založ štítek „' + STITEK + '")'));
   if (!stitky.length) return;
 
+  var hotovo = GmailApp.getUserLabelByName(STITEK_HOTOVO);
   var dotaz =
     '(' + stitky.map(function (s) { return 'label:"' + s + '"'; }).join(' OR ') + ')' +
-    ' -label:"' + STITEK_HOTOVO + '"';
+    (hotovo ? ' -label:"' + hotovo.getName() + '"' : '');
   var vlakna = GmailApp.search(dotaz, 0, MAX_ZPRAV);
   Logger.log('Čeká na odeslání: ' + vlakna.length + ' vláken');
   for (var i = 0; i < vlakna.length; i++) {
