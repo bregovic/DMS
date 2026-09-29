@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
-import { getExpenseItems, updateExpense } from "@/server/actions/expenses";
+import { getExpenseEditData, updateExpense } from "@/server/actions/expenses";
 import { claimedTotals } from "@/lib/vat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,10 @@ export type ExpenseEdit = {
   vendorId: string | null;
   subProjectId: string | null;
   stage: string | null;
+  taxDate: string | null; // DUZP, yyyy-mm-dd
+  docNumber: string | null;
+  deductible: boolean;
+  hasTaxData: boolean; // doklad s DPH – daňová pole má smysl ukazovat
 };
 
 export function EditExpenseForm({
@@ -61,15 +65,15 @@ export function EditExpenseForm({
   const [isIncome, setIsIncome] = useState(Number(expense.amount) < 0);
   const [rate, setRate] = useState(expense.rate != null ? String(expense.rate) : "");
   const [hours, setHours] = useState(expense.hours != null ? String(expense.hours) : "");
-  const [danove, setDanove] = useState<Awaited<ReturnType<typeof getExpenseItems>> | null>(null);
+  const [danove, setDanove] = useState<Awaited<ReturnType<typeof getExpenseEditData>> | null>(null);
 
   // Položky dokladu se načtou až při otevření – na stránce projektu by jen
   // nafoukly data, která skoro nikdo neotevře.
   useEffect(() => {
     if (!open) return;
     let zruseno = false;
-    getExpenseItems(expense.id)
-      .then((d) => !zruseno && setDanove(d))
+    getExpenseEditData(expense.id)
+      .then((d: Awaited<ReturnType<typeof getExpenseEditData>>) => !zruseno && setDanove(d))
       .catch(() => {});
     return () => {
       zruseno = true;
@@ -180,28 +184,21 @@ export function EditExpenseForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="ee-sub">Složka</Label>
-            {subProjects.length === 0 ? (
-              <>
-                <input type="hidden" name="subProjectId" value="" />
-                <p className="text-xs text-stone-500">
-                  Projekt {projectName ?? ""} zatím nemá složky.
-                </p>
-              </>
+            <Label>Zařazení</Label>
+            {danove ? (
+              <Combobox
+                key={danove.targets.length}
+                name="moveTo"
+                items={danove.targets.map((t) => ({ id: t.value, label: t.label }))}
+                defaultId={`${expense.projectId}:${expense.subProjectId ?? ""}`}
+                placeholder="Hledat projekt nebo složku…"
+                allowEmpty={false}
+                clearOnFocus
+              />
             ) : (
-              <select
-                id="ee-sub"
-                name="subProjectId"
-                defaultValue={expense.subProjectId ?? ""}
-                className={fieldClass}
-              >
-                <option value="">{projectName ? `${projectName} — bez složky` : "— bez složky —"}</option>
-                {subProjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {cestaSlozky(s.id)}
-                  </option>
-                ))}
-              </select>
+              <p className={`${fieldClass} flex items-center text-stone-400`}>
+                {projectName ? `${projectName}${expense.subProjectId ? ` › ${cestaSlozky(expense.subProjectId)}` : ""}` : "Načítám…"}
+              </p>
             )}
           </div>
 
@@ -326,6 +323,28 @@ export function EditExpenseForm({
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
             />
           </div>
+
+          {expense.hasTaxData && (
+            <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 border-t border-stone-200 pt-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ee-duzp">DUZP</Label>
+                <DateInput id="ee-duzp" name="taxDate" defaultValue={expense.taxDate ?? ""} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ee-docnum">Číslo dokladu</Label>
+                <Input id="ee-docnum" name="docNumber" defaultValue={expense.docNumber ?? ""} />
+              </div>
+              <label className="flex h-10 cursor-pointer items-center gap-2 text-sm text-stone-700">
+                <input
+                  type="checkbox"
+                  name="deductible"
+                  defaultChecked={expense.deductible}
+                  className="size-4 accent-stone-900"
+                />
+                Zahrnout do DPH
+              </label>
+            </div>
+          )}
 
           {danove && danove.items.length > 0 && (
             <div className="space-y-2 border-t border-stone-200 pt-4">

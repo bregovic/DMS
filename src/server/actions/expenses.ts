@@ -183,7 +183,7 @@ export async function updateExpense(formData: FormData) {
 
   const existing = await prisma.expense.findFirst({
     where: { id, projectId },
-    select: { id: true, project: { select: { ownerId: true } } },
+    select: { id: true, subProjectId: true, project: { select: { ownerId: true } } },
   });
   if (!existing) throw new Error("Výdaj nenalezen.");
 
@@ -200,13 +200,35 @@ export async function updateExpense(formData: FormData) {
   }
 
   let subProjectId = String(formData.get("subProjectId") || "") || null;
+
+  /* Přesun do jiného projektu nebo složky. Hodnota je "projectId:subProjectId"
+     (prázdná část za dvojtečkou = kořen projektu). Napříč projekty se musí
+     přestěhovat i přílohy – dokument visí na projektu, ne na výdaji – a zahodit
+     vazby na úkol, žádanku, nabídku a fakturu, protože ty zůstaly ve zdrojovém
+     projektu. Klíče souborů v úložišti se nepřepisují: jsou to jen cesty a
+     dokument si na ně dál ukazuje. */
+  const moveTo = String(formData.get("moveTo") || "");
+  let cilProjectId = projectId;
+  if (moveTo) {
+    const [mp, ms] = moveTo.split(":");
+    if (mp && mp !== projectId) {
+      if (!isManager(await getProjectRole(mp, user))) throw new Error("Do toho projektu nemáš přístup.");
+      cilProjectId = mp;
+    }
+    subProjectId = ms || null;
+  } else if (!formData.has("subProjectId")) {
+    // Vyhledávání nikdo nedokončil (rozepsaný text bez výběru) – zařazení se
+    // nemění. Jinak by výdaj tiše vypadl ze složky.
+    subProjectId = existing.subProjectId;
+  }
   if (subProjectId) {
     const sub = await prisma.subProject.findFirst({
-      where: { id: subProjectId, projectId },
+      where: { id: subProjectId, projectId: cilProjectId },
       select: { id: true },
     });
     if (!sub) subProjectId = null;
   }
+  const presun = cilProjectId !== projectId;
 
   const amountMode = String(formData.get("amountMode") || "fixed");
   let amount: number | null;
@@ -302,8 +324,30 @@ export async function updateExpense(formData: FormData) {
       stage: String(formData.get("stage") || "").trim() || null,
       vendorId,
       subProjectId,
+      ...(presun
+        ? { projectId: cilProjectId, taskId: null, requestId: null, offerId: null, invoiceId: null }
+        : {}),
+      // Daňová pole jen u dokladu, který je má – jinak by se formulář bez nich
+      // tvářil, že je uživatel vymazal.
+      ...(formData.has("docNumber")
+        ? {
+            docNumber: String(formData.get("docNumber") || "").trim() || null,
+            taxDate: (() => {
+              const t = String(formData.get("taxDate") || "");
+              const d = t ? new Date(t) : null;
+              return d && !isNaN(d.getTime()) ? d : null;
+            })(),
+            deductible: formData.get("deductible") != null,
+          }
+        : {}),
     },
   });
+
+  if (presun) {
+    await prisma.document.updateMany({ where: { expenseId: id }, data: { projectId: cilProjectId } });
+    await prisma.docScan.updateMany({ where: { expenseId: id }, data: { projectId: cilProjectId } });
+    revalidatePath(`/projects/${cilProjectId}`);
+  }
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");
@@ -311,6 +355,7 @@ export async function updateExpense(formData: FormData) {
   revalidatePath("/payments");
   revalidatePath("/vendors");
   revalidatePath("/dph");
+  revalidatePath("/doklady");
 }
 
 export async function setExpenseStage(formData: FormData) {
@@ -435,7 +480,7 @@ export async function deleteExpense(formData: FormData) {
  * Položky dokladu k úpravě: u každé kategorie a jestli jde do přiznání.
  * Načítá se až při otevření úprav – stránka projektu je i bez toho dost velká.
  */
-export async function getExpenseItems(expenseId: string) {
+export async function getExpenseEditData(expenseId: string) {
   const user = await requireUser();
   const e = await prisma.expense.findUnique({
     where: { id: expenseId },
@@ -453,8 +498,29 @@ export async function getExpenseItems(expenseId: string) {
   });
   if (!e) throw new Error("Výdaj nenalezen.");
   if (!isManager(await getProjectRole(e.projectId, user))) throw new Error("Nemáš oprávnění.");
+  // Kam jde výdaj přesunout: projekty, které uživatel spravuje, i s jejich
+  // složkami. Cesta se skládá, ať je v jednom seznamu poznat vnoření.
+  const ids = await managedProjectIds(user);
+  const projekty = await prisma.project.findMany({
+    where: { id: { in: ids } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, subProjects: { select: { id: true, name: true, parentId: true } } },
+  });
+  const targets: { value: string; label: string }[] = [];
+  for (const p of projekty) {
+    targets.push({ value: `${p.id}:`, label: p.name });
+    const cesta = (sid: string): string => {
+      const sub = p.subProjects.find((x) => x.id === sid);
+      if (!sub) return p.name;
+      return sub.parentId ? `${cesta(sub.parentId)} › ${sub.name}` : `${p.name} › ${sub.name}`;
+    };
+    for (const sub of [...p.subProjects].sort((a, b) => cesta(a.id).localeCompare(cesta(b.id), "cs")))
+      targets.push({ value: `${p.id}:${sub.id}`, label: cesta(sub.id) });
+  }
+
   const rows = (e.vatBreakdownDoc ?? e.vatBreakdown ?? []) as { rate: number; base: number; vat: number }[];
   return {
+    targets,
     currency: e.currency,
     docRows: rows,
     docBase: e.vatBaseDoc != null ? Number(e.vatBaseDoc) : e.vatBase != null ? Number(e.vatBase) : null,

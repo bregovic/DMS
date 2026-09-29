@@ -55,13 +55,15 @@ export function Field({
   className?: string;
   children: React.ReactNode;
 }) {
+  // Mřížka zarovnává buňky na spodní hranu, takže vstup musí zůstat poslední –
+  // nápověda pod ním by pole vytlačila nahoru proti sousedům.
   return (
     <div className={`space-y-1.5 ${className}`}>
       <label htmlFor={htmlFor} className="kicker block !text-stone-500">
         {label}
       </label>
-      {children}
       {hint && <p className="text-[11px] text-stone-400">{hint}</p>}
+      {children}
     </div>
   );
 }

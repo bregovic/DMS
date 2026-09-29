@@ -772,6 +772,10 @@ export default async function ProjectDetailPage({
       vendorId: e.vendorId,
       subProjectId: e.subProjectId,
       stage: e.stage,
+      taxDate: e.taxDate ? e.taxDate.toISOString().slice(0, 10) : null,
+      docNumber: e.docNumber,
+      deductible: e.deductible,
+      hasTaxData: e.vatAmount != null || e.vatBase != null || !!e.docNumber || !!e.taxDate,
     },
   }));
 

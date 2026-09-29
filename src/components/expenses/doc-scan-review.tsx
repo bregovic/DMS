@@ -266,7 +266,7 @@ export function DocScanReview({
                 <Field label="Datum vystavení" htmlFor="ds-date">
                   <input id="ds-date" type="date" className={input} value={form.date ?? ""} onChange={(e) => set("date", e.target.value)} />
                 </Field>
-                <Field label="DUZP" htmlFor="ds-tax" hint="datum zdanitelného plnění">
+                <Field label="DUZP" htmlFor="ds-tax">
                   <input id="ds-tax" type="date" className={input} value={form.taxDate ?? ""} onChange={(e) => set("taxDate", e.target.value)} />
                 </Field>
                 <Field label="Splatnost" htmlFor="ds-due">
