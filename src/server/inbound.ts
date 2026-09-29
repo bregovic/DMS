@@ -371,7 +371,21 @@ export async function storeMail(
     const folder = `${owner.ownerId}/posta/${row.id}`;
     // Originál e-mailu je nepovinný – skript v Gmailu ho nemusí poslat.
     const rawKey = mail.raw ? await storage.save(mail.raw, "original.eml", folder).catch(() => null) : null;
-    for (const [i, a] of mail.attachments.entries()) {
+    /* Dvakrát přeposlaný e-mail je pro Gmail nová zpráva (jiné Message-ID),
+       takže deduplikace podle něj nestačí. Druhá pojistka je název a velikost
+       přílohy: co na totéž ještě čeká nezpracované, se podruhé nezakládá. */
+    let novych = 0;
+    for (const a of mail.attachments) {
+      const uz = await prisma.inboundAttachment.findFirst({
+        where: {
+          mail: { ownerId: owner.ownerId },
+          documentId: null,
+          originalName: a.originalName.slice(0, 300),
+          size: a.size,
+        },
+        select: { id: true },
+      });
+      if (uz) continue;
       const key = await storage.save(a.content, a.originalName, folder);
       await prisma.inboundAttachment.create({
         data: {
@@ -383,6 +397,14 @@ export async function storeMail(
           kind: "other",
         },
       });
+      novych++;
+    }
+    // Zpráva, ze které nic nového nezbylo, by ve frontě jen překážela.
+    if (mail.attachments.length > 0 && novych === 0) {
+      await prisma.inboundMail.delete({ where: { id: row.id } });
+      if (rawKey) await storage.delete(rawKey).catch(() => undefined);
+      res.skipped.push({ subject: mail.subject, reason: "přílohy už čekají ke zpracování" });
+      return null;
     }
     if (rawKey) await prisma.inboundMail.update({ where: { id: row.id }, data: { rawKey } });
 
