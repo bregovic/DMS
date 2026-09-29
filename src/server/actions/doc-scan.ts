@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { canWrite, getProjectRole, getTaskOnlyAccess, isManager, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { createDocScan, createMailScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
+import { AI_MODEL } from "@/server/extraction";
+import { Prisma } from "@/generated/prisma/client";
 import { notifyExpenseAdded } from "@/server/notify";
 import { EXPENSE_PAID_STAGE } from "@/lib/constants";
 import { claimedTotals } from "@/lib/vat";
@@ -100,6 +102,28 @@ export async function scanInbox() {
   });
   revalidatePath("/doklady");
   return { count: ids.length };
+}
+
+/**
+ * Pustí čtení znovu – ať jde o doklad v projektu, nebo o přílohu z pošty.
+ * Používá se, když čtení nedoběhlo (typicky ho utnulo nasazení).
+ */
+export async function restartScan(formData: FormData) {
+  const id = String(formData.get("scanId"));
+  const scan = await prisma.docScan.findUnique({
+    where: { id },
+    select: { id: true, projectId: true, inboundAttachment: { select: { mail: { select: { ownerId: true } } } } },
+  });
+  if (!scan) throw new Error("Návrh nenalezen.");
+  const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
+  if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
+    throw new Error("Nemáš oprávnění.");
+  await prisma.docScan.update({
+    where: { id },
+    data: { status: "running", error: null, result: Prisma.JsonNull, model: AI_MODEL },
+  });
+  after(() => runDocScan(id));
+  revalidatePath("/doklady");
 }
 
 /** Otevřené žádanky uživatele pro výběr u nabídky. */

@@ -15,6 +15,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteDocument } from "@/server/actions/documents";
 import { deleteExpense } from "@/server/actions/expenses";
 import { deleteIncome } from "@/server/actions/incomes";
+import { restartScan } from "@/server/actions/doc-scan";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { isExpensePaid } from "@/lib/constants";
@@ -99,6 +100,7 @@ export default async function DocsPage({
         projectId: true,
         status: true,
         result: true,
+        updatedAt: true,
         document: { select: { id: true, originalName: true } },
         inboundAttachment: {
           select: { id: true, originalName: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } },
@@ -291,7 +293,9 @@ export default async function DocsPage({
         <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
       </header>
       <FinanceNav />
-      <AutoRefresh when={scans.some((s) => s.status === "running")} />
+      <AutoRefresh
+        when={scans.some((s) => s.status === "running" && Date.now() - s.updatedAt.getTime() < 10 * 60_000)}
+      />
 
       <div className="mt-6">
         <DocUploadBox projects={projects} />
@@ -360,6 +364,9 @@ export default async function DocsPage({
                 docKind?: string | null;
               } | null;
               const nazev = sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument";
+              // Čtení běží na pozadí; nasazení ho utne a stav „running" by pak
+              // zůstal navždy. Po deseti minutách ho bereme jako nedokončené.
+              const zaseklo = sc.status === "running" && Date.now() - sc.updatedAt.getTime() > 10 * 60_000;
               const odkud = sc.projectId
                 ? projName.get(sc.projectId)
                 : sc.inboundAttachment
@@ -377,15 +384,32 @@ export default async function DocsPage({
                   )}
                   <span className="text-xs text-stone-500">{odkud}</span>
                   {r?.total != null && <span className="font-mono text-stone-950">{formatCurrency(r.total)}</span>}
-                  <span className={`w-28 text-right text-xs ${sc.status === "ready" ? "text-orange-700" : sc.status === "error" ? "text-red-600" : "text-stone-500"}`}>
-                    {sc.status === "ready" ? "ke kontrole" : sc.status === "error" ? "nepřečteno" : "čtu doklad…"}
+                  <span className={`w-28 text-right text-xs ${sc.status === "ready" ? "text-orange-700" : sc.status === "error" || zaseklo ? "text-red-600" : "text-stone-500"}`}>
+                    {sc.status === "ready"
+                      ? "ke kontrole"
+                      : sc.status === "error"
+                        ? "nepřečteno"
+                        : zaseklo
+                          ? "nedokončeno"
+                          : "čtu doklad…"}
                   </span>
+                  {zaseklo && (
+                    <form action={restartScan}>
+                      <input type="hidden" name="scanId" value={sc.id} />
+                      <button
+                        type="submit"
+                        className="flex h-8 cursor-pointer items-center border border-stone-300 px-2 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+                      >
+                        Přečíst znovu
+                      </button>
+                    </form>
+                  )}
                   <DocScanReview
                     scanId={sc.id}
                     documentId={sc.document?.id ?? null}
                     projectId={sc.projectId}
                     categories={categories.map((c) => ({ key: c.key, label: c.label }))}
-                    label={sc.status === "error" ? "Zkusit znovu" : "Zkontrolovat"}
+                    label={sc.status === "error" ? "Zkusit znovu" : "Otevřít"}
                   />
                 </li>
               );
