@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RotateCcw } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { managedProjectIds } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -393,14 +394,17 @@ export default async function DocsPage({
                           ? "nedokončeno"
                           : "čtu doklad…"}
                   </span>
-                  {zaseklo && (
+                  {/* Přečíst znovu jde u všeho, co zrovna neběží – i u hotového,
+                      když se návrh netrefil nebo vznikal starší verzí. */}
+                  {(sc.status !== "running" || zaseklo) && (
                     <form action={restartScan}>
                       <input type="hidden" name="scanId" value={sc.id} />
                       <button
                         type="submit"
-                        className="flex h-8 cursor-pointer items-center border border-stone-300 px-2 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+                        title="Přečíst znovu"
+                        className="flex size-8 cursor-pointer items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
                       >
-                        Přečíst znovu
+                        <RotateCcw className="size-4" />
                       </button>
                     </form>
                   )}
