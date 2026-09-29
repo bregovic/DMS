@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileSearch, Loader2 } from "lucide-react";
-import { applyDocScan, dismissDocScan, getDocScan, scanDocument, vendorsForScan } from "@/server/actions/doc-scan";
+import { applyDocScan, dismissDocScan, getDocScan, mistaProZarazeni, scanDocument, vendorsForScan } from "@/server/actions/doc-scan";
+import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FormGrid, FormSection } from "@/components/ui/form-section";
@@ -32,8 +33,8 @@ export function DocScanReview({
   onDone,
 }: {
   scanId: string | null;
-  documentId: string;
-  projectId: string;
+  documentId: string | null;
+  projectId: string | null;
   subProjects?: { id: string; name: string }[];
   categories: { key: string; label: string }[];
   label?: string;
@@ -52,6 +53,7 @@ export function DocScanReview({
   const [items, setItems] = useState<ScanResult["items"]>([]);
   const [rows, setRows] = useState<ScanResult["vatBreakdown"]>([]);
   const [novaKat, setNovaKat] = useState<string | null>(null);
+  const [mista, setMista] = useState<{ value: string; label: string }[]>([]);
   const router = useRouter();
 
   // Dřív se vracel volný text („palivo"), dnes klíč („fuel"). U starších skenů
@@ -105,7 +107,8 @@ export function DocScanReview({
         vatBase: String(r.totalBase ?? ""),
         vatAmount: String(r.totalVat ?? ""),
         category: issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"),
-        subProjectId: "",
+        subProjectId: r.subProjectId ?? "",
+        zarazeni: r.projectId ? `${r.projectId}:${r.subProjectId ?? ""}` : "",
         deductible: "1",
         paid: r.docType === "receipt" ? "1" : "0",
       });
@@ -119,8 +122,10 @@ export function DocScanReview({
       try {
         const vs = await vendorsForScan(projectId);
         setVendors(vs);
+        if (!projectId) setMista(await mistaProZarazeni());
         let id = scanId;
         if (!id) {
+          if (!documentId) throw new Error("Doklad se nepodařilo načíst.");
           const fd = new FormData();
           fd.set("documentId", documentId);
           id = (await scanDocument(fd)).id;
@@ -158,6 +163,12 @@ export function DocScanReview({
       fd.set("vatRows", JSON.stringify(rows));
       if (force) fd.set("force", "1");
       fd.set("items", JSON.stringify(items));
+      if (!projectId) {
+        const [p, sub] = String(form.zarazeni || "").split(":");
+        if (!p) throw new Error("Vyber projekt.");
+        fd.set("targetProjectId", p);
+        fd.set("subProjectId", sub || "");
+      }
       await applyDocScan(fd);
       setOpen(false);
       router.refresh();
@@ -196,6 +207,7 @@ export function DocScanReview({
             type="button"
             variant="outline"
             onClick={async () => {
+              if (!documentId) return;
               const fd = new FormData();
               fd.set("documentId", documentId);
               const { id } = await scanDocument(fd);
@@ -257,7 +269,28 @@ export function DocScanReview({
               </div>
             </FormSection>
 
-            <FormSection title="Doklad" hint={scan.document.originalName}>
+            {!projectId && (
+              <FormSection
+                title="Zařazení"
+                hint={scan.result?.placeReason ?? undefined}
+                actions={
+                  scan.result?.docKind === "nabidka" ? (
+                    <span className="text-xs text-stone-500">rozpoznáno jako nabídka</span>
+                  ) : undefined
+                }
+              >
+                <Combobox
+                  name="zarazeni-pole"
+                  items={mista.map((m) => ({ id: m.value, label: m.label }))}
+                  defaultId={form.zarazeni || undefined}
+                  placeholder="Hledat projekt nebo složku…"
+                  allowEmpty={false}
+                  onSelect={(item) => set("zarazeni", item?.id ?? "")}
+                />
+              </FormSection>
+            )}
+
+            <FormSection title="Doklad" hint={scan.document?.originalName ?? scan.inboundAttachment?.originalName}>
               <FormGrid cols={3}>
                 <Field label="Název výdaje" htmlFor="ds-title">
                   <input id="ds-title" className={input} value={form.title ?? ""} onChange={(e) => set("title", e.target.value)} />

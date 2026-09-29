@@ -56,6 +56,18 @@ export type ScanResult = {
   summary: string;
   items: ScanItem[];
   warnings: string[];
+  /** Co ten soubor je: doklad k zaúčtování, nabídka na žádanku, nebo nic z toho. */
+  docKind: "doklad" | "nabidka" | "ostatni";
+  /** Kód místa ze seznamu v pokynu (projekt nebo složka); mapuje se zpět na id. */
+  placeCode: string | null;
+  /** Kódy žádanek, které nabídka pokrývá. */
+  requestCodes: string[];
+  /** Čím je zařazení podložené – ať je vidět, proč to tam chce dát. */
+  placeReason: string | null;
+  /** Doplní server po převodu kódů na identifikátory. */
+  projectId?: string | null;
+  subProjectId?: string | null;
+  requestIds?: string[];
 };
 
 const n = { type: ["number", "null"] };
@@ -102,9 +114,21 @@ const SCHEMA = obj({
     }),
   },
   warnings: { type: "array", items: { type: "string" } },
+  docKind: { type: "string", enum: ["doklad", "nabidka", "ostatni"] },
+  placeCode: str,
+  requestCodes: { type: "array", items: { type: "string" } },
+  placeReason: str,
 });
 
-const INSTRUCTIONS = (cats: { key: string; label: string }[]) => `Jsi účetní. Ze snímku nebo PDF účtenky či faktury přečti údaje přesně tak, jak jsou na dokladu. Nic nedopočítávej odhadem.
+export type Misto = { kod: string; nazev: string; projectId: string; subProjectId: string | null };
+export type ZadankaVolba = { kod: string; nazev: string; misto: string; id: string };
+
+const INSTRUCTIONS = (
+  cats: { key: string; label: string }[],
+  mista: Misto[],
+  zadanky: ZadankaVolba[],
+  kontext: string,
+) => `Jsi účetní. Ze snímku nebo PDF přečti údaje přesně tak, jak jsou v dokumentu. Nic nedopočítávej odhadem.
 - docType: receipt = účtenka/paragon, invoice = faktura (daňový doklad), proforma = zálohová faktura, credit_note = dobropis.
 - supplier = kdo doklad vystavil (prodávající). ico = 8 číslic bez mezer, dic například CZ12345678. customer = odběratel, pokud je uveden.
 - supplier.bankAccount = číslo účtu (123456789/0100) nebo IBAN, na který se platí – bývá v hlavičce, v patičce nebo u platebních údajů. Když na dokladu není, vrať null.
@@ -118,11 +142,22 @@ const INSTRUCTIONS = (cats: { key: string; label: string }[]) => `Jsi účetní.
 - U každé položky taky category = klíč ze stejného seznamu (doklad běžně míchá víc druhů nákupu, třeba palivo a občerstvení).
 - deductible u položky = patří do nároku na odpočet DPH? Vrať false jen u zjevně osobní spotřeby: jídlo, pití, občerstvení, cukrovinky, tabák, léky a drogerie pro osobní potřebu. U všeho ostatního true.
 - title = krátký název výdaje pro evidenci (dodavatel + co to je, max 60 znaků).
-- summary = 1–2 věty, co doklad obsahuje. warnings = co je nečitelné nebo nejisté.
-Čísla vracej jako čísla bez měny a bez mezer. Když údaj na dokladu není, vrať null.
+- summary = 1–2 věty, co dokument obsahuje. warnings = co je nečitelné nebo nejisté.
+- docKind = co ten soubor je. "doklad" = faktura, účtenka nebo dobropis k zaúčtování. "nabidka" = cenová nabídka nebo ceník, ještě se neplatí. "ostatni" = technický list, katalog, leták, smlouva.
+- placeCode = kód místa ze seznamu níž, kam dokument patří. Když to z obsahu nejde poznat, vrať null; nehádej.
+- requestCodes = u nabídky kódy VŠECH žádanek, které nabídka naceňuje – nabídka běžně pokrývá víc žádanek naráz. U dokladu vrať prázdné pole.
+- placeReason = jednou větou, čím je zařazení podložené (co v dokumentu na to místo nebo žádanku ukazuje).
+Čísla vracej jako čísla bez měny a bez mezer. Když údaj v dokumentu není, vrať null.
 
 Kategorie (klíč = název):
-${cats.map((c) => `${c.key} = ${c.label}`).join("\n")}`;
+${cats.map((c) => `${c.key} = ${c.label}`).join("\n")}
+
+Místa (kód = název):
+${mista.map((m) => `${m.kod} = ${m.nazev}`).join("\n") || "(žádná)"}
+
+Otevřené žádanky (kód = název · místo):
+${zadanky.map((z) => `${z.kod} = ${z.nazev} · ${z.misto}`).join("\n") || "(žádné)"}
+${kontext}`;
 
 /**
  * Postgres neuloží do JSON ani do textu znak \u0000 (a osamělé půlky surrogate
@@ -143,15 +178,96 @@ function stripNul<T>(v: T): T {
   return v;
 }
 
+/**
+ * Místa a otevřené žádanky, ze kterých si čtení vybírá.
+ *
+ * Do pokynu jdou krátké kódy (m1, r3), ne identifikátory z databáze – model
+ * by je jinak skládal podle podoby a vracel neexistující. Kód se pak převede
+ * zpátky; co v seznamu není, se zahodí.
+ */
+async function volbyZarazeni(ownerId: string | null) {
+  if (!ownerId) return { mista: [] as Misto[], zadanky: [] as ZadankaVolba[] };
+  const projekty = await prisma.project.findMany({
+    where: { ownerId },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, subProjects: { select: { id: true, name: true, parentId: true } } },
+  });
+  const mista: Misto[] = [];
+  const podleId = new Map<string, string>(); // subProjectId → název místa
+  for (const p of projekty) {
+    mista.push({ kod: `m${mista.length + 1}`, nazev: p.name, projectId: p.id, subProjectId: null });
+    const cesta = (sid: string): string => {
+      const sub = p.subProjects.find((x) => x.id === sid);
+      if (!sub) return p.name;
+      return sub.parentId ? `${cesta(sub.parentId)} › ${sub.name}` : `${p.name} › ${sub.name}`;
+    };
+    for (const sub of p.subProjects) {
+      const nazev = cesta(sub.id);
+      podleId.set(sub.id, nazev);
+      mista.push({ kod: `m${mista.length + 1}`, nazev, projectId: p.id, subProjectId: sub.id });
+    }
+  }
+
+  const rq = await prisma.request.findMany({
+    where: { project: { ownerId }, status: { notIn: ["zruseno", "objednano", "dokonceno"] } },
+    orderBy: { createdAt: "desc" },
+    take: 120,
+    select: { id: true, title: true, subProjectId: true, project: { select: { name: true } } },
+  });
+  const zadanky: ZadankaVolba[] = rq.map((r, i) => ({
+    kod: `r${i + 1}`,
+    nazev: r.title.slice(0, 120),
+    misto: r.subProjectId ? (podleId.get(r.subProjectId) ?? r.project.name) : r.project.name,
+    id: r.id,
+  }));
+  return { mista, zadanky };
+}
+
+/** Kódy z odpovědi zpět na identifikátory; neznámé se zahodí. */
+function prelozZarazeni(d: ScanResult, mista: Misto[], zadanky: ZadankaVolba[]): ScanResult {
+  const misto = mista.find((m) => m.kod === d.placeCode);
+  d.projectId = misto?.projectId ?? null;
+  d.subProjectId = misto?.subProjectId ?? null;
+  const kody = new Set((d.requestCodes ?? []).map(String));
+  d.requestIds = zadanky.filter((z) => kody.has(z.kod)).map((z) => z.id);
+  // Žádanka určuje místo přesněji než odhad – když je vybraná, řídí se jí.
+  if (d.requestIds.length && !misto) {
+    const prvni = rq_misto(zadanky, d.requestIds[0], mista);
+    if (prvni) {
+      d.projectId = prvni.projectId;
+      d.subProjectId = prvni.subProjectId;
+    }
+  }
+  return d;
+}
+
+function rq_misto(zadanky: ZadankaVolba[], requestId: string, mista: Misto[]) {
+  const z = zadanky.find((x) => x.id === requestId);
+  return z ? mista.find((m) => m.nazev === z.misto) : undefined;
+}
+
 /** Spustí vytěžení dokladu – návrh se uloží do DocScan (status ready | error). */
 export async function runDocScan(scanId: string) {
   try {
     const scan = await prisma.docScan.findUnique({
       where: { id: scanId },
-      select: { id: true, model: true, document: { select: { fileName: true, originalName: true, mimeType: true } } },
+      select: {
+        id: true,
+        model: true,
+        document: { select: { fileName: true, originalName: true, mimeType: true, project: { select: { ownerId: true } } } },
+        inboundAttachment: {
+          select: {
+            fileName: true,
+            originalName: true,
+            mimeType: true,
+            mail: { select: { subject: true, bodyText: true, fromName: true, fromAddress: true, ownerId: true } },
+          },
+        },
+      },
     });
     if (!scan) return;
-    const doc = scan.document;
+    const doc = scan.document ?? scan.inboundAttachment;
+    if (!doc) return;
     if (!extractable(doc.mimeType, doc.originalName)) {
       await prisma.docScan.update({
         where: { id: scanId },
@@ -161,16 +277,26 @@ export async function runDocScan(scanId: string) {
     }
     await assertBudget(); // limity zpracování až tady, ať je případná chyba vidět u dokladu
     const cats = await getExpenseCategories();
+    const ownerId = scan.document?.project.ownerId ?? scan.inboundAttachment?.mail.ownerId ?? null;
+    const { mista, zadanky } = await volbyZarazeni(ownerId);
+    // U pošty jde do promptu i hlavička zprávy – u přeposlané nabídky bývá
+    // dodavatel jen tam a v textu, ne v příloze.
+    const m = scan.inboundAttachment?.mail;
+    const kontext = m
+      ? `\nE-mail, kterým dokument přišel:\nOd: ${m.fromName ?? ""} <${m.fromAddress}>\nPředmět: ${m.subject}\n${(m.bodyText ?? "").slice(0, 4000)}`
+      : "";
     const buf = await storage.read(doc.fileName);
     const { data, costUsd } = await callModel<ScanResult>(
       scan.model,
-      INSTRUCTIONS(cats),
+      INSTRUCTIONS(cats, mista, zadanky, kontext),
       [await filePart(buf, doc.originalName, doc.mimeType), { type: "input_text", text: `Soubor: ${doc.originalName}` }],
       "doc-scan",
       SCHEMA,
       { effort: "low", maxOutput: 20_000 },
     );
-    const result = await fillExchangeRate(normalize(stripNul(data), new Set(cats.map((c) => c.key))));
+    const result = await fillExchangeRate(
+      prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky),
+    );
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },
       data: { status: "ready", result: result as unknown as Prisma.InputJsonValue, costUsd },
@@ -184,13 +310,17 @@ export async function runDocScan(scanId: string) {
         : result.docType === "receipt"
           ? "receipt"
           : null;
-    if (docType) await prisma.document.update({ where: { id: scanRow.documentId }, data: { type: docType } });
+    if (docType && scanRow.documentId)
+      await prisma.document.update({ where: { id: scanRow.documentId }, data: { type: docType } });
 
-    // správci projektu: doklad je přečtený a čeká na zaúčtování
-    const project = await prisma.project.findUnique({
-      where: { id: scanRow.projectId },
-      select: { name: true, ownerId: true, memberships: { where: { role: "member" }, select: { email: true } } },
-    });
+    // Správci projektu: doklad je přečtený a čeká na zaúčtování. U pošty
+    // projekt ještě není, takže není komu hlásit – zpráva přijde po zařazení.
+    const project = scanRow.projectId
+      ? await prisma.project.findUnique({
+          where: { id: scanRow.projectId },
+          select: { name: true, ownerId: true, memberships: { where: { role: "member" }, select: { email: true } } },
+        })
+      : null;
     if (project) {
       const emails = project.memberships.map((m) => m.email);
       const members = emails.length
@@ -321,6 +451,17 @@ export async function createDocScan(projectId: string, documentId: string, userI
     where: { documentId },
     update: { status: "running", result: Prisma.JsonNull, error: null, model: AI_MODEL, createdById: userId },
     create: { projectId, documentId, model: AI_MODEL, createdById: userId },
+    select: { id: true },
+  });
+  return scan.id;
+}
+
+/** Čtení přílohy z pošty – projekt se určí až z obsahu, dokument vznikne potvrzením. */
+export async function createMailScan(inboundAttachmentId: string, userId: string) {
+  const scan = await prisma.docScan.upsert({
+    where: { inboundAttachmentId },
+    update: { status: "running", result: Prisma.JsonNull, error: null, model: AI_MODEL, createdById: userId },
+    create: { inboundAttachmentId, model: AI_MODEL, createdById: userId },
     select: { id: true },
   });
   return scan.id;

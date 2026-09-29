@@ -6,10 +6,11 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { canWrite, getProjectRole, getTaskOnlyAccess, isManager } from "@/server/access";
 import { storage } from "@/lib/storage";
-import { createDocScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
+import { createDocScan, createMailScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { notifyExpenseAdded } from "@/server/notify";
 import { EXPENSE_PAID_STAGE } from "@/lib/constants";
 import { claimedTotals } from "@/lib/vat";
+import { extractable } from "@/server/extraction";
 import { getExpenseCategories, slugifyCategory } from "@/server/expense-categories";
 
 async function writable(projectId: string) {
@@ -60,6 +61,53 @@ export async function scanProjectDocuments(formData: FormData) {
   return { count: ids.length };
 }
 
+/**
+ * Přečte přílohy, které přišly poštou a ještě přečtené nejsou. Projekt se
+ * neřeší – určí se z obsahu a potvrdí v kontrole.
+ */
+export async function scanMailAttachments() {
+  const user = await requireUser();
+  const prilohy = await prisma.inboundAttachment.findMany({
+    where: { mail: { ownerId: user.id }, documentId: null, scan: { is: null } },
+    orderBy: { id: "asc" },
+    take: 25,
+    select: { id: true, mimeType: true, originalName: true },
+  });
+  const ids: string[] = [];
+  for (const a of prilohy) {
+    if (!extractable(a.mimeType, a.originalName)) continue;
+    ids.push(await createMailScan(a.id, user.id));
+  }
+  after(async () => {
+    // po jednom, ať se nevyčerpá limit a chyba se projeví u konkrétní přílohy
+    for (const id of ids) await runDocScan(id);
+  });
+  revalidatePath("/doklady");
+  return { count: ids.length };
+}
+
+/** Místa, kam jde doklad z pošty zařadit (projekty a složky uživatele). */
+export async function mistaProZarazeni() {
+  const user = await requireUser();
+  const projekty = await prisma.project.findMany({
+    where: { ownerId: user.id },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, subProjects: { select: { id: true, name: true, parentId: true } } },
+  });
+  const out: { value: string; label: string }[] = [];
+  for (const p of projekty) {
+    out.push({ value: `${p.id}:`, label: p.name });
+    const cesta = (sid: string): string => {
+      const sub = p.subProjects.find((x) => x.id === sid);
+      if (!sub) return p.name;
+      return sub.parentId ? `${cesta(sub.parentId)} › ${sub.name}` : `${p.name} › ${sub.name}`;
+    };
+    for (const sub of [...p.subProjects].sort((a, b) => cesta(a.id).localeCompare(cesta(b.id), "cs")))
+      out.push({ value: `${p.id}:${sub.id}`, label: cesta(sub.id) });
+  }
+  return out;
+}
+
 /** Návrh k potvrzení (pro dialog kontroly). */
 export async function getDocScan(id: string) {
   const scan = await prisma.docScan.findUnique({
@@ -72,19 +120,29 @@ export async function getDocScan(id: string) {
       result: true,
       expenseId: true,
       document: { select: { id: true, originalName: true, type: true } },
+      inboundAttachment: {
+        select: { id: true, originalName: true, mail: { select: { subject: true, fromName: true, fromAddress: true, ownerId: true } } },
+      },
     },
   });
   if (!scan) throw new Error("Návrh nenalezen.");
-  const user = await writable(scan.projectId);
+  // Doklad z pošty ještě projekt nemá – právo se odvozuje od majitele schránky.
+  const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
+  if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
+    throw new Error("Nemáš oprávnění.");
   const result = (scan.result ?? null) as ScanResult | null;
 
   // Vystavil doklad majitel projektu? Poznáme podle jeho IČO/DIČ z nastavení
   // (Fakturace a daně) – ne podle toho, kdo je zrovna přihlášený, aby to
   // spolusprávci vyhodnotilo stejně jako vlastníkovi.
-  const owner = await prisma.project.findUnique({
-    where: { id: scan.projectId },
-    select: { ownerId: true, owner: { select: { billingIco: true, billingDic: true, billingName: true } } },
-  });
+  const owner = scan.projectId
+    ? await prisma.project.findUnique({
+        where: { id: scan.projectId },
+        select: { ownerId: true, owner: { select: { billingIco: true, billingDic: true, billingName: true } } },
+      })
+    : await prisma.user
+        .findUnique({ where: { id: user.id }, select: { billingIco: true, billingDic: true, billingName: true } })
+        .then((u) => (u ? { ownerId: user.id, owner: u } : null));
   const me = owner?.owner ?? null;
   const norm = (v: string | null | undefined) => (v ?? "").replace(/\s/g, "").toUpperCase().replace(/^CZ/, "");
   const myIco = norm(me?.billingIco);
@@ -145,13 +203,50 @@ export async function applyDocScan(formData: FormData) {
   const scanId = String(formData.get("scanId"));
   const scan = await prisma.docScan.findUnique({
     where: { id: scanId },
-    select: { id: true, projectId: true, documentId: true, status: true, expenseId: true },
+    select: {
+      id: true,
+      projectId: true,
+      documentId: true,
+      status: true,
+      expenseId: true,
+      inboundAttachment: { select: { id: true, fileName: true, originalName: true, mimeType: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } } },
+    },
   });
   if (!scan) throw new Error("Návrh nenalezen.");
   if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl.");
-  const user = await writable(scan.projectId);
-  const project = await prisma.project.findUnique({ where: { id: scan.projectId }, select: { ownerId: true } });
+
+  /* Doklad z pošty projekt nemá – zvolí se až tady, v kontrole. Teprve
+     potvrzením se soubor přesune do projektu a vznikne dokument; do té doby
+     leží v poště a nikde nepřekáží. */
+  const cilovy = scan.projectId ?? String(formData.get("targetProjectId") || "");
+  if (!cilovy) throw new Error("Vyber projekt.");
+  const user = await writable(cilovy);
+  const project = await prisma.project.findUnique({ where: { id: cilovy }, select: { ownerId: true } });
   if (!project) throw new Error("Projekt nenalezen.");
+
+  if (!scan.projectId && scan.inboundAttachment) {
+    const a = scan.inboundAttachment;
+    const buf = await storage.read(a.fileName);
+    const key = await storage.save(buf, a.originalName, `${project.ownerId}/${cilovy}/invoice`);
+    const doc = await prisma.document.create({
+      data: {
+        projectId: cilovy,
+        fileName: key,
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: buf.length,
+        type: "invoice",
+        summary: `${a.mail.fromName ?? a.mail.fromAddress} · ${a.mail.subject}`.slice(0, 500),
+        uploadedById: user.id,
+      },
+      select: { id: true },
+    });
+    await storage.delete(a.fileName).catch(() => undefined);
+    await prisma.inboundAttachment.update({ where: { id: a.id }, data: { documentId: doc.id, fileName: key } });
+    await prisma.docScan.update({ where: { id: scan.id }, data: { projectId: cilovy, documentId: doc.id } });
+    scan.projectId = cilovy;
+    scan.documentId = doc.id;
+  }
 
   // dodavatel: vybraný, nebo podle IČO / názvu, případně nový z ARESu
   const ico = String(formData.get("supplierIco") || "").replace(/\D/g, "") || null;
@@ -248,7 +343,7 @@ export async function applyDocScan(formData: FormData) {
   if (issued) {
     const income = await prisma.income.create({
       data: {
-        projectId: scan.projectId,
+        projectId: cilovy,
         subProjectId,
         title: String(formData.get("title") || "Vystavená faktura").slice(0, 200),
         description: String(formData.get("description") || "").slice(0, 2000) || null,
@@ -281,7 +376,7 @@ export async function applyDocScan(formData: FormData) {
 
   const expense = await prisma.expense.create({
     data: {
-      projectId: scan.projectId,
+      projectId: cilovy,
       subProjectId,
       title: String(formData.get("title") || "Doklad").slice(0, 200),
       description: String(formData.get("description") || "").slice(0, 2000) || null,
@@ -327,7 +422,8 @@ export async function applyDocScan(formData: FormData) {
     select: { id: true },
   });
 
-  await prisma.document.update({ where: { id: scan.documentId }, data: { expenseId: expense.id } });
+  if (scan.documentId)
+    await prisma.document.update({ where: { id: scan.documentId }, data: { expenseId: expense.id } });
   // porovnání nakoupených položek s ceníkem katalogu (na pozadí)
   after(async () => {
     const { checkExpensePrices } = await import("@/server/price-check");
@@ -345,19 +441,22 @@ export async function dismissDocScan(formData: FormData) {
   const id = String(formData.get("id"));
   const scan = await prisma.docScan.findUnique({ where: { id }, select: { projectId: true } });
   if (!scan) return;
-  await writable(scan.projectId);
+  if (scan.projectId) await writable(scan.projectId);
+  else await requireUser();
   await prisma.docScan.update({ where: { id }, data: { status: "dismissed" } });
   revalidatePath(`/projects/${scan.projectId}`);
 }
 
 /** Dodavatelé projektu pro výběr v dialogu (spárování dokladu). */
-export async function vendorsForScan(projectId: string) {
-  const user = await writable(projectId);
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
-  void user;
-  if (!project) return [];
+export async function vendorsForScan(projectId: string | null) {
+  // Doklad z pošty projekt ještě nemá – dodavatelé se berou podle přihlášeného.
+  const user = projectId ? await writable(projectId) : await requireUser();
+  const ownerId = projectId
+    ? (await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } }))?.ownerId
+    : user.id;
+  if (!ownerId) return [];
   return prisma.vendor.findMany({
-    where: { ownerId: project.ownerId },
+    where: { ownerId },
     orderBy: { name: "asc" },
     select: { id: true, name: true, ico: true },
   });
@@ -548,7 +647,7 @@ export async function applyReadyScans(formData: FormData) {
     try {
       const d = await getDocScan(s.id);
       const r = d.result;
-      const name = r?.number ?? d.document.originalName;
+      const name = r?.number ?? d.document?.originalName ?? d.inboundAttachment?.originalName ?? "doklad";
       if (!r) {
         skipped.push(`${name} – není co založit`);
         continue;

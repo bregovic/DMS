@@ -7,6 +7,7 @@ import { PeriodPicker } from "@/components/invoices/period-picker";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { DocScanQueue } from "@/components/expenses/doc-scan-queue";
+import { MailQueue } from "@/components/expenses/mail-queue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { DocPreview } from "@/components/documents/doc-preview";
@@ -84,12 +85,25 @@ export default async function DocsPage({
   const ids = projects.map((p) => p.id);
   const scope = projectId ? [projectId] : ids;
 
-  const [scans, pendingDocs, expenses, incomes, invoices] = await Promise.all([
+  const [scans, pendingDocs, mailsWaiting, expenses, incomes, invoices] = await Promise.all([
     prisma.docScan.findMany({
-      where: { projectId: { in: scope }, status: { in: ["running", "ready", "error"] } },
+      // Doklad z projektu, nebo příloha z pošty, u které se projekt teprve určuje.
+      where: {
+        status: { in: ["running", "ready", "error"] },
+        OR: [{ projectId: { in: scope } }, { inboundAttachment: { mail: { ownerId: user.id } } }],
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
-      select: { id: true, projectId: true, status: true, result: true, document: { select: { id: true, originalName: true } } },
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+        result: true,
+        document: { select: { id: true, originalName: true } },
+        inboundAttachment: {
+          select: { id: true, originalName: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } },
+        },
+      },
     }),
     // doklady, které poslal někdo jiný (dodavatel) a ještě nejsou přečtené
     prisma.document.findMany({
@@ -109,6 +123,19 @@ export default async function DocsPage({
         createdAt: true,
         projectId: true,
         uploadedBy: { select: { name: true, email: true } },
+      },
+    }),
+    // pošta, u které ještě nic přečteného není
+    prisma.inboundMail.findMany({
+      where: { ownerId: user.id, attachments: { some: { documentId: null, scan: { is: null } } } },
+      orderBy: { receivedAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        subject: true,
+        fromName: true,
+        fromAddress: true,
+        attachments: { where: { documentId: null, scan: { is: null } }, select: { originalName: true } },
       },
     }),
     prisma.expense.findMany({
@@ -275,6 +302,16 @@ export default async function DocsPage({
         </p>
       </div>
 
+      <MailQueue
+        mails={mailsWaiting.map((m) => ({
+          id: m.id,
+          subject: m.subject,
+          from: m.fromName ?? m.fromAddress,
+          attachments: m.attachments.map((a) => a.originalName),
+        }))}
+        count={mailsWaiting.reduce((a, m) => a + m.attachments.length, 0)}
+      />
+
       {pendingDocs.length > 0 && (
         <section className="mt-6">
           <h2 className="kicker mb-2">Nové od spolupracovníků · {pendingDocs.length}</h2>
@@ -318,31 +355,45 @@ export default async function DocsPage({
                 .filter((sc) => sc.status === "ready")
                 .map((sc) => ({
                   id: sc.id,
-                  documentId: sc.document.id,
+                  documentId: sc.document?.id ?? null,
                   projectId: sc.projectId,
-                  originalName: sc.document.originalName,
+                  originalName: sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument",
                 }))}
               categories={categories.map((c) => ({ key: c.key, label: c.label }))}
             />
           </div>
           <ul className="border-t border-stone-200">
             {scans.map((sc) => {
-              const r = sc.result as { supplier?: { name?: string | null }; total?: number | null; number?: string | null } | null;
+              const r = sc.result as {
+                supplier?: { name?: string | null };
+                total?: number | null;
+                number?: string | null;
+                docKind?: string | null;
+              } | null;
+              const nazev = sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument";
+              const odkud = sc.projectId
+                ? projName.get(sc.projectId)
+                : sc.inboundAttachment
+                  ? `z pošty · ${sc.inboundAttachment.mail.fromName ?? sc.inboundAttachment.mail.fromAddress}`
+                  : null;
               return (
                 <li key={sc.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                  <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={sc.document.originalName}>
-                    {sc.document.originalName}
+                  <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={nazev}>
+                    {nazev}
                     {r?.supplier?.name && <span className="text-xs text-stone-500"> · {r.supplier.name}</span>}
                     {r?.number && <span className="text-xs text-stone-400"> · č. {r.number}</span>}
                   </span>
-                  <span className="text-xs text-stone-500">{projName.get(sc.projectId)}</span>
+                  {r?.docKind === "nabidka" && (
+                    <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">nabídka</span>
+                  )}
+                  <span className="text-xs text-stone-500">{odkud}</span>
                   {r?.total != null && <span className="font-mono text-stone-950">{formatCurrency(r.total)}</span>}
                   <span className={`w-28 text-right text-xs ${sc.status === "ready" ? "text-orange-700" : sc.status === "error" ? "text-red-600" : "text-stone-500"}`}>
                     {sc.status === "ready" ? "ke kontrole" : sc.status === "error" ? "nepřečteno" : "čtu doklad…"}
                   </span>
                   <DocScanReview
                     scanId={sc.id}
-                    documentId={sc.document.id}
+                    documentId={sc.document?.id ?? null}
                     projectId={sc.projectId}
                     categories={categories.map((c) => ({ key: c.key, label: c.label }))}
                     label={sc.status === "error" ? "Zkusit znovu" : "Zkontrolovat"}

@@ -630,8 +630,11 @@ model ExpenseItem {
 // Vytěžení účtenky/faktury z přílohy (#doklady): návrh výdaje k potvrzení.
 model DocScan {
   id          String   @id @default(cuid())
-  projectId   String
-  documentId  String   @unique
+  /** Až po zařazení – doklad z pošty se čte dřív, než se ví, kam patří. */
+  projectId   String?
+  documentId  String?  @unique
+  /** Čtení přímo nad přílohou z pošty (dokument vznikne až potvrzením). */
+  inboundAttachmentId String? @unique
   status      String   @default("running") // running | ready | error | applied | dismissed
   result      Json?
   error       String?
@@ -642,9 +645,11 @@ model DocScan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  inboundAttachment InboundAttachment? @relation(fields: [inboundAttachmentId], references: [id], onDelete: Cascade)
 
   @@index([projectId, status])
+  @@index([status])
 }
 
 model Document {
@@ -972,6 +977,7 @@ model InboundAttachment {
   documentId   String?
 
   mail InboundMail @relation(fields: [mailId], references: [id], onDelete: Cascade)
+  scan DocScan?
 
   @@index([mailId])
 }

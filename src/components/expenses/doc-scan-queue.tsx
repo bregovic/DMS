@@ -7,8 +7,8 @@ import { DocScanReview } from "@/components/expenses/doc-scan-review";
 
 export type QueueScan = {
   id: string;
-  documentId: string;
-  projectId: string;
+  documentId: string | null;
+  projectId: string | null;
   originalName: string;
 };
 
