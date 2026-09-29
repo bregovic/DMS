@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { after } from "next/server";
-import { storeMail, reportIngest, emptyIngest, autoFile } from "@/server/inbound";
+import { storeMail, reportIngest, emptyIngest } from "@/server/inbound";
 import type { FetchedMail } from "@/lib/mailbox";
 
 /**
@@ -104,11 +104,7 @@ export async function POST(req: NextRequest) {
   const stored = await storeMail(mail, res, { auto: false });
 
   after(async () => {
-    try {
-      if (stored) await autoFile(stored, mail, res);
-    } catch {
-      // Chyba zpracování nesmí nic shodit – zůstane v Doručené poště.
-    }
+    // Nic se nezpracovává samo – zpráva čeká ve frontě dokladů na přečtení.
     const to = process.env.MAIL_REPORT_TO;
     if (to && (res.stored > 0 || res.skipped.length > 0 || res.failed.length > 0))
       await reportIngest(res, to, process.env.APP_URL || "https://dokumenty.up.railway.app").catch(() => {});

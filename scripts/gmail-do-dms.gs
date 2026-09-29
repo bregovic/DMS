@@ -1,20 +1,21 @@
 /**
- * Gmail → DMS (issue #41)
+ * Gmail → DMS
  *
  * Skript běží pod účtem schránky, takže nepotřebuje heslo aplikace ani IMAP.
  *
  * ── Jak se to používá ──────────────────────────────────────────────────
- * Ke každému projektu – nebo i ke složce uvnitř projektu – si v Gmailu
- * založíš **stejnojmenný štítek** (např. „Dům" nebo „Garáž", což je složka
- * projektu Dům). Co do štítku přetáhneš, to se zpracuje a zařadí se tam.
- * Skript se na nic jiného ve schránce nepodívá, takže ho jde bez obav
- * pustit i ve vlastní běžné poště.
+ * V Gmailu je jeden štítek **DMS**. Co pod něj přetáhneš, to se pošle do
+ * DMS jako jeden balíček – e-mail i s přílohami pohromadě. Uvnitř si můžeš
+ * dělat vnořené štítky („DMS/Dům", „DMS/Garáž"); posílají se taky a jejich
+ * název jde do DMS jako nápověda, kam zpráva patří. Rozhoduje se až v DMS.
  *
- * Seznam projektů i složek si skript stahuje z DMS sám. Když v DMS přibude
- * projekt nebo složka, stačí založit štítek téhož jména – do kódu se nesahá.
+ * Skript sám nic nepoznává a nic nezakládá. Druh dokladu, dodavatele,
+ * projekt i žádanku určí až čtení dokladů v DMS, kde to jde projít hromadně
+ * a potvrdit. Díky tomu je jedno, jak má kdo projekty pojmenované.
  *
- * Štítky můžou být i vnořené („DMS/Dům"); porovnává se poslední část,
- * bez ohledu na velikost písmen a diakritiku.
+ * Hotová zpráva dostane štítek **DMS/Hotovo** a ostatní DMS štítky se jí
+ * sundají, takže pod DMS zůstane jen to, co ještě neodešlo. Druhou pojistkou
+ * proti dvojímu odeslání je Message-ID, které si hlídá DMS.
  *
  * ── Nastavení (jednou) ─────────────────────────────────────────────────
  *  1. script.google.com → Nový projekt, přihlášený pod tou schránkou,
@@ -23,20 +24,18 @@
  *  3. Projekt → Nastavení projektu → Vlastnosti skriptu, přidat:
  *       DMS_URL     = https://dokumenty.up.railway.app
  *       DMS_SECRET  = <hodnota CRON_SECRET ze služby DMS na Railway>
- *  4. V Gmailu založit štítky pojmenované jako projekty nebo složky v DMS
- *  5. Spustit jednou ručně `otestujSpojeni` → Google se zeptá na oprávnění
- *     (čtení Gmailu a odesílání požadavků), potvrdit; v Protokolu spuštění
- *     se vypíše, jaká místa DMS vrátil a které štítky k nim v Gmailu jsou
+ *     Volitelně DMS_STITEK, když se kořenový štítek nemá jmenovat „DMS".
+ *  4. V Gmailu založit štítek DMS (vnořené uvnitř podle chuti)
+ *  5. Spustit jednou ručně `otestujSpojeni` → Google se zeptá na oprávnění,
+ *     potvrdit; v Protokolu spuštění se vypíše, co by se poslalo
  *  6. Spouštěče (ikona budíku) → Přidat spouštěč:
  *       funkce `zpracujPostu`, časový, každých 5 minut
- *
- * Zpracovaná zpráva dostane štítek „DMS hotovo" a projektový štítek se jí
- * sundá – ve štítku projektu tak zůstane jen to, co ještě neprošlo.
- * Druhou pojistkou proti dvojímu odeslání je Message-ID, které si hlídá DMS.
  */
 
-/** Štítek, kterým se značí hotové zprávy. */
-var STITEK_HOTOVO = 'DMS hotovo';
+/** Kořenový štítek; vnořené („DMS/Dům") se berou taky. */
+var STITEK = PropertiesService.getScriptProperties().getProperty('DMS_STITEK') || 'DMS';
+/** Sem se zpráva přehodí, až projde. */
+var STITEK_HOTOVO = STITEK + '/Hotovo';
 /** Kolik zpráv nejvýš za jeden běh (spouštěč má limit 6 minut). */
 var MAX_ZPRAV = 10;
 /** Přílohy nad tenhle limit se nepošlou – DMS je stejně nezpracuje. */
@@ -54,49 +53,31 @@ function nastaveni() {
   return { zaklad: zaklad, secret: secret };
 }
 
-/** Názvy projektů i složek z DMS – podle nich se hledají štítky. */
-function nactiProjekty(n) {
-  var odpoved = UrlFetchApp.fetch(n.zaklad + '/api/mail/projects', {
-    method: 'get',
-    headers: { Authorization: 'Bearer ' + n.secret },
-    muteHttpExceptions: true,
-  });
-  if (odpoved.getResponseCode() !== 200) {
-    throw new Error('Seznam projektů se nepodařilo načíst: ' + odpoved.getContentText());
-  }
-  var j = JSON.parse(odpoved.getContentText());
-  // Štítkem může být projekt i složka uvnitř něj („Garáž" pod „Dům").
-  return (j.projects || []).concat(j.folders || []);
-}
-
-/** Štítky v Gmailu, jejichž název odpovídá některému projektu. */
-function najdiStitky(projekty) {
-  var klic = function (s) {
-    return s.split('/').pop().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  };
-  var hledane = {};
-  for (var i = 0; i < projekty.length; i++) hledane[klic(projekty[i])] = true;
-
+/**
+ * Štítky, ze kterých se posílá: kořenový a všechny vnořené, kromě Hotovo.
+ * Nic se nikam nepřekládá – názvy jsou věc uživatele.
+ */
+function zdrojoveStitky() {
   var vysledek = [];
   var vsechny = GmailApp.getUserLabels();
-  for (var j = 0; j < vsechny.length; j++) {
-    var jmeno = vsechny[j].getName();
-    if (jmeno === STITEK_HOTOVO) continue;
-    if (hledane[klic(jmeno)]) vysledek.push(jmeno);
+  for (var i = 0; i < vsechny.length; i++) {
+    var jmeno = vsechny[i].getName();
+    if (jmeno !== STITEK && jmeno.indexOf(STITEK + '/') !== 0) continue;
+    if (jmeno === STITEK_HOTOVO || jmeno.indexOf(STITEK_HOTOVO + '/') === 0) continue;
+    vysledek.push(jmeno);
   }
   return vysledek;
 }
 
 function zpracujPostu() {
   var n = nastaveni();
-  var stitky = najdiStitky(nactiProjekty(n));
+  var stitky = zdrojoveStitky();
   if (!stitky.length) {
-    Logger.log('Žádný štítek neodpovídá projektu ani složce v DMS – není co zpracovat.');
+    Logger.log('Štítek „' + STITEK + '" v Gmailu není – není odkud brát.');
     return;
   }
 
   var hotovo = GmailApp.getUserLabelByName(STITEK_HOTOVO) || GmailApp.createLabel(STITEK_HOTOVO);
-  // Jen zprávy pod projektovými štítky, které ještě nejsou hotové.
   var dotaz =
     '(' + stitky.map(function (s) { return 'label:"' + s + '"'; }).join(' OR ') + ')' +
     ' -label:"' + STITEK_HOTOVO + '"';
@@ -116,8 +97,6 @@ function zpracujPostu() {
     // Štítky až když prošly všechny zprávy vlákna – jinak se to zkusí znovu.
     if (vseOk) {
       vlakno.addLabel(hotovo);
-      // Projektový štítek sundat, ať v něm zůstane jen nevyřízená pošta.
-      // Názvy míst chodí z DMS, proto se porovnávají proti nim, ne napevno.
       for (var k = 0; k < stitkyVlakna.length; k++) {
         if (stitky.indexOf(stitkyVlakna[k].getName()) !== -1) vlakno.removeLabel(stitkyVlakna[k]);
       }
@@ -144,6 +123,7 @@ function posliZpravu(zprava, stitky, n) {
       from: zprava.getFrom(),
       subject: zprava.getSubject(),
       date: zprava.getDate().toISOString(),
+      // Vnořený štítek je jen nápověda, kam zpráva patří – rozhodne DMS.
       labels: stitky,
       // Přeposlaný e-mail má původní nabídku v těle – pošleme prostý text.
       body: zprava.getPlainBody().slice(0, 40000),
@@ -171,20 +151,21 @@ function posliZpravu(zprava, stitky, n) {
   }
 }
 
-/**
- * Ověření nastavení. Vypíše projekty z DMS a štítky, které jim v Gmailu
- * odpovídají – hned je vidět, jestli se někde liší název. Nic neodesílá.
- */
+/** Ověření nastavení: vypíše, odkud by se bralo a kolik toho čeká. Nic neodesílá. */
 function otestujSpojeni() {
   var n = nastaveni();
-  var projekty = nactiProjekty(n);
-  var stitky = najdiStitky(projekty);
-  Logger.log('Projekty a složky v DMS: ' + (projekty.join(', ') || '(žádné)'));
-  Logger.log('Štítky v Gmailu, které jim odpovídají: ' + (stitky.join(', ') || '(žádné)'));
+  var stitky = zdrojoveStitky();
+  Logger.log('DMS: ' + n.zaklad);
+  Logger.log('Štítky, ze kterých se posílá: ' + (stitky.join(', ') || '(žádné – založ štítek „' + STITEK + '")'));
+  if (!stitky.length) return;
 
-  var chybi = projekty.filter(function (p) {
-    return stitky.map(function (s) { return s.split('/').pop().toLowerCase(); })
-      .indexOf(p.toLowerCase()) === -1;
-  });
-  if (chybi.length) Logger.log('Bez štítku v Gmailu: ' + chybi.join(', '));
+  var dotaz =
+    '(' + stitky.map(function (s) { return 'label:"' + s + '"'; }).join(' OR ') + ')' +
+    ' -label:"' + STITEK_HOTOVO + '"';
+  var vlakna = GmailApp.search(dotaz, 0, MAX_ZPRAV);
+  Logger.log('Čeká na odeslání: ' + vlakna.length + ' vláken');
+  for (var i = 0; i < vlakna.length; i++) {
+    var z = vlakna[i].getMessages()[0];
+    Logger.log('  · ' + z.getSubject() + ' (příloh: ' + z.getAttachments({ includeInlineImages: false }).length + ')');
+  }
 }

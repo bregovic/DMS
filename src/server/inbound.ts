@@ -345,9 +345,13 @@ export async function storeMail(
       return null;
     }
 
-    // Štítek pojmenovaný jako projekt má přednost před odhadem z textu.
+    /* Příjem nic nepoznává. Vnořený štítek („DMS/Dům") je levná nápověda, kam
+       zpráva nejspíš patří – bere se jen jako předvyplnění. Druh dokladu,
+       dodavatele ani žádanku tady neurčujeme: rozhodne se to najednou při
+       čtení dokladů, kde to jde projít hromadně a potvrdit. Dřív se tu hádalo
+       modelem a z jedné zprávy rovnou vznikaly nabídky, dokumenty u každé
+       žádanky a dodavatelé – a nedalo se poznat, co je správně. */
     const fromLabel = await projectFromLabels(mail.labels, owner.ownerId);
-    const suggestion = await suggestRouting(mail, owner.ownerId, fromLabel);
     const row = await prisma.inboundMail.create({
       data: {
         messageId: mail.messageId,
@@ -357,10 +361,8 @@ export async function storeMail(
         receivedAt: mail.receivedAt,
         bodyText: mail.bodyText?.slice(0, 20_000) ?? null,
         ownerId: owner.ownerId,
-        projectId: fromLabel.projectId ?? suggestion?.projectId ?? null,
+        projectId: fromLabel.projectId,
         subProjectId: fromLabel.subProjectId,
-        requestId: suggestion?.requestId ?? null,
-        suggestion: (suggestion ?? undefined) as unknown as Prisma.InputJsonValue,
         note: [`Přijato od ${owner.via}.`, fromLabel.note].filter(Boolean).join(" "),
       },
       select: { id: true },
@@ -378,7 +380,7 @@ export async function storeMail(
           originalName: a.originalName.slice(0, 300),
           mimeType: a.mimeType,
           size: a.size,
-          kind: suggestion?.attachmentKinds?.[i] ?? suggestion?.kind ?? "other",
+          kind: "other",
         },
       });
     }
@@ -395,14 +397,14 @@ export async function storeMail(
       ]
         .filter(Boolean)
         .join(" · "),
-      href: "/posta",
-      projectId: fromLabel.projectId ?? suggestion?.projectId ?? null,
+      href: "/doklady",
+      projectId: fromLabel.projectId,
       dedupeKey: `mail:${row.id}`,
       email: false,
     });
 
     res.stored++;
-    const stored: StoredMail = { mailId: row.id, ownerId: owner.ownerId, fromLabel, suggestion };
+    const stored: StoredMail = { mailId: row.id, ownerId: owner.ownerId, fromLabel, suggestion: null };
     // Volající, který na odpověď čeká (skript v Gmailu), si zpracování
     // vyzvedne až po odeslání odpovědi – jinak mu vyprší limit běhu.
     if (opts.auto !== false) await autoFile(stored, mail, res);
@@ -411,9 +413,7 @@ export async function storeMail(
       subject: mail.subject,
       from: mail.fromAddress,
       attachments: mail.attachments.length,
-      suggestion: fromLabel.note
-        ? `${fromLabel.note}${suggestion?.reason ? ` ${suggestion.reason}` : ""}`
-        : (suggestion?.reason ?? "zařazení se nepodařilo určit"),
+      suggestion: fromLabel.note || "čeká na přečtení",
     });
     return stored;
   } catch (err) {
