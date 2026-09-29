@@ -144,9 +144,12 @@ const INSTRUCTIONS = (
 - title = krátký název výdaje pro evidenci (dodavatel + co to je, max 60 znaků).
 - summary = 1–2 věty, co dokument obsahuje. warnings = co je nečitelné nebo nejisté.
 - docKind = co ten soubor je. "doklad" = faktura, účtenka nebo dobropis k zaúčtování. "nabidka" = cenová nabídka nebo ceník, ještě se neplatí. "ostatni" = technický list, katalog, leták, smlouva.
-- placeCode = kód místa ze seznamu níž, kam dokument patří. Když to z obsahu nejde poznat, vrať null; nehádej.
-- requestCodes = u nabídky kódy VŠECH žádanek, které nabídka naceňuje – nabídka běžně pokrývá víc žádanek naráz. U dokladu vrať prázdné pole.
-- placeReason = jednou větou, čím je zařazení podložené (co v dokumentu na to místo nebo žádanku ukazuje).
+
+ZAŘAZENÍ – tohle je stejně důležité jako částky, projdi to poctivě:
+- requestCodes = kódy **všech** žádanek ze seznamu níž, které dokument naceňuje. Jedna nabídka bývá na víc věcí najednou (okna + dveře + portál) a každá z nich je samostatná žádanka. **Projdi žádanky jednu po druhé** a porovnej jejich název, rozměry a počty s položkami v dokumentu; co v dokumentu najdeš, to do pole patří.
+  Pole nech prázdné **jen** když dokument nenaceňuje žádnou žádanku ze seznamu. Naceňuje-li jedinou, vrať pole s jedním prvkem. Nikdy nevracej prázdné pole s odůvodněním, že žádanek je víc – v tom je právě smysl toho pole. U dokladu (faktury, účtenky) vrať prázdné pole.
+- placeCode = kód místa, kam dokument patří. Když jsi vybral žádanky, vezmi místo té první. Jinak urči místo z obsahu; teprve když ani to nejde, vrať null.
+- placeReason = jedna krátká věta, podle čeho ses rozhodl (např. „nabídka naceňuje okna 1200×1500 a vstupní dveře, což odpovídá žádankám Okna patro a Vstupní dveře").
 Čísla vracej jako čísla bez měny a bez mezer. Když údaj v dokumentu není, vrať null.
 
 Kategorie (klíč = název):
@@ -292,7 +295,9 @@ export async function runDocScan(scanId: string) {
       [await filePart(buf, doc.originalName, doc.mimeType), { type: "input_text", text: `Soubor: ${doc.originalName}` }],
       "doc-scan",
       SCHEMA,
-      { effort: "low", maxOutput: 20_000 },
+      // Zařazení k žádankám chce porovnávat položky s poptávkami – na "low"
+      // se model nerozhodl a vracel prázdno i tam, kde to z dokumentu plyne.
+      { effort: "medium", maxOutput: 20_000 },
     );
     const result = await fillExchangeRate(
       prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky),

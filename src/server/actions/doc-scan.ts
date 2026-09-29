@@ -102,6 +102,29 @@ export async function scanInbox() {
   return { count: ids.length };
 }
 
+/** Otevřené žádanky uživatele pro výběr u nabídky. */
+export async function zadankyProVyber() {
+  const user = await requireUser();
+  const rq = await prisma.request.findMany({
+    where: { project: { ownerId: user.id }, status: { notIn: ["zruseno", "objednano", "dokonceno"] } },
+    orderBy: [{ createdAt: "desc" }],
+    take: 120,
+    select: {
+      id: true,
+      title: true,
+      projectId: true,
+      project: { select: { name: true } },
+      subProject: { select: { name: true } },
+    },
+  });
+  return rq.map((r) => ({
+    id: r.id,
+    title: r.title,
+    projectId: r.projectId,
+    place: r.subProject ? `${r.project.name} › ${r.subProject.name}` : r.project.name,
+  }));
+}
+
 /** Místa, kam jde doklad z pošty zařadit (projekty a složky uživatele). */
 export async function mistaProZarazeni() {
   const user = await requireUser();
@@ -719,4 +742,161 @@ export async function applyReadyScans(formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/doklady");
   return { created, skipped };
+}
+
+/**
+ * Potvrzení nabídky → vznikne nabídka u každé vybrané žádanky a dokument
+ * u ní, ne kopie u všech (#42).
+ *
+ * Pokrývá-li nabídka víc žádanek, sdruží se přes společnou nabídku na
+ * balíček: dokument pak leží jednou a je vidět u všech žádanek balíčku.
+ */
+export async function applyOfferScan(formData: FormData) {
+  const scanId = String(formData.get("scanId"));
+  const scan = await prisma.docScan.findUnique({
+    where: { id: scanId },
+    select: {
+      id: true,
+      projectId: true,
+      documentId: true,
+      inboundAttachment: {
+        select: { id: true, fileName: true, originalName: true, mimeType: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } },
+      },
+    },
+  });
+  if (!scan) throw new Error("Návrh nenalezen.");
+
+  const requestIds = (JSON.parse(String(formData.get("requestIds") || "[]")) as string[]).filter(Boolean);
+  if (requestIds.length === 0) throw new Error("Vyber aspoň jednu žádanku.");
+
+  const zadanky = await prisma.request.findMany({
+    where: { id: { in: requestIds } },
+    select: { id: true, projectId: true, title: true, bundleId: true },
+  });
+  if (zadanky.length !== requestIds.length) throw new Error("Některá žádanka už neexistuje.");
+  const projectId = zadanky[0].projectId;
+  if (zadanky.some((r) => r.projectId !== projectId))
+    throw new Error("Vybrané žádanky nejsou ze stejného projektu.");
+
+  const user = await writable(projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  if (!project) throw new Error("Projekt nenalezen.");
+
+  // dodavatel: vybraný, nebo podle IČO / názvu, případně nový z ARESu
+  const ico = String(formData.get("supplierIco") || "").replace(/\D/g, "") || null;
+  const dic = String(formData.get("supplierDic") || "").trim() || null;
+  const supplierName = String(formData.get("supplierName") || "").trim();
+  let vendorId = String(formData.get("vendorId") || "") || null;
+  if (!vendorId && (ico || supplierName)) {
+    const found = await prisma.vendor.findFirst({
+      where: {
+        ownerId: project.ownerId,
+        OR: [...(ico ? [{ ico }] : []), ...(supplierName ? [{ name: { equals: supplierName, mode: "insensitive" as const } }] : [])],
+      },
+      select: { id: true },
+    });
+    vendorId = found?.id ?? null;
+  }
+  if (!vendorId && (ico || supplierName)) {
+    const ares = ico ? await fetchAres(ico) : null;
+    const v = await prisma.vendor.create({
+      data: {
+        ownerId: project.ownerId,
+        name: (ares?.name || supplierName || ico || "Dodavatel").slice(0, 200),
+        email: `${ico ?? Date.now()}@ares.local`,
+        category: "other",
+        ico,
+        dic: dic ?? ares?.dic ?? null,
+        address: ares?.address ?? null,
+      },
+      select: { id: true },
+    });
+    vendorId = v.id;
+  }
+
+  const price = num(formData.get("total"));
+  const priceWithoutVat = num(formData.get("vatBase"));
+  const note = String(formData.get("description") || "").slice(0, 2000) || null;
+  const vic = zadanky.length > 1;
+
+  /* Dokument visí na nabídce (u jedné žádanky), nebo na společné nabídce
+     balíčku (u víc žádanek) – tak leží jednou a je vidět u všech. */
+  let bundleOfferId: string | null = null;
+  const offerIds: string[] = [];
+  if (vic) {
+    // Sdružení, ve kterém už ty žádanky jsou, jinak nové.
+    const existujici = zadanky.find((r) => r.bundleId)?.bundleId ?? null;
+    const bundleId =
+      existujici ??
+      (
+        await prisma.requestBundle.create({
+          data: {
+            projectId,
+            name: zadanky.map((r) => r.title).join(" + ").slice(0, 200),
+            createdById: user.id,
+          },
+          select: { id: true },
+        })
+      ).id;
+    await prisma.request.updateMany({ where: { id: { in: requestIds } }, data: { bundleId } });
+    const bo = await prisma.bundleOffer.create({
+      data: { bundleId, vendorId, vendorName: vendorId ? null : supplierName || null, price, priceWithoutVat, note, createdById: user.id },
+      select: { id: true },
+    });
+    bundleOfferId = bo.id;
+  }
+
+  for (const r of zadanky) {
+    const o = await prisma.offer.create({
+      data: {
+        requestId: r.id,
+        bundleOfferId,
+        vendorId,
+        vendorName: vendorId ? null : supplierName || null,
+        // Celková cena patří balíčku; část bez vlastní ceny znamená „kryje“.
+        price: vic ? null : price,
+        note,
+        createdById: user.id,
+      },
+      select: { id: true },
+    });
+    offerIds.push(o.id);
+  }
+
+  // Soubor z pošty se přesune do projektu a zavěsí na nabídku.
+  if (!scan.documentId && scan.inboundAttachment) {
+    const a = scan.inboundAttachment;
+    const buf = await storage.read(a.fileName);
+    const key = await storage.save(buf, a.originalName, `${project.ownerId}/${projectId}/nabidky`);
+    const doc = await prisma.document.create({
+      data: {
+        projectId,
+        offerId: bundleOfferId ? null : offerIds[0],
+        bundleOfferId,
+        fileName: key,
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: buf.length,
+        type: "offer",
+        summary: `${a.mail.fromName ?? a.mail.fromAddress} · ${a.mail.subject}`.slice(0, 500),
+        uploadedById: user.id,
+      },
+      select: { id: true },
+    });
+    await storage.delete(a.fileName).catch(() => undefined);
+    await prisma.inboundAttachment.update({ where: { id: a.id }, data: { documentId: doc.id, fileName: key, kind: "offer" } });
+  } else if (scan.documentId) {
+    await prisma.document.update({
+      where: { id: scan.documentId },
+      data: { offerId: bundleOfferId ? null : offerIds[0], bundleOfferId, type: "offer" },
+    });
+  }
+
+  // Došla nabídka → žádanka se posouvá z Poptávky na Nabídku.
+  await prisma.request.updateMany({ where: { id: { in: requestIds }, status: "poptavka" }, data: { status: "nabidka" } });
+  await prisma.docScan.update({ where: { id: scanId }, data: { status: "applied", projectId } });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/doklady");
+  return { offers: offerIds.length, requests: zadanky.map((r) => r.title) };
 }

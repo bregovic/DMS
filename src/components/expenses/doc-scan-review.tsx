@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileSearch, Loader2 } from "lucide-react";
-import { applyDocScan, dismissDocScan, getDocScan, mistaProZarazeni, scanDocument, vendorsForScan } from "@/server/actions/doc-scan";
+import {
+  applyDocScan,
+  applyOfferScan,
+  dismissDocScan,
+  getDocScan,
+  mistaProZarazeni,
+  scanDocument,
+  vendorsForScan,
+  zadankyProVyber,
+} from "@/server/actions/doc-scan";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -54,6 +63,8 @@ export function DocScanReview({
   const [rows, setRows] = useState<ScanResult["vatBreakdown"]>([]);
   const [novaKat, setNovaKat] = useState<string | null>(null);
   const [mista, setMista] = useState<{ value: string; label: string }[]>([]);
+  const [zadanky, setZadanky] = useState<{ id: string; title: string; projectId: string; place: string }[]>([]);
+  const [vybrane, setVybrane] = useState<string[]>([]);
   const router = useRouter();
 
   // Dřív se vracel volný text („palivo"), dnes klíč („fuel"). U starších skenů
@@ -82,6 +93,7 @@ export function DocScanReview({
       setItems(r.items ?? []);
       setRows(r.vatBreakdown ?? []);
       setNovaKat(r.newCategory ?? null);
+      setVybrane(r.requestIds ?? []);
       const match = vendors.find((v) => (r.supplier.ico && v.ico === r.supplier.ico) || v.name === r.supplier.name);
       setForm({
         title: r.title ?? r.supplier.name ?? "Doklad",
@@ -123,6 +135,7 @@ export function DocScanReview({
         const vs = await vendorsForScan(projectId);
         setVendors(vs);
         if (!projectId) setMista(await mistaProZarazeni());
+        setZadanky(await zadankyProVyber());
         let id = scanId;
         if (!id) {
           if (!documentId) throw new Error("Doklad se nepodařilo načíst.");
@@ -175,6 +188,27 @@ export function DocScanReview({
       onDone?.("done");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Výdaj se nepodařilo založit.");
+    }
+    setBusy(false);
+  }
+
+  const jeNabidka = scan?.result?.docKind === "nabidka";
+
+  async function applyOffer() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.set("scanId", scan!.id);
+      fd.set("requestIds", JSON.stringify(vybrane));
+      for (const k of ["supplierName", "supplierIco", "supplierDic", "vendorId", "total", "vatBase", "description"])
+        fd.set(k, form[k] ?? "");
+      await applyOfferScan(fd);
+      setOpen(false);
+      router.refresh();
+      onDone?.("done");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Nabídku se nepodařilo založit.");
     }
     setBusy(false);
   }
@@ -269,7 +303,7 @@ export function DocScanReview({
               </div>
             </FormSection>
 
-            {!projectId && (
+            {!projectId && !jeNabidka && (
               <FormSection
                 title="Zařazení"
                 hint={scan.result?.placeReason ?? undefined}
@@ -287,6 +321,35 @@ export function DocScanReview({
                   allowEmpty={false}
                   onSelect={(item) => set("zarazeni", item?.id ?? "")}
                 />
+              </FormSection>
+            )}
+
+            {jeNabidka && (
+              <FormSection title="Žádanky, které nabídka naceňuje" hint={scan.result?.placeReason ?? undefined}>
+                <div className="max-h-56 space-y-1 overflow-y-auto">
+                  {zadanky.length === 0 && <p className="text-xs text-stone-500">Žádné otevřené žádanky.</p>}
+                  {zadanky.map((z) => (
+                    <label key={z.id} className="flex cursor-pointer items-start gap-2 py-0.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={vybrane.includes(z.id)}
+                        onChange={(e) =>
+                          setVybrane((v) => (e.target.checked ? [...v, z.id] : v.filter((x) => x !== z.id)))
+                        }
+                        className="mt-0.5 size-4 accent-stone-900"
+                      />
+                      <span className="min-w-0">
+                        {z.title}
+                        <span className="block text-xs text-stone-400">{z.place}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {vybrane.length > 1 && (
+                  <p className="mt-2 border-t border-stone-200 pt-2 text-xs text-stone-600">
+                    Nabídka pokrývá {vybrane.length} žádanky – sdruží se do balíčku a dokument bude u všech.
+                  </p>
+                )}
               </FormSection>
             )}
 
@@ -478,7 +541,7 @@ export function DocScanReview({
               </div>
             </FormSection>
 
-            {items.length > 0 && (
+            {items.length > 0 && !jeNabidka && (
               <FormSection
                 title={`Položky · ${items.length}`}
                 hint={issuedDoc ? "uloží se k dokladu" : "odškrtni, co nepatří do přiznání"}
@@ -582,13 +645,13 @@ export function DocScanReview({
             </Button>
             <Button
               type="button"
-              onClick={apply}
-              disabled={busy || (!!scan.duplicate && !force) || scan.result?.docKind === "nabidka"}
+              onClick={jeNabidka ? applyOffer : apply}
+              disabled={busy || (!jeNabidka && !!scan.duplicate && !force) || (jeNabidka && vybrane.length === 0)}
             >
               {busy
                 ? "Zakládám…"
-                : scan.result?.docKind === "nabidka"
-                  ? "Nabídka – zatím nelze založit"
+                : jeNabidka
+                  ? `Založit nabídku${vybrane.length > 1 ? ` (${vybrane.length} žádanky)` : ""}`
                   : form.direction === "issued"
                     ? "Založit příjem"
                     : "Založit výdaj"}
