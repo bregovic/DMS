@@ -7,7 +7,7 @@ import { PeriodPicker } from "@/components/invoices/period-picker";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { DocScanQueue } from "@/components/expenses/doc-scan-queue";
-import { MailQueue } from "@/components/expenses/mail-queue";
+import { InboxQueue } from "@/components/expenses/inbox-queue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { DocPreview } from "@/components/documents/doc-preview";
@@ -111,7 +111,6 @@ export default async function DocsPage({
         projectId: { in: scope },
         type: { in: ["receipt", "invoice"] },
         expenseId: null,
-        uploadedById: { not: user.id },
         scan: { is: null },
       },
       orderBy: { createdAt: "desc" },
@@ -297,54 +296,44 @@ export default async function DocsPage({
       <div className="mt-6">
         <DocUploadBox projects={projects} />
         <p className="mt-2 text-[11px] text-stone-400">
-          Nahrané doklady se přečtou až na povel (tlačítko u dokladu nebo dávka v projektu): dodavatel z ARESu, číslo,
-          DUZP, DPH i položky. Vlastní faktura se založí jako příjem.
+          Nahrané doklady i pošta čekají v Nezpracovaných, dokud je nepřečteš. Vlastní faktura se založí jako příjem.
         </p>
       </div>
 
-      <MailQueue
+      <InboxQueue
         mails={mailsWaiting.map((m) => ({
           id: m.id,
           subject: m.subject,
           from: m.fromName ?? m.fromAddress,
-          attachments: m.attachments.map((a) => a.originalName),
+          files: m.attachments.map((a) => a.originalName),
         }))}
-        count={mailsWaiting.reduce((a, m) => a + m.attachments.length, 0)}
-      />
-
-      {pendingDocs.length > 0 && (
-        <section className="mt-6">
-          <h2 className="kicker mb-2">Nové od spolupracovníků · {pendingDocs.length}</h2>
-          <ul className="border-t border-stone-200">
-            {pendingDocs.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={d.originalName}>
-                  {d.originalName}
-                  <span className="text-xs text-stone-500"> · {d.uploadedBy.name ?? d.uploadedBy.email}</span>
-                </span>
-                <span className="text-xs text-stone-500">{projName.get(d.projectId)}</span>
-                <span className="text-xs text-stone-400">{formatDate(d.createdAt)}</span>
-                <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
-                <DeleteButton
-                  action={deleteDocument}
-                  fields={{ id: d.id }}
-                  confirm="Smazat nahraný doklad?"
-                />
-                <DocScanReview
-                  scanId={null}
-                  documentId={d.id}
-                  projectId={d.projectId}
-                  categories={categories.map((c) => ({ key: c.key, label: c.label }))}
-                  label="Přečíst doklad"
-                />
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1.5 text-[11px] text-stone-400">
-            Přečtení spouštíš ty. Komu chceš čtení povolit, nastav v projektu → Nastavení → Přístup.
-          </p>
-        </section>
-      )}
+        files={pendingDocs.map((d) => ({
+          id: d.id,
+          name: d.originalName,
+          place: projName.get(d.projectId) ?? null,
+          by: d.uploadedBy.name ?? d.uploadedBy.email,
+        }))}
+      >
+        {pendingDocs.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
+            <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={d.originalName}>
+              {d.originalName}
+              <span className="text-xs text-stone-500"> · {d.uploadedBy.name ?? d.uploadedBy.email}</span>
+            </span>
+            <span className="text-xs text-stone-500">{projName.get(d.projectId)}</span>
+            <span className="text-xs text-stone-400">{formatDate(d.createdAt)}</span>
+            <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
+            <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat nahraný doklad?" />
+            <DocScanReview
+              scanId={null}
+              documentId={d.id}
+              projectId={d.projectId}
+              categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+              label="Přečíst doklad"
+            />
+          </li>
+        ))}
+      </InboxQueue>
 
       {scans.length > 0 && (
         <section className="mt-6">

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { canWrite, getProjectRole, getTaskOnlyAccess, isManager } from "@/server/access";
+import { canWrite, getProjectRole, getTaskOnlyAccess, isManager, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { createDocScan, createMailScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { notifyExpenseAdded } from "@/server/notify";
@@ -65,21 +65,37 @@ export async function scanProjectDocuments(formData: FormData) {
  * Přečte přílohy, které přišly poštou a ještě přečtené nejsou. Projekt se
  * neřeší – určí se z obsahu a potvrdí v kontrole.
  */
-export async function scanMailAttachments() {
+export async function scanInbox() {
   const user = await requireUser();
+  const ids: string[] = [];
+
+  // Přílohy z pošty – projekt se určí až ze čtení.
   const prilohy = await prisma.inboundAttachment.findMany({
     where: { mail: { ownerId: user.id }, documentId: null, scan: { is: null } },
     orderBy: { id: "asc" },
     take: 25,
     select: { id: true, mimeType: true, originalName: true },
   });
-  const ids: string[] = [];
   for (const a of prilohy) {
     if (!extractable(a.mimeType, a.originalName)) continue;
     ids.push(await createMailScan(a.id, user.id));
   }
+
+  // Nahrané doklady, které ještě nikdo nečetl – ať přišly odkudkoli.
+  const managed = await managedProjectIds(user);
+  const docs = await prisma.document.findMany({
+    where: { projectId: { in: managed }, type: { in: ["receipt", "invoice"] }, expenseId: null, scan: { is: null } },
+    orderBy: { createdAt: "asc" },
+    take: 25,
+    select: { id: true, projectId: true, mimeType: true, originalName: true },
+  });
+  for (const d of docs) {
+    if (!extractable(d.mimeType, d.originalName)) continue;
+    ids.push(await createDocScan(d.projectId, d.id, user.id));
+  }
+
   after(async () => {
-    // po jednom, ať se nevyčerpá limit a chyba se projeví u konkrétní přílohy
+    // po jednom, ať se nevyčerpá limit a chyba se projeví u konkrétního dokladu
     for (const id of ids) await runDocScan(id);
   });
   revalidatePath("/doklady");
