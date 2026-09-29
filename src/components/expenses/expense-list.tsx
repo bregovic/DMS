@@ -47,6 +47,7 @@ export function ExpenseList({
   vendors,
   categories,
   subProjects,
+  projectName,
   docTypes,
 }: {
   projectId: string;
@@ -56,7 +57,8 @@ export function ExpenseList({
   statuses: StatusOpt[];
   vendors: { id: string; name: string; hourlyRate: number | null }[];
   categories: { key: string; label: string }[];
-  subProjects: { id: string; name: string }[];
+  subProjects: { id: string; name: string; parentId?: string | null }[];
+  projectName?: string;
   docTypes: { value: string; label: string }[];
 }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -271,6 +273,7 @@ export function ExpenseList({
                     vendors={vendors}
                     categories={categories}
                     subProjects={subProjects}
+                    projectName={projectName}
                     statuses={statuses}
                   />
                   <DeleteButton

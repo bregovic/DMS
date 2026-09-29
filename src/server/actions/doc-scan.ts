@@ -300,6 +300,10 @@ export async function applyDocScan(formData: FormData) {
       vatAmount: claimVat,
       vatRate: claimRows.length === 1 ? claimRows[0].rate : null,
       vatBreakdown: claimRows.length ? claimRows : undefined,
+      // Doklad tak, jak přišel – z něj se nárok počítá znovu při každé úpravě položek.
+      vatBaseDoc: num(formData.get("vatBase")),
+      vatAmountDoc: num(formData.get("vatAmount")),
+      vatBreakdownDoc: vatRows.length ? vatRows : undefined,
       exchangeRate: num(formData.get("exchangeRate")),
       supplierIco: ico,
       supplierDic: dic,

@@ -526,7 +526,12 @@ model Expense {
   vatBase     Decimal?  @db.Decimal(12, 2) // základ celkem
   vatAmount   Decimal?  @db.Decimal(12, 2) // daň celkem
   vatRate     Decimal?  @db.Decimal(5, 2) // hlavní sazba (0 / 12 / 21)
-  vatBreakdown Json? // [{ rate, base, vat }] po sazbách
+  vatBreakdown Json? // [{ rate, base, vat }] po sazbách – co jde do přiznání
+  /** Co je na dokladu, než se zúží na položky v nároku. Bez toho by po
+      odškrtnutí položky nešel nárok vrátit zpátky. */
+  vatBaseDoc      Decimal? @db.Decimal(12, 2)
+  vatAmountDoc    Decimal? @db.Decimal(12, 2)
+  vatBreakdownDoc Json?
   supplierIco String?
   supplierDic String?
   deductible  Boolean @default(true) // brát do podkladu pro DPH

@@ -1372,7 +1372,8 @@ export default async function ProjectDetailPage({
                 hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
               }))}
               categories={categories}
-              subProjects={subs.map((s) => ({ id: s.id, name: s.name }))}
+              subProjects={subs.map((s) => ({ id: s.id, name: s.name, parentId: s.parentId }))}
+              projectName={project.name}
               docTypes={docTypes}
             />
             )}

@@ -65,7 +65,7 @@ export function DocInbox({
   /** smí spustit vytěžení (vlastník, spolusprávce, nebo komu to vlastník povolil) */
   canScan: boolean;
   categories: { key: string; label: string }[];
-  subProjects: { id: string; name: string }[];
+  subProjects: { id: string; name: string; parentId?: string | null }[];
   docs: InboxDoc[];
 }) {
   const [busy, start] = useTransition();

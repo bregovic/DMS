@@ -8,6 +8,7 @@ import { deleteWithFiles } from "@/server/document-files";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
+import { claimedTotals } from "@/lib/vat";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null) return null;
@@ -241,9 +242,52 @@ export async function updateExpense(formData: FormData) {
   const variableSymbol =
     String(formData.get("variableSymbol") || "").trim() || null;
 
+  // Položky dokladu: kategorie a co jde do přiznání. Nárok se přepočítá
+  // z původního rozpisu dokladu, ne z toho, co je uložené – jinak by se
+  // jednou odškrtnutá položka nedala vrátit zpátky.
+  const itemsRaw = String(formData.get("items") || "");
+  type VatRow = { rate: number; base: number; vat: number };
+  let vat: { vatBase: number | null; vatAmount: number | null; vatBreakdown?: VatRow[] } | null = null;
+  if (itemsRaw) {
+    const upravene = JSON.parse(itemsRaw) as { id: string; category: string | null; deductible: boolean }[];
+    const doc = await prisma.expense.findUnique({
+      where: { id },
+      select: { vatBase: true, vatAmount: true, vatBaseDoc: true, vatAmountDoc: true, vatBreakdown: true, vatBreakdownDoc: true, items: true },
+    });
+    if (doc) {
+      const zmena = new Map(upravene.map((u) => [u.id, u]));
+      await prisma.$transaction(
+        doc.items
+          .filter((i) => zmena.has(i.id))
+          .map((i) =>
+            prisma.expenseItem.update({
+              where: { id: i.id },
+              data: { category: zmena.get(i.id)!.category || null, deductible: zmena.get(i.id)!.deductible },
+            }),
+          ),
+      );
+      const rows = (doc.vatBreakdownDoc ?? doc.vatBreakdown ?? []) as VatRow[];
+      const proPocet = doc.items.map((i) => ({
+        amount: Number(i.amount),
+        vatRate: i.vatRate != null ? Number(i.vatRate) : null,
+        deductible: zmena.get(i.id)?.deductible ?? i.deductible,
+      }));
+      const c = claimedTotals(rows, proPocet);
+      const plny = proPocet.every((i) => i.deductible);
+      const baseDoc = doc.vatBaseDoc != null ? Number(doc.vatBaseDoc) : doc.vatBase != null ? Number(doc.vatBase) : null;
+      const vatDoc = doc.vatAmountDoc != null ? Number(doc.vatAmountDoc) : doc.vatAmount != null ? Number(doc.vatAmount) : null;
+      vat = {
+        vatBase: plny ? baseDoc : c.base,
+        vatAmount: plny ? vatDoc : c.vat,
+        vatBreakdown: (plny ? rows : c.rows).length ? (plny ? rows : c.rows) : undefined,
+      };
+    }
+  }
+
   await prisma.expense.update({
     where: { id },
     data: {
+      ...(vat ?? {}),
       title,
       kind: String(formData.get("kind") || "expense"),
       category: String(formData.get("category") || "other"),
@@ -266,6 +310,7 @@ export async function updateExpense(formData: FormData) {
   revalidatePath("/reports");
   revalidatePath("/payments");
   revalidatePath("/vendors");
+  revalidatePath("/dph");
 }
 
 export async function setExpenseStage(formData: FormData) {
@@ -384,4 +429,45 @@ export async function deleteExpense(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/reports");
   revalidatePath("/vendors");
+}
+
+/**
+ * Položky dokladu k úpravě: u každé kategorie a jestli jde do přiznání.
+ * Načítá se až při otevření úprav – stránka projektu je i bez toho dost velká.
+ */
+export async function getExpenseItems(expenseId: string) {
+  const user = await requireUser();
+  const e = await prisma.expense.findUnique({
+    where: { id: expenseId },
+    select: {
+      projectId: true,
+      currency: true,
+      vatBase: true,
+      vatAmount: true,
+      vatBaseDoc: true,
+      vatAmountDoc: true,
+      vatBreakdown: true,
+      vatBreakdownDoc: true,
+      items: { orderBy: { line: "asc" } },
+    },
+  });
+  if (!e) throw new Error("Výdaj nenalezen.");
+  if (!isManager(await getProjectRole(e.projectId, user))) throw new Error("Nemáš oprávnění.");
+  const rows = (e.vatBreakdownDoc ?? e.vatBreakdown ?? []) as { rate: number; base: number; vat: number }[];
+  return {
+    currency: e.currency,
+    docRows: rows,
+    docBase: e.vatBaseDoc != null ? Number(e.vatBaseDoc) : e.vatBase != null ? Number(e.vatBase) : null,
+    docVat: e.vatAmountDoc != null ? Number(e.vatAmountDoc) : e.vatAmount != null ? Number(e.vatAmount) : null,
+    items: e.items.map((i) => ({
+      id: i.id,
+      description: i.description,
+      quantity: i.quantity != null ? Number(i.quantity) : null,
+      unit: i.unit,
+      amount: Number(i.amount),
+      vatRate: i.vatRate != null ? Number(i.vatRate) : null,
+      category: i.category,
+      deductible: i.deductible,
+    })),
+  };
 }

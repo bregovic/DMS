@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
-import { updateExpense } from "@/server/actions/expenses";
+import { getExpenseItems, updateExpense } from "@/server/actions/expenses";
+import { claimedTotals } from "@/lib/vat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -42,12 +43,14 @@ export function EditExpenseForm({
   categories,
   subProjects,
   statuses,
+  projectName,
 }: {
   expense: ExpenseEdit;
   vendors: Vendor[];
   categories: { key: string; label: string }[];
-  subProjects: { id: string; name: string }[];
+  subProjects: { id: string; name: string; parentId?: string | null }[];
   statuses: { key: string; label: string }[];
+  projectName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState(expense.kind);
@@ -58,6 +61,33 @@ export function EditExpenseForm({
   const [isIncome, setIsIncome] = useState(Number(expense.amount) < 0);
   const [rate, setRate] = useState(expense.rate != null ? String(expense.rate) : "");
   const [hours, setHours] = useState(expense.hours != null ? String(expense.hours) : "");
+  const [danove, setDanove] = useState<Awaited<ReturnType<typeof getExpenseItems>> | null>(null);
+
+  // Položky dokladu se načtou až při otevření – na stránce projektu by jen
+  // nafoukly data, která skoro nikdo neotevře.
+  useEffect(() => {
+    if (!open) return;
+    let zruseno = false;
+    getExpenseItems(expense.id)
+      .then((d) => !zruseno && setDanove(d))
+      .catch(() => {});
+    return () => {
+      zruseno = true;
+    };
+  }, [open, expense.id]);
+
+  const setPolozka = (id: string, patch: { category?: string | null; deductible?: boolean }) =>
+    setDanove((d) => (d ? { ...d, items: d.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) } : d));
+
+  const narok = danove ? claimedTotals(danove.docRows, danove.items) : null;
+  const kraceno = !!danove && danove.items.some((i) => !i.deductible) && danove.docRows.length > 0;
+
+  // Složky jsou stromové – v nabídce se vnoření ukáže odsazením.
+  const cestaSlozky = (id: string): string => {
+    const s = subProjects.find((x) => x.id === id);
+    if (!s) return "";
+    return s.parentId ? `${cestaSlozky(s.parentId)} › ${s.name}` : s.name;
+  };
 
   if (!open) {
     return (
@@ -150,20 +180,29 @@ export function EditExpenseForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="ee-sub">Složka (subprojekt)</Label>
-            <select
-              id="ee-sub"
-              name="subProjectId"
-              defaultValue={expense.subProjectId ?? ""}
-              className={fieldClass}
-            >
-              <option value="">— bez složky (root) —</option>
-              {subProjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <Label htmlFor="ee-sub">Složka</Label>
+            {subProjects.length === 0 ? (
+              <>
+                <input type="hidden" name="subProjectId" value="" />
+                <p className="text-xs text-stone-500">
+                  Projekt {projectName ?? ""} zatím nemá složky.
+                </p>
+              </>
+            ) : (
+              <select
+                id="ee-sub"
+                name="subProjectId"
+                defaultValue={expense.subProjectId ?? ""}
+                className={fieldClass}
+              >
+                <option value="">{projectName ? `${projectName} — bez složky` : "— bez složky —"}</option>
+                {subProjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {cestaSlozky(s.id)}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Režim částky */}
@@ -287,6 +326,71 @@ export function EditExpenseForm({
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:outline-none focus-visible:border-stone-950"
             />
           </div>
+
+          {danove && danove.items.length > 0 && (
+            <div className="space-y-2 border-t border-stone-200 pt-4">
+              <Label>Položky dokladu</Label>
+              <input type="hidden" name="items" value={JSON.stringify(danove.items.map((i) => ({ id: i.id, category: i.category, deductible: i.deductible })))} />
+              <div className="max-h-64 overflow-x-auto overflow-y-auto">
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-stone-200 text-left text-stone-500">
+                      <th className="w-10 py-1 text-center font-medium">DPH</th>
+                      <th className="py-1 font-medium">Popis</th>
+                      <th className="py-1 font-medium">Kategorie</th>
+                      <th className="py-1 text-right font-medium">Sazba</th>
+                      <th className="py-1 text-right font-medium">Částka</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {danove.items.map((i) => (
+                      <tr key={i.id} className={`border-b border-stone-100 ${i.deductible ? "" : "text-stone-400"}`}>
+                        <td className="py-1 text-center">
+                          <input
+                            type="checkbox"
+                            checked={i.deductible}
+                            onChange={(e) => setPolozka(i.id, { deductible: e.target.checked })}
+                            aria-label={`Do přiznání: ${i.description}`}
+                            className="size-4 accent-stone-900"
+                          />
+                        </td>
+                        <td className="py-1 pr-2">{i.description}</td>
+                        <td className="py-1 pr-2">
+                          <select
+                            value={i.category ?? ""}
+                            onChange={(e) => setPolozka(i.id, { category: e.target.value || null })}
+                            aria-label={`Kategorie: ${i.description}`}
+                            className="h-7 w-full max-w-36 cursor-pointer border border-stone-200 bg-white px-1 text-xs text-stone-700 focus-visible:border-stone-950 focus-visible:outline-none"
+                          >
+                            <option value="">—</option>
+                            {categories.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-1 text-right whitespace-nowrap">{i.vatRate != null ? `${i.vatRate} %` : "–"}</td>
+                        <td className="py-1 text-right font-mono">{formatCurrency(i.amount, danove.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {narok && (
+                <p className="text-xs text-stone-600">
+                  Do přiznání jde základ{" "}
+                  <span className="font-mono text-stone-950">
+                    {formatCurrency(kraceno ? narok.base : danove.docBase ?? narok.base, danove.currency)}
+                  </span>{" "}
+                  a daň{" "}
+                  <span className="font-mono text-stone-950">
+                    {formatCurrency(kraceno ? narok.vat : danove.docVat ?? narok.vat, danove.currency)}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
