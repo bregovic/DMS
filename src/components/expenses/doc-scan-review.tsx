@@ -580,8 +580,18 @@ export function DocScanReview({
             >
               Zahodit návrh
             </Button>
-            <Button type="button" onClick={apply} disabled={busy || (!!scan.duplicate && !force)}>
-              {busy ? "Zakládám…" : form.direction === "issued" ? "Založit příjem" : "Založit výdaj"}
+            <Button
+              type="button"
+              onClick={apply}
+              disabled={busy || (!!scan.duplicate && !force) || scan.result?.docKind === "nabidka"}
+            >
+              {busy
+                ? "Zakládám…"
+                : scan.result?.docKind === "nabidka"
+                  ? "Nabídka – zatím nelze založit"
+                  : form.direction === "issued"
+                    ? "Založit příjem"
+                    : "Založit výdaj"}
             </Button>
           </DialogFooter>
         </>

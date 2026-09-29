@@ -225,11 +225,16 @@ export async function applyDocScan(formData: FormData) {
       documentId: true,
       status: true,
       expenseId: true,
+      result: true,
       inboundAttachment: { select: { id: true, fileName: true, originalName: true, mimeType: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } } },
     },
   });
   if (!scan) throw new Error("Návrh nenalezen.");
   if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl.");
+  // Nabídka není doklad k zaúčtování – výdaj by z ní udělal náklad, který
+  // nevznikl. Zakládání nabídek se dodělává (#42).
+  if ((scan.result as { docKind?: string } | null)?.docKind === "nabidka")
+    throw new Error("Tohle je nabídka, ne doklad k zaúčtování. Zakládání nabídek se ještě dodělává.");
 
   /* Doklad z pošty projekt nemá – zvolí se až tady, v kontrole. Teprve
      potvrzením se soubor přesune do projektu a vznikne dokument; do té doby
