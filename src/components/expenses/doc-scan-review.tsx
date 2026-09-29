@@ -9,6 +9,7 @@ import {
   dismissDocScan,
   getDocScan,
   mistaProZarazeni,
+  restartScan,
   scanDocument,
   vendorsForScan,
   zadankyProVyber,
@@ -220,7 +221,10 @@ export function DocScanReview({
       </Button>
     );
 
-  const running = !scan || scan.status === "running";
+  // Stránka z minulého nasazení volá serverové akce, které už neexistují.
+  // Bez téhle hlášky se dialog jen věčně točil na „Čtu doklad…".
+  const stara = !!err && /Server Action|Failed to find/i.test(err);
+  const running = !err && (!scan || scan.status === "running");
   return (
     <Dialog
       title="Doklad – kontrola vytěžených údajů"
@@ -234,6 +238,15 @@ export function DocScanReview({
         <div className="flex items-center gap-2 p-6 text-sm text-stone-600">
           <Loader2 className="size-4 animate-spin" /> Čtu doklad… (do minuty)
         </div>
+      ) : !scan ? (
+        <div className="space-y-3 p-5">
+          <p className="text-sm text-red-600">
+            {stara ? "Aplikace se mezitím aktualizovala. Načti stránku znovu." : err}
+          </p>
+          <Button type="button" variant="outline" onClick={() => location.reload()}>
+            Načíst znovu
+          </Button>
+        </div>
       ) : scan.status === "error" ? (
         <div className="space-y-3 p-5">
           <p className="text-sm text-red-600">{scan.error}</p>
@@ -241,11 +254,14 @@ export function DocScanReview({
             type="button"
             variant="outline"
             onClick={async () => {
-              if (!documentId) return;
-              const fd = new FormData();
-              fd.set("documentId", documentId);
-              const { id } = await scanDocument(fd);
-              await load(id);
+              try {
+                const fd = new FormData();
+                fd.set("scanId", scan.id);
+                await restartScan(fd);
+                await load(scan.id);
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Čtení se nepodařilo spustit.");
+              }
             }}
           >
             Zkusit znovu
