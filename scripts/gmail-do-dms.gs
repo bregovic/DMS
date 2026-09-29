@@ -82,7 +82,13 @@ function ziskejStitek(jmeno) {
   } catch (e) {
     var pozdeji = najdi();
     if (pozdeji) return pozdeji;
-    throw e;
+    // Gmail tvrdí, že štítek existuje, ale mezi štítky není. Ať je z hlášky
+    // poznat, s čím se to pere – seznam vypíše `vypisStitky`.
+    throw new Error(
+      'Štítek ' + JSON.stringify(jmeno) + ' nejde založit („' + e + '“) a mezi štítky není. ' +
+      'Spusť `vypisStitky` a podívej se, jestli tam není podobný název; ' +
+      'jiný název jde nastavit vlastností DMS_STITEK.',
+    );
   }
 }
 
@@ -103,6 +109,23 @@ function zdrojoveStitky() {
     vysledek.push(jmeno);
   }
   return vysledek;
+}
+
+/**
+ * Diagnostika štítků. Nic nemění – vypíše všechny štítky přesně tak, jak je
+ * Gmail vrací, včetně skrytých mezer a neobvyklých znaků (proto JSON).
+ * Když zakládání štítku hlásí konflikt a hledání ho přitom nenajde, je
+ * příčina vidět tady.
+ */
+function vypisStitky() {
+  var vsechny = GmailApp.getUserLabels();
+  Logger.log('Štítků celkem: ' + vsechny.length);
+  for (var i = 0; i < vsechny.length; i++) {
+    Logger.log('  ' + JSON.stringify(vsechny[i].getName()));
+  }
+  Logger.log('Hledám: ' + JSON.stringify(STITEK) + ' a ' + JSON.stringify(STITEK_HOTOVO));
+  Logger.log('getUserLabelByName(koren): ' + (GmailApp.getUserLabelByName(STITEK) ? 'nalezen' : 'NENALEZEN'));
+  Logger.log('getUserLabelByName(hotovo): ' + (GmailApp.getUserLabelByName(STITEK_HOTOVO) ? 'nalezen' : 'NENALEZEN'));
 }
 
 function zpracujPostu() {
