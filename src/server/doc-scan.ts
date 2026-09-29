@@ -226,15 +226,26 @@ async function volbyZarazeni(ownerId: string | null) {
   return { mista, zadanky };
 }
 
-/** Kódy z odpovědi zpět na identifikátory; neznámé se zahodí. */
-function prelozZarazeni(d: ScanResult, mista: Misto[], zadanky: ZadankaVolba[]): ScanResult {
+/**
+ * Kódy z odpovědi zpět na identifikátory; neznámé se zahodí.
+ *
+ * Zařazení ze štítku v Gmailu má přednost: uživatel ho určil sám, kdežto
+ * model ho odhaduje z obsahu.
+ */
+function prelozZarazeni(
+  d: ScanResult,
+  mista: Misto[],
+  zadanky: ZadankaVolba[],
+  zeStitku?: { projectId: string | null; subProjectId: string | null } | null,
+): ScanResult {
   const misto = mista.find((m) => m.kod === d.placeCode);
-  d.projectId = misto?.projectId ?? null;
-  d.subProjectId = misto?.subProjectId ?? null;
+  d.projectId = zeStitku?.projectId ?? misto?.projectId ?? null;
+  d.subProjectId = zeStitku?.projectId ? zeStitku.subProjectId : (misto?.subProjectId ?? null);
+  if (zeStitku?.projectId && !misto) d.placeReason = "Zařazeno podle štítku v Gmailu.";
   const kody = new Set((d.requestCodes ?? []).map(String));
   d.requestIds = zadanky.filter((z) => kody.has(z.kod)).map((z) => z.id);
   // Žádanka určuje místo přesněji než odhad – když je vybraná, řídí se jí.
-  if (d.requestIds.length && !misto) {
+  if (d.requestIds.length && !misto && !zeStitku?.projectId) {
     const prvni = rq_misto(zadanky, d.requestIds[0], mista);
     if (prvni) {
       d.projectId = prvni.projectId;
@@ -263,7 +274,17 @@ export async function runDocScan(scanId: string) {
             fileName: true,
             originalName: true,
             mimeType: true,
-            mail: { select: { subject: true, bodyText: true, fromName: true, fromAddress: true, ownerId: true } },
+            mail: {
+              select: {
+                subject: true,
+                bodyText: true,
+                fromName: true,
+                fromAddress: true,
+                ownerId: true,
+                projectId: true,
+                subProjectId: true,
+              },
+            },
           },
         },
       },
@@ -300,7 +321,7 @@ export async function runDocScan(scanId: string) {
       { effort: "medium", maxOutput: 20_000 },
     );
     const result = await fillExchangeRate(
-      prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky),
+      prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky, m),
     );
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },

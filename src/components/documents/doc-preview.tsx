@@ -11,12 +11,15 @@ import { Dialog } from "@/components/ui/dialog";
  */
 export function DocPreview({
   documentId,
+  url: urlProp,
   name,
   mimeType,
   label,
   className = "",
 }: {
-  documentId: string;
+  documentId?: string;
+  /** Jiný zdroj než dokument projektu – třeba příloha z pošty. */
+  url?: string;
   name: string;
   mimeType?: string | null;
   /** Text tlačítka; bez něj je jen ikona oka. */
@@ -24,7 +27,7 @@ export function DocPreview({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const url = `/api/documents/${documentId}`;
+  const url = urlProp ?? `/api/documents/${documentId}`;
   const isPdf = (mimeType ?? "").includes("pdf") || /\.pdf$/i.test(name);
   const isImage = (mimeType ?? "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic)$/i.test(name);
 

@@ -18,6 +18,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FormGrid, FormSection } from "@/components/ui/form-section";
+import { DocPreview } from "@/components/documents/doc-preview";
 import { formatCurrency } from "@/lib/utils";
 import { claimedTotals } from "@/lib/vat";
 import type { ScanResult } from "@/server/doc-scan";
@@ -292,6 +293,7 @@ export function DocScanReview({
               </ul>
             )}
 
+            {!jeNabidka && (
             <FormSection title="Druh dokladu" hint="poznáme podle IČO a DIČ v Nastavení → Fakturace a daně">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(
@@ -318,6 +320,7 @@ export function DocScanReview({
                 ))}
               </div>
             </FormSection>
+            )}
 
             {!projectId && !jeNabidka && (
               <FormSection
@@ -369,14 +372,28 @@ export function DocScanReview({
               </FormSection>
             )}
 
-            <FormSection title="Doklad" hint={scan.document?.originalName ?? scan.inboundAttachment?.originalName}>
-              <FormGrid cols={3}>
-                <Field label="Název výdaje" htmlFor="ds-title">
+            <FormSection
+              title={jeNabidka ? "Nabídka" : "Doklad"}
+              hint={scan.document?.originalName ?? scan.inboundAttachment?.originalName}
+              actions={
+                scan.document || scan.inboundAttachment ? (
+                  <DocPreview
+                    documentId={scan.document?.id}
+                    url={scan.inboundAttachment ? `/api/mail/attachment/${scan.inboundAttachment.id}` : undefined}
+                    name={scan.document?.originalName ?? scan.inboundAttachment?.originalName ?? "dokument"}
+                    label="Zobrazit"
+                  />
+                ) : undefined
+              }
+            >
+              <FormGrid cols={jeNabidka ? 2 : 3}>
+                <Field label={jeNabidka ? "Název" : "Název výdaje"} htmlFor="ds-title">
                   <input id="ds-title" className={input} value={form.title ?? ""} onChange={(e) => set("title", e.target.value)} />
                 </Field>
-                <Field label="Číslo dokladu" htmlFor="ds-num">
+                <Field label={jeNabidka ? "Číslo nabídky" : "Číslo dokladu"} htmlFor="ds-num">
                   <input id="ds-num" className={input} value={form.docNumber ?? ""} onChange={(e) => set("docNumber", e.target.value)} />
                 </Field>
+                {!jeNabidka && (
                 <Field label="Kategorie" htmlFor="ds-cat">
                   <select id="ds-cat" className={input} value={form.category ?? "other"} onChange={(e) => set("category", e.target.value)}>
                     {categories.map((c) => (
@@ -387,15 +404,19 @@ export function DocScanReview({
                     {novaKat && <option value={`__new__:${novaKat}`}>{novaKat} (založit)</option>}
                   </select>
                 </Field>
+                )}
               </FormGrid>
-              <FormGrid cols={3}>
-                <Field label="Datum vystavení" htmlFor="ds-date">
+              {/* DUZP a splatnost patří dokladu – nabídka se ještě neplatí. */}
+              <FormGrid cols={jeNabidka ? 2 : 3}>
+                <Field label={jeNabidka ? "Datum nabídky" : "Datum vystavení"} htmlFor="ds-date">
                   <input id="ds-date" type="date" className={input} value={form.date ?? ""} onChange={(e) => set("date", e.target.value)} />
                 </Field>
+                {!jeNabidka && (
                 <Field label="DUZP" htmlFor="ds-tax">
                   <input id="ds-tax" type="date" className={input} value={form.taxDate ?? ""} onChange={(e) => set("taxDate", e.target.value)} />
                 </Field>
-                <Field label="Splatnost" htmlFor="ds-due">
+                )}
+                <Field label={jeNabidka ? "Platnost do" : "Splatnost"} htmlFor="ds-due">
                   <input id="ds-due" type="date" className={input} value={form.dueDate ?? ""} onChange={(e) => set("dueDate", e.target.value)} />
                 </Field>
               </FormGrid>
@@ -463,9 +484,9 @@ export function DocScanReview({
             )}
 
             <FormSection
-              title="Částky a DPH"
+              title={jeNabidka ? "Cena" : "Částky a DPH"}
               actions={
-                rows.length > 0 ? (
+                rows.length > 0 && !jeNabidka ? (
                   <span className="text-xs text-stone-500">
                     rozpis celkem {formatCurrency(rowsTotal, form.currency || "CZK")}
                     {foreign && rate > 0 && (
@@ -482,14 +503,16 @@ export function DocScanReview({
                 <Field label="Celkem s DPH" htmlFor="ds-total">
                   <input id="ds-total" inputMode="decimal" className={input} value={form.total ?? ""} onChange={(e) => set("total", e.target.value)} />
                 </Field>
-                <Field label="Základ" htmlFor="ds-base">
+                <Field label={jeNabidka ? "Cena bez DPH" : "Základ"} htmlFor="ds-base">
                   <input id="ds-base" inputMode="decimal" className={input} value={form.vatBase ?? ""} onChange={(e) => set("vatBase", e.target.value)} />
                 </Field>
+                {!jeNabidka && (
                 <Field label="DPH" htmlFor="ds-vat">
                   <input id="ds-vat" inputMode="decimal" className={input} value={form.vatAmount ?? ""} onChange={(e) => set("vatAmount", e.target.value)} />
                 </Field>
+                )}
               </FormGrid>
-              {rows.length > 0 && (
+              {rows.length > 0 && !jeNabidka && (
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-left text-stone-500">
@@ -524,9 +547,11 @@ export function DocScanReview({
                     />
                   </Field>
                 )}
+                {!jeNabidka && (
                 <Field label="VS" htmlFor="ds-vs">
                   <input id="ds-vs" className={input} value={form.variableSymbol ?? ""} onChange={(e) => set("variableSymbol", e.target.value)} />
                 </Field>
+                )}
                 {subProjects.length > 0 && (
                   <Field label="Složka" htmlFor="ds-sub">
                     <select id="ds-sub" className={input} value={form.subProjectId ?? ""} onChange={(e) => set("subProjectId", e.target.value)}>
@@ -540,7 +565,7 @@ export function DocScanReview({
                   </Field>
                 )}
               </FormGrid>
-              <div className="flex flex-wrap gap-4 text-sm text-stone-700">
+              <div className={`flex-wrap gap-4 text-sm text-stone-700 ${jeNabidka ? "hidden" : "flex"}`}>
                 <label className="flex cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={form.paid === "1"} onChange={(e) => set("paid", e.target.checked ? "1" : "0")} className="size-4 accent-stone-900" />
                   {form.direction === "issued" ? "Už uhrazeno" : "Už zaplaceno"}
