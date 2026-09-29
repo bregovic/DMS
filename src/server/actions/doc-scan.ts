@@ -9,6 +9,8 @@ import { storage } from "@/lib/storage";
 import { createDocScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { notifyExpenseAdded } from "@/server/notify";
 import { EXPENSE_PAID_STAGE } from "@/lib/constants";
+import { claimedTotals } from "@/lib/vat";
+import { getExpenseCategories, slugifyCategory } from "@/server/expense-categories";
 
 async function writable(projectId: string) {
   const user = await requireUser();
@@ -198,7 +200,28 @@ export async function applyDocScan(formData: FormData) {
     unitPrice: number | null;
     amount: number;
     vatRate: number | null;
+    category?: string | null;
+    deductible?: boolean;
   }[];
+  // Kategorie, kterou číselník nemá, se založí – z dialogu přijde jako "__new__:Název".
+  const resolveCat = async (v: unknown, fallback: string) => {
+    const raw = String(v ?? "").trim();
+    if (!raw) return fallback;
+    if (!raw.startsWith("__new__:")) return raw;
+    const label = raw.slice(8).trim().slice(0, 40);
+    if (!label) return fallback;
+    const key = slugifyCategory(label);
+    await prisma.expenseCategory.upsert({ where: { key }, update: { label }, create: { key, label } });
+    return key;
+  };
+  for (const i of items) i.category = i.category ? await resolveCat(i.category, "") || null : null;
+
+  // Do přiznání jde jen to, co je zaškrtnuté. Rekapitulace dokladu se pokrátí
+  // podílem odškrtnutých položek – u plného nároku zůstanou čísla beze změny.
+  const claim = claimedTotals(vatRows, items);
+  const claimBase = items.some((i) => i.deductible === false) ? claim.base : num(formData.get("vatBase"));
+  const claimVat = items.some((i) => i.deductible === false) ? claim.vat : num(formData.get("vatAmount"));
+  const claimRows = items.some((i) => i.deductible === false) ? claim.rows : vatRows;
   const total = num(formData.get("total")) ?? 0;
   const paid = formData.get("paid") === "1";
   const subProjectId = String(formData.get("subProjectId") || "") || null;
@@ -231,7 +254,7 @@ export async function applyDocScan(formData: FormData) {
         description: String(formData.get("description") || "").slice(0, 2000) || null,
         amount: total,
         currency: String(formData.get("currency") || "CZK").slice(0, 3),
-        category: String(formData.get("category") || "prodej"),
+        category: await resolveCat(formData.get("category"), "prodej"),
         date: date(formData.get("date")) ?? new Date(),
         dueDate: date(formData.get("dueDate")),
         taxDate: date(formData.get("taxDate")),
@@ -264,7 +287,7 @@ export async function applyDocScan(formData: FormData) {
       description: String(formData.get("description") || "").slice(0, 2000) || null,
       amount: total,
       currency: String(formData.get("currency") || "CZK").slice(0, 3),
-      category: String(formData.get("category") || "other"),
+      category: await resolveCat(formData.get("category"), "other"),
       kind: "expense",
       status: "approved",
       stage: paid ? EXPENSE_PAID_STAGE : null,
@@ -273,10 +296,10 @@ export async function applyDocScan(formData: FormData) {
       taxDate: date(formData.get("taxDate")),
       docNumber: String(formData.get("docNumber") || "").slice(0, 100) || null,
       variableSymbol: String(formData.get("variableSymbol") || "").slice(0, 50) || null,
-      vatBase: num(formData.get("vatBase")),
-      vatAmount: num(formData.get("vatAmount")),
-      vatRate: vatRows.length === 1 ? vatRows[0].rate : null,
-      vatBreakdown: vatRows.length ? vatRows : undefined,
+      vatBase: claimBase,
+      vatAmount: claimVat,
+      vatRate: claimRows.length === 1 ? claimRows[0].rate : null,
+      vatBreakdown: claimRows.length ? claimRows : undefined,
       exchangeRate: num(formData.get("exchangeRate")),
       supplierIco: ico,
       supplierDic: dic,
@@ -292,6 +315,8 @@ export async function applyDocScan(formData: FormData) {
           unitPrice: i.unitPrice ?? null,
           amount: i.amount ?? 0,
           vatRate: i.vatRate ?? null,
+          category: i.category || null,
+          deductible: i.deductible !== false,
         })),
       },
     },
@@ -504,6 +529,15 @@ export async function applyReadyScans(formData: FormData) {
     select: { id: true },
   });
 
+  // Starší skeny mají v category volný text („palivo"), novější klíč („fuel").
+  const cats = await getExpenseCategories();
+  const bez = (x: string) => x.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const katKlic = (v: string | null | undefined) => {
+    const raw = (v ?? "").trim();
+    if (!raw) return null;
+    return cats.find((c) => c.key === raw)?.key ?? cats.find((c) => bez(c.label) === bez(raw))?.key ?? null;
+  };
+
   let created = 0;
   const skipped: string[] = [];
   for (const s of scans) {
@@ -547,7 +581,7 @@ export async function applyReadyScans(formData: FormData) {
       put("total", r.total);
       put("vatBase", r.totalBase ?? "");
       put("vatAmount", r.totalVat ?? "");
-      put("category", issued ? "prodej" : "other");
+      put("category", issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"));
       put("deductible", "1");
       put("paid", r.docType === "receipt" ? "1" : "0");
       fd.set("vatRows", JSON.stringify(r.vatBreakdown ?? []));

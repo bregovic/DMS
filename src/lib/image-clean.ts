@@ -250,6 +250,51 @@ export function photoQuality(src: ImageData): PhotoQuality {
  * Zpracuje fotku dokladu: ořez a narovnání papíru (dá-li se spolehlivě najít)
  * + vyčištění. `crop: false` ořez vynechá.
  */
+/**
+ * Vyčištění dokladu do šedé s roztaženým kontrastem.
+ *
+ * Účtenky bývají na termopapíru: šedý tisk na šedavém papíru, k tomu nažloutlé
+ * světlo. Krajní hodnoty se berou z percentilů, ne z minima a maxima – jinak by
+ * jeden tmavý pixel (stín, díra po sponce) roztažení zabil. Rozsah se nikdy
+ * nenatahuje víc, než odpovídá LIMIT, aby se slabý tisk nerozpadl do bílé.
+ */
+export function enhanceDocument(data: Uint8ClampedArray) {
+  const LIMIT = 3; // největší povolené zesílení kontrastu
+  const hist = new Uint32Array(256);
+  const gray = new Uint8ClampedArray(data.length / 4);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const g = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
+    gray[j] = g;
+    hist[g | 0]++;
+  }
+  const total = gray.length;
+  const pct = (p: number) => {
+    let acc = 0;
+    const want = total * p;
+    for (let v = 0; v < 256; v++) {
+      acc += hist[v];
+      if (acc >= want) return v;
+    }
+    return 255;
+  };
+  let lo = pct(0.02);
+  let hi = pct(0.98);
+  if (hi - lo < 255 / LIMIT) {
+    const stred = (lo + hi) / 2;
+    lo = Math.max(0, stred - 255 / LIMIT / 2);
+    hi = Math.min(255, stred + 255 / LIMIT / 2);
+  }
+  const span = Math.max(1, hi - lo);
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.min(255, Math.max(0, ((v - lo) / span) * 255));
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const v = lut[gray[j]];
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+  }
+}
+
 export async function processDocumentPhoto(file: File, opts?: { crop?: boolean }): Promise<PhotoResult> {
   if (!file.type.startsWith("image/")) return { file, cropped: false, preview: null, quality: null };
   try {
@@ -297,13 +342,16 @@ export async function processDocumentPhoto(file: File, opts?: { crop?: boolean }
       }
     }
 
+    const quality = photoQuality(work);
+    enhanceDocument(work.data);
     canvas.width = work.width;
     canvas.height = work.height;
     ctx.putImageData(work, 0, 0);
-    const quality = photoQuality(work);
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", QUALITY));
     const preview = canvas.toDataURL("image/jpeg", 0.5);
-    if (!blob || blob.size >= file.size) return { file, cropped: false, preview, quality };
+    // Velikost je jen kompresní pojistka – narovnaný výřez má přednost i když
+    // povyroste. (Dřív se u malé předlohy zahodil i ořez a zůstala křivá fotka.)
+    if (!blob || (!cropped && blob.size >= file.size)) return { file, cropped: false, preview, quality };
     const out = new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg", lastModified: Date.now() });
     return { file: out, cropped, preview, quality };
   } catch {

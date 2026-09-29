@@ -423,8 +423,15 @@ export default async function VatPage({
                           {i.title}
                           <span className="text-stone-400"> · {i.customerName ?? "—"}</span>
                         </td>
-                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(i.vatBase ?? 0))}</td>
-                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(i.vatAmount ?? 0))}</td>
+                        <td className="py-1.5 text-right font-mono">{formatCurrency(vatTotalsCzk(i).base)}</td>
+                        <td className="py-1.5 text-right font-mono">
+                          {formatCurrency(vatTotalsCzk(i).vat)}
+                          {i.currency !== "CZK" && (
+                            <span className="block text-[11px] font-normal text-stone-400">
+                              {formatCurrency(Number(i.amount), i.currency)} · kurz {i.exchangeRate ?? "?"}
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -475,8 +482,15 @@ export default async function VatPage({
                           </Link>
                           <span className="text-stone-400"> · {e.vendor?.name ?? "—"}</span>
                         </td>
-                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(e.vatBase ?? 0))}</td>
-                        <td className="py-1.5 text-right font-mono">{formatCurrency(Number(e.vatAmount ?? 0))}</td>
+                        <td className="py-1.5 text-right font-mono">{formatCurrency(vatTotalsCzk(e).base)}</td>
+                        <td className="py-1.5 text-right font-mono">
+                          {formatCurrency(vatTotalsCzk(e).vat)}
+                          {e.currency !== "CZK" && (
+                            <span className="block text-[11px] font-normal text-stone-400">
+                              {formatCurrency(Number(e.amount), e.currency)} · kurz {e.exchangeRate ?? "?"}
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

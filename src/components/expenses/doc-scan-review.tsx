@@ -8,6 +8,7 @@ import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FormGrid, FormSection } from "@/components/ui/form-section";
 import { formatCurrency } from "@/lib/utils";
+import { claimedTotals } from "@/lib/vat";
 import type { ScanResult } from "@/server/doc-scan";
 
 const input =
@@ -44,7 +45,25 @@ export function DocScanReview({
   const [form, setForm] = useState<Record<string, string>>({});
   const [items, setItems] = useState<ScanResult["items"]>([]);
   const [rows, setRows] = useState<ScanResult["vatBreakdown"]>([]);
+  const [novaKat, setNovaKat] = useState<string | null>(null);
   const router = useRouter();
+
+  // Dřív se vracel volný text („palivo"), dnes klíč („fuel"). U starších skenů
+  // se proto hledá i podle popisku, ať výběr nezůstane prázdný.
+  const katKlic = (v: string | null | undefined) => {
+    const raw = (v ?? "").trim();
+    if (!raw) return null;
+    const bez = (x: string) => x.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    return categories.find((c) => c.key === raw)?.key ?? categories.find((c) => bez(c.label) === bez(raw))?.key ?? null;
+  };
+
+  const issuedDoc = form.direction === "issued";
+  // Co z dokladu půjde do přiznání – přepočítává se při každém odškrtnutí,
+  // ať uživatel vidí výsledek dřív, než doklad založí.
+  const claim = claimedTotals(rows, items);
+  const kraceno = !issuedDoc && items.some((i) => i.deductible === false) && rows.length > 0;
+  const setItem = (idx: number, patch: Partial<ScanResult["items"][number]>) =>
+    setItems((list) => list.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
   async function load(id: string) {
     const s = await getDocScan(id);
@@ -54,6 +73,7 @@ export function DocScanReview({
       const issued = s.direction === "issued";
       setItems(r.items ?? []);
       setRows(r.vatBreakdown ?? []);
+      setNovaKat(r.newCategory ?? null);
       const match = vendors.find((v) => (r.supplier.ico && v.ico === r.supplier.ico) || v.name === r.supplier.name);
       setForm({
         title: r.title ?? r.supplier.name ?? "Doklad",
@@ -78,7 +98,7 @@ export function DocScanReview({
         total: String(r.total ?? ""),
         vatBase: String(r.totalBase ?? ""),
         vatAmount: String(r.totalVat ?? ""),
-        category: issued ? "prodej" : "other",
+        category: issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"),
         subProjectId: "",
         deductible: "1",
         paid: r.docType === "receipt" ? "1" : "0",
@@ -238,6 +258,7 @@ export function DocScanReview({
                         {c.label}
                       </option>
                     ))}
+                    {novaKat && <option value={`__new__:${novaKat}`}>{novaKat} (založit)</option>}
                   </select>
                 </Field>
               </FormGrid>
@@ -413,37 +434,76 @@ export function DocScanReview({
             {items.length > 0 && (
               <FormSection
                 title={`Položky · ${items.length}`}
-                hint="uloží se k výdaji a slouží k porovnání cen s katalogem"
+                hint={issuedDoc ? "uloží se k dokladu" : "odškrtni, co nepatří do přiznání"}
                 actions={
                   <button type="button" onClick={() => setItems([])} className="cursor-pointer text-xs text-stone-500 hover:text-stone-950">
                     Neukládat položky
                   </button>
                 }
               >
-                <div className="max-h-56 overflow-y-auto">
-                  <table className="w-full text-xs">
+                <div className="max-h-72 overflow-x-auto overflow-y-auto">
+                  <table className="w-full min-w-[640px] text-xs">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b border-stone-200 text-left text-stone-500">
+                        {!issuedDoc && <th className="w-10 py-1 text-center font-medium">DPH</th>}
                         <th className="py-1 font-medium">Popis</th>
+                        <th className="py-1 font-medium">Kategorie</th>
                         <th className="py-1 text-right font-medium">Množství</th>
-                        <th className="py-1 text-right font-medium">Jedn. cena</th>
+                        <th className="py-1 text-right font-medium">Sazba</th>
                         <th className="py-1 text-right font-medium">Částka</th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((i, idx) => (
-                        <tr key={idx} className="border-b border-stone-100">
+                        <tr key={idx} className={`border-b border-stone-100 ${i.deductible === false ? "text-stone-400" : ""}`}>
+                          {!issuedDoc && (
+                            <td className="py-1 text-center">
+                              <input
+                                type="checkbox"
+                                checked={i.deductible !== false}
+                                onChange={(e) => setItem(idx, { deductible: e.target.checked })}
+                                aria-label={`Do přiznání: ${i.description}`}
+                                className="size-4 accent-stone-900"
+                              />
+                            </td>
+                          )}
                           <td className="py-1 pr-2">{i.description}</td>
+                          <td className="py-1 pr-2">
+                            <select
+                              value={katKlic(i.category) ?? ""}
+                              onChange={(e) => setItem(idx, { category: e.target.value || null })}
+                              aria-label={`Kategorie: ${i.description}`}
+                              className="h-7 w-full max-w-36 cursor-pointer border border-stone-200 bg-white px-1 text-xs text-stone-700 focus-visible:border-stone-950 focus-visible:outline-none"
+                            >
+                              <option value="">—</option>
+                              {categories.map((c) => (
+                                <option key={c.key} value={c.key}>
+                                  {c.label}
+                                </option>
+                              ))}
+                              {novaKat && <option value={`__new__:${novaKat}`}>{novaKat} (založit)</option>}
+                            </select>
+                          </td>
                           <td className="py-1 text-right whitespace-nowrap">
                             {i.quantity != null ? `${i.quantity.toLocaleString("cs-CZ")} ${i.unit ?? ""}` : "–"}
                           </td>
-                          <td className="py-1 text-right font-mono">{i.unitPrice != null ? formatCurrency(i.unitPrice, form.currency || "CZK") : "–"}</td>
+                          <td className="py-1 text-right whitespace-nowrap">{i.vatRate != null ? `${i.vatRate} %` : "–"}</td>
                           <td className="py-1 text-right font-mono">{formatCurrency(i.amount, form.currency || "CZK")}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {kraceno && (
+                  <p className="mt-2 border-t border-stone-200 pt-2 text-xs text-stone-600">
+                    Do přiznání jde základ{" "}
+                    <span className="font-mono text-stone-950">{formatCurrency(claim.base, form.currency || "CZK")}</span> a daň{" "}
+                    <span className="font-mono text-stone-950">{formatCurrency(claim.vat, form.currency || "CZK")}</span>
+                    {claim.rows.length > 0 && (
+                      <> · {claim.rows.map((r) => `${r.rate} %`).join(", ")}</>
+                    )}
+                  </p>
+                )}
               </FormSection>
             )}
 

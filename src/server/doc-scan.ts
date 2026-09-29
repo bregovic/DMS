@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
 import { currencyCode } from "@/lib/utils";
+import { getExpenseCategories } from "@/server/expense-categories";
 import { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -21,6 +22,10 @@ export type ScanItem = {
   unitPrice: number | null;
   amount: number;
   vatRate: number | null;
+  /** Klíč kategorie z číselníku, nebo null když nic nesedí. */
+  category: string | null;
+  /** Návrh, jestli položka patří do přiznání (osobní spotřeba ne). */
+  deductible: boolean;
 };
 export type ScanResult = {
   docType: "receipt" | "invoice" | "proforma" | "credit_note" | "other";
@@ -45,6 +50,8 @@ export type ScanResult = {
   paymentMethod: string | null;
   variableSymbol: string | null;
   category: string | null;
+  /** Název kategorie k založení, když doklad nesedí do žádné existující. */
+  newCategory: string | null;
   title: string | null;
   summary: string;
   items: ScanItem[];
@@ -78,16 +85,26 @@ const SCHEMA = obj({
   paymentMethod: str,
   variableSymbol: str,
   category: str,
+  newCategory: str,
   title: str,
   summary: { type: "string" },
   items: {
     type: "array",
-    items: obj({ description: { type: "string" }, quantity: n, unit: str, unitPrice: n, amount: { type: "number" }, vatRate: n }),
+    items: obj({
+      description: { type: "string" },
+      quantity: n,
+      unit: str,
+      unitPrice: n,
+      amount: { type: "number" },
+      vatRate: n,
+      category: str,
+      deductible: { type: "boolean" },
+    }),
   },
   warnings: { type: "array", items: { type: "string" } },
 });
 
-const INSTRUCTIONS = `Jsi účetní. Ze snímku nebo PDF účtenky či faktury přečti údaje přesně tak, jak jsou na dokladu. Nic nedopočítávej odhadem.
+const INSTRUCTIONS = (cats: { key: string; label: string }[]) => `Jsi účetní. Ze snímku nebo PDF účtenky či faktury přečti údaje přesně tak, jak jsou na dokladu. Nic nedopočítávej odhadem.
 - docType: receipt = účtenka/paragon, invoice = faktura (daňový doklad), proforma = zálohová faktura, credit_note = dobropis.
 - supplier = kdo doklad vystavil (prodávající). ico = 8 číslic bez mezer, dic například CZ12345678. customer = odběratel, pokud je uveden.
 - supplier.bankAccount = číslo účtu (123456789/0100) nebo IBAN, na který se platí – bývá v hlavičce, v patičce nebo u platebních údajů. Když na dokladu není, vrať null.
@@ -97,10 +114,15 @@ const INSTRUCTIONS = `Jsi účetní. Ze snímku nebo PDF účtenky či faktury p
 - vatBreakdown = rozpis po sazbách přesně z rekapitulace dokladu (v ČR 21, 12 a 0 %). Když na dokladu rozpis není a doklad je bez DPH, vrať prázdné pole.
 - reverseCharge = true u přenesené daňové povinnosti (režim PDP, „daň odvede zákazník").
 - items = jednotlivé položky (popis, množství, MJ, jednotková cena bez DPH pokud je uvedená, částka za položku, sazba). U účtenky s mnoha položkami vrať nejvýš 40 nejdůležitějších.
-- category = stručně, o jaký nákup jde (např. stavební materiál, palivo, elektronika, nářadí, služby).
+- category = klíč kategorie nákupu ze seznamu níž. Vyber ten, který sedí nejlíp; když nesedí žádný, vrať null a do newCategory dej krátký název kategorie, která chybí (1–2 slova, prvním písmenem velkým).
+- U každé položky taky category = klíč ze stejného seznamu (doklad běžně míchá víc druhů nákupu, třeba palivo a občerstvení).
+- deductible u položky = patří do nároku na odpočet DPH? Vrať false jen u zjevně osobní spotřeby: jídlo, pití, občerstvení, cukrovinky, tabák, léky a drogerie pro osobní potřebu. U všeho ostatního true.
 - title = krátký název výdaje pro evidenci (dodavatel + co to je, max 60 znaků).
 - summary = 1–2 věty, co doklad obsahuje. warnings = co je nečitelné nebo nejisté.
-Čísla vracej jako čísla bez měny a bez mezer. Když údaj na dokladu není, vrať null.`;
+Čísla vracej jako čísla bez měny a bez mezer. Když údaj na dokladu není, vrať null.
+
+Kategorie (klíč = název):
+${cats.map((c) => `${c.key} = ${c.label}`).join("\n")}`;
 
 /**
  * Postgres neuloží do JSON ani do textu znak \u0000 (a osamělé půlky surrogate
@@ -138,16 +160,17 @@ export async function runDocScan(scanId: string) {
       return;
     }
     await assertBudget(); // limity zpracování až tady, ať je případná chyba vidět u dokladu
+    const cats = await getExpenseCategories();
     const buf = await storage.read(doc.fileName);
     const { data, costUsd } = await callModel<ScanResult>(
       scan.model,
-      INSTRUCTIONS,
+      INSTRUCTIONS(cats),
       [await filePart(buf, doc.originalName, doc.mimeType), { type: "input_text", text: `Soubor: ${doc.originalName}` }],
       "doc-scan",
       SCHEMA,
       { effort: "low", maxOutput: 20_000 },
     );
-    const result = await fillExchangeRate(normalize(stripNul(data)));
+    const result = await fillExchangeRate(normalize(stripNul(data), new Set(cats.map((c) => c.key))));
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },
       data: { status: "ready", result: result as unknown as Prisma.InputJsonValue, costUsd },
@@ -194,7 +217,14 @@ export async function runDocScan(scanId: string) {
 }
 
 /** Doplní chybějící součty a pohlídá, že rozpis DPH sedí na celek. */
-export function normalize(d: ScanResult): ScanResult {
+export function normalize(d: ScanResult, catKeys?: Set<string>): ScanResult {
+  // Model občas vrátí popisek místo klíče ("Palivo") nebo klíč, který neexistuje.
+  const cat = (v: unknown) => {
+    const k = String(v ?? "").trim();
+    if (!k) return null;
+    if (!catKeys) return k.slice(0, 40);
+    return catKeys.has(k) ? k : null;
+  };
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
   d.currency = currencyCode(d.currency);
   d.exchangeRate = num(d.exchangeRate);
@@ -216,7 +246,17 @@ export function normalize(d: ScanResult): ScanResult {
     unitPrice: num(i.unitPrice),
     amount: num(i.amount) ?? 0,
     vatRate: num(i.vatRate),
+    category: cat(i.category),
+    deductible: i.deductible !== false,
   }));
+  d.category = cat(d.category);
+  d.newCategory = String(d.newCategory ?? "").trim().slice(0, 40) || null;
+  // Kategorie z položek, když ji doklad jako celek neurčil: která má největší podíl.
+  if (!d.category) {
+    const podle = new Map<string, number>();
+    for (const i of d.items) if (i.category) podle.set(i.category, (podle.get(i.category) ?? 0) + Math.abs(i.amount));
+    d.category = [...podle.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
   d.warnings = d.warnings ?? [];
   if (d.total != null && d.vatBreakdown.length) {
     const diff = Math.abs(d.total - (sumBase + sumVat));
