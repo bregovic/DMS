@@ -126,6 +126,26 @@ export async function restartScan(formData: FormData) {
   revalidatePath("/doklady");
 }
 
+/**
+ * Zahodí návrh úplně. Podklad zůstane: příloha z pošty se vrátí mezi
+ * nezpracované a jde přečíst znovu, nahraný doklad taky. Na rozdíl od
+ * „zahodit návrh" (dismiss), které doklad z fronty jen schová.
+ */
+export async function deleteScan(formData: FormData) {
+  const id = String(formData.get("scanId"));
+  const scan = await prisma.docScan.findUnique({
+    where: { id },
+    select: { id: true, projectId: true, expenseId: true, inboundAttachment: { select: { mail: { select: { ownerId: true } } } } },
+  });
+  if (!scan) return;
+  const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
+  if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
+    throw new Error("Nemáš oprávnění.");
+  if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl – smaž nejdřív ten výdaj.");
+  await prisma.docScan.delete({ where: { id } });
+  revalidatePath("/doklady");
+}
+
 /** Otevřené žádanky uživatele pro výběr u nabídky. */
 export async function zadankyProVyber() {
   const user = await requireUser();

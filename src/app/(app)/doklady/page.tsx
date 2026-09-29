@@ -16,7 +16,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteDocument } from "@/server/actions/documents";
 import { deleteExpense } from "@/server/actions/expenses";
 import { deleteIncome } from "@/server/actions/incomes";
-import { restartScan } from "@/server/actions/doc-scan";
+import { deleteScan, restartScan } from "@/server/actions/doc-scan";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { isExpensePaid } from "@/lib/constants";
@@ -408,6 +408,11 @@ export default async function DocsPage({
                       </button>
                     </form>
                   )}
+                  <DeleteButton
+                    action={deleteScan}
+                    fields={{ scanId: sc.id }}
+                    confirm="Zahodit přečtení? Soubor zůstane mezi nezpracovanými a půjde přečíst znovu."
+                  />
                   <DocScanReview
                     scanId={sc.id}
                     documentId={sc.document?.id ?? null}
