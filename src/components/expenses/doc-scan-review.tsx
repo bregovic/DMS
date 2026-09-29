@@ -28,6 +28,8 @@ export function DocScanReview({
   categories,
   label = "Zkontrolovat doklad",
   autoOpen = false,
+  hideButton = false,
+  onDone,
 }: {
   scanId: string | null;
   documentId: string;
@@ -36,6 +38,10 @@ export function DocScanReview({
   categories: { key: string; label: string }[];
   label?: string;
   autoOpen?: boolean;
+  /** Dialog řídí někdo jiný (fronta kontroly) – vlastní tlačítko se nekreslí. */
+  hideButton?: boolean;
+  /** "done" = doklad vyřízený (založený nebo zahozený), "close" = uživatel odešel. */
+  onDone?: (vysledek: "done" | "close") => void;
 }) {
   const [open, setOpen] = useState(autoOpen);
   const [busy, setBusy] = useState(false);
@@ -155,6 +161,7 @@ export function DocScanReview({
       await applyDocScan(fd);
       setOpen(false);
       router.refresh();
+      onDone?.("done");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Výdaj se nepodařilo založit.");
     }
@@ -162,7 +169,7 @@ export function DocScanReview({
   }
 
   if (!open)
-    return (
+    return hideButton ? null : (
       <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
         <FileSearch className="size-4" /> {label}
       </Button>
@@ -170,7 +177,14 @@ export function DocScanReview({
 
   const running = !scan || scan.status === "running";
   return (
-    <Dialog title="Doklad – kontrola vytěžených údajů" size="3xl" onClose={() => setOpen(false)}>
+    <Dialog
+      title="Doklad – kontrola vytěžených údajů"
+      size="3xl"
+      onClose={() => {
+        setOpen(false);
+        onDone?.("close");
+      }}
+    >
       {running ? (
         <div className="flex items-center gap-2 p-6 text-sm text-stone-600">
           <Loader2 className="size-4 animate-spin" /> Čtu doklad… (do minuty)
@@ -528,6 +542,7 @@ export function DocScanReview({
                 await dismissDocScan(fd);
                 setOpen(false);
                 router.refresh();
+                onDone?.("done");
               }}
             >
               Zahodit návrh

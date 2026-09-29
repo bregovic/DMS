@@ -6,6 +6,7 @@ import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
+import { DocScanQueue } from "@/components/expenses/doc-scan-queue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { DocPreview } from "@/components/documents/doc-preview";
@@ -310,7 +311,20 @@ export default async function DocsPage({
 
       {scans.length > 0 && (
         <section className="mt-6">
-          <h2 className="kicker mb-2">Ke kontrole · {scans.length}</h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="kicker">Ke kontrole · {scans.length}</h2>
+            <DocScanQueue
+              scans={scans
+                .filter((sc) => sc.status === "ready")
+                .map((sc) => ({
+                  id: sc.id,
+                  documentId: sc.document.id,
+                  projectId: sc.projectId,
+                  originalName: sc.document.originalName,
+                }))}
+              categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+            />
+          </div>
           <ul className="border-t border-stone-200">
             {scans.map((sc) => {
               const r = sc.result as { supplier?: { name?: string | null }; total?: number | null; number?: string | null } | null;
