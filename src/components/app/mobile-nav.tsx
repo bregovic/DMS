@@ -29,7 +29,7 @@ export function MobileNav() {
         type="button"
         onClick={() => setOpen(true)}
         title="Menu"
-        className="flex size-9 items-center justify-center text-stone-700 hover:bg-stone-100 cursor-pointer"
+        className="flex size-11 items-center justify-center text-stone-700 hover:bg-stone-100 cursor-pointer"
       >
         <Menu className="size-5" />
       </button>

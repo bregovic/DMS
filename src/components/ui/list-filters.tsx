@@ -162,7 +162,7 @@ export function ListFilters({
           : statuses.filter((x) => stSelected.has(x.key)).map((x) => x.label).join(", ") || "žádný stav";
 
   const inputClass =
-    "h-8 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950";
+    "h-11 rounded-none border border-stone-300 bg-white px-2 text-xs text-stone-700 focus-visible:outline-none focus-visible:border-stone-950 sm:h-8";
   const chip = (on: boolean) =>
     `flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-xs transition-colors ${
       on ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-600 hover:border-stone-950"
@@ -175,7 +175,7 @@ export function ListFilters({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className={`flex h-8 cursor-pointer items-center gap-1.5 border px-2.5 text-xs transition-colors ${
+          className={`flex h-11 cursor-pointer items-center gap-1.5 border px-2.5 text-xs transition-colors sm:h-8 ${
             open ? "border-stone-950 text-stone-950" : "border-stone-300 text-stone-700 hover:border-stone-950"
           }`}
         >
@@ -216,7 +216,7 @@ export function ListFilters({
             title={dir === "asc" ? "Vzestupně" : "Sestupně"}
             aria-label={dir === "asc" ? "Řadit vzestupně" : "Řadit sestupně"}
             onClick={() => setParam({ [k("dir")]: dir === "asc" ? "desc" : "asc" })}
-            className="flex h-8 cursor-pointer items-center gap-1 border border-stone-300 px-2 text-xs text-stone-700 hover:border-stone-950"
+            className="flex h-11 cursor-pointer items-center gap-1 border border-stone-300 px-2 text-xs text-stone-700 hover:border-stone-950 sm:h-8"
           >
             <ArrowDownUp className="size-3.5" />
             {dir === "asc" ? "↑" : "↓"}
@@ -262,7 +262,7 @@ export function ListFilters({
                   <select
                     value={cur}
                     onChange={(e) => setParam({ [k(s.key)]: e.target.value || null })}
-                    className={`${inputClass} mt-1 block h-9 min-w-36 text-sm`}
+                    className={`${inputClass} mt-1 block h-11 min-w-36 text-sm sm:h-9`}
                   >
                     {s.allLabel !== null && <option value="">{s.allLabel ?? "Vše"}</option>}
                     {s.options.map((o) => (
@@ -282,7 +282,7 @@ export function ListFilters({
                 type="button"
                 onClick={() => setStOpen((v) => !v)}
                 aria-expanded={stOpen}
-                className={`${inputClass} mt-1 flex h-9 min-w-40 items-center justify-between gap-2 text-sm normal-case tracking-normal`}
+                className={`${inputClass} mt-1 flex h-11 min-w-40 items-center justify-between gap-2 text-sm normal-case tracking-normal sm:h-9`}
               >
                 <span className="truncate text-stone-700">{statusSummary}</span>
                 <ChevronDown className={`size-3.5 shrink-0 transition-transform ${stOpen ? "rotate-180" : ""}`} />

@@ -30,7 +30,7 @@ export function UserMenu({
       <Link
         href="/settings"
         title="Nastavení"
-        className="flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
+        className="flex size-11 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white sm:size-9"
       >
         <Settings className="size-4" />
       </Link>
@@ -38,7 +38,7 @@ export function UserMenu({
         <button
           type="submit"
           title="Odhlásit se"
-          className="flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer"
+          className="flex size-11 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer sm:size-9"
         >
           <LogOut className="size-4" />
         </button>

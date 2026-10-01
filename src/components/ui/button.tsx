@@ -19,9 +19,10 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-5",
-        sm: "h-8 px-3 text-xs",
+        // na telefonu plná klikací výška (44 px), na počítači zůstává drobné
+        sm: "h-11 px-3 text-xs sm:h-8",
         lg: "h-12 px-7",
-        icon: "h-9 w-9",
+        icon: "size-11 sm:size-9",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

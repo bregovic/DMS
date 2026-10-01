@@ -42,7 +42,7 @@ export function EditVendorForm({ vendor }: { vendor: Vendor }) {
         type="button"
         onClick={() => setOpen(true)}
         title="Upravit"
-        className="flex size-8 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer"
+        className="flex size-11 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white cursor-pointer sm:size-8"
       >
         <Pencil className="size-4" />
       </button>

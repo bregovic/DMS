@@ -284,7 +284,7 @@ export default async function DocsPage({
     return `/doklady?${u.toString()}`;
   };
   const chip = (active: boolean) =>
-    `border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors ${
+    `inline-flex min-h-9 items-center border px-2.5 py-0.5 text-[11px] uppercase tracking-wide transition-colors sm:min-h-0 ${
       active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
     }`;
 

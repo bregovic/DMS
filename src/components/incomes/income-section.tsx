@@ -173,7 +173,7 @@ export function IncomeSection({
                       type="button"
                       title="Upravit"
                       onClick={() => setEditing(i)}
-                      className="flex size-7 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer"
+                      className="flex size-11 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer sm:size-7"
                     >
                       <Pencil className="size-3.5" />
                     </button>

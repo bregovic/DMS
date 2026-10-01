@@ -46,7 +46,7 @@ export function MaterialForm({ material }: { material?: MaterialInput }) {
         type="button"
         onClick={() => setOpen(true)}
         title="Upravit"
-        className="text-stone-400 hover:text-stone-950 cursor-pointer"
+        className="flex size-11 items-center justify-center text-stone-400 hover:text-stone-950 cursor-pointer sm:size-6"
       >
         <Pencil className="size-4" />
       </button>

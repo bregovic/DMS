@@ -128,7 +128,7 @@ export function Dialog({
               type="button"
               onClick={onClose}
               aria-label="Zavřít"
-              className="-m-2 p-2 text-stone-400 hover:text-stone-950 cursor-pointer"
+              className="-m-2 flex size-11 items-center justify-center text-stone-400 hover:text-stone-950 cursor-pointer sm:size-8"
             >
               <X className="size-4" />
             </button>
