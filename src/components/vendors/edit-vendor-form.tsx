@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { updateVendor } from "@/server/actions/vendors";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { AresLookup } from "@/components/vendors/ares-lookup";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -29,7 +30,7 @@ type Vendor = {
 
 export function EditVendorForm({ vendor }: { vendor: Vendor }) {
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(updateVendor, undefined);
+  const [state, action, pending] = useFormAction(updateVendor, undefined);
 
   useEffect(() => {
     if (state?.ok) setOpen(false);

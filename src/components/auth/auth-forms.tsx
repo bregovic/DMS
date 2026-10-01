@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
 import {
   type AuthFormState,
@@ -10,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 // Přihlášení přes Google je dočasně vypnuté (zatím nefunguje) – provider zůstává
 // v auth.ts, jen se neukazuje v UI.
@@ -24,7 +24,7 @@ function ErrorMsg({ state }: { state: AuthFormState }) {
 }
 
 export function LoginForm() {
-  const [state, action, pending] = useActionState(loginAction, undefined);
+  const [state, action, pending] = useFormAction(loginAction, undefined);
   return (
     <div>
       <form action={action} className="space-y-4">
@@ -58,7 +58,7 @@ export function LoginForm() {
 }
 
 export function RegisterForm() {
-  const [state, action, pending] = useActionState(registerAction, undefined);
+  const [state, action, pending] = useFormAction(registerAction, undefined);
   return (
     <div>
       <form action={action} className="space-y-4">

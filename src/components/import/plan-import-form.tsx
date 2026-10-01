@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
 import { importPlanJson } from "@/server/actions/import-plan";
 import { Button } from "@/components/ui/button";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export function PlanImportForm() {
-  const [state, action, pending] = useActionState(importPlanJson, undefined);
+  const [state, action, pending] = useFormAction(importPlanJson, undefined);
   const s = state?.summary;
 
   return (

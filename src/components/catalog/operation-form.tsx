@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { createOperation, updateOperation } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export type OperationInput = {
   id: string;
@@ -27,7 +28,7 @@ const UNITS = ["m2", "m3", "bm", "ks", "kg", "t", "hod"];
 export function OperationForm({ operation }: { operation?: OperationInput }) {
   const editing = !!operation;
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useFormAction(
     editing ? updateOperation : createOperation,
     undefined,
   );

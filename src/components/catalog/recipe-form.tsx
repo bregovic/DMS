@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { addRecipe, updateRecipe } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { OperationPicker } from "@/components/catalog/operation-picker";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export type MaterialOption = { id: string; code: string; name: string; unit: string };
 export type RecipeInput = {
@@ -30,7 +31,7 @@ export function RecipeForm({
   const editing = !!recipe;
   const [open, setOpen] = useState(false);
   const [materialId, setMaterialId] = useState(recipe?.materialId ?? "");
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useFormAction(
     editing ? updateRecipe : addRecipe,
     undefined,
   );

@@ -1,14 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Plus } from "lucide-react";
 import { createCatalogWish } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export function WishForm() {
-  const [state, action, pending] = useActionState(createCatalogWish, undefined);
+  const [state, action, pending] = useFormAction(createCatalogWish, undefined);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

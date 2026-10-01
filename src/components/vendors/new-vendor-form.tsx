@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { createVendor } from "@/server/actions/vendors";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label";
 import { AresLookup } from "@/components/vendors/ares-lookup";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
 
 export function NewVendorForm() {
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(createVendor, undefined);
+  const [state, action, pending] = useFormAction(createVendor, undefined);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

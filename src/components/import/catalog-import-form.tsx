@@ -1,14 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
 import { importCatalog } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 const inputClass =
   "block w-full cursor-pointer border border-stone-300 bg-white text-sm text-stone-700 file:mr-4 file:cursor-pointer file:border-0 file:border-r file:border-stone-300 file:bg-stone-100 file:px-4 file:py-2.5 file:text-stone-950 hover:file:bg-stone-200";
 
 export function CatalogImportForm() {
-  const [state, action, pending] = useActionState(importCatalog, undefined);
+  const [state, action, pending] = useFormAction(importCatalog, undefined);
   const s = state?.summary;
 
   return (

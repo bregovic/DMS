@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { createMaterial, updateMaterial } from "@/server/actions/process-tables";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export type MaterialInput = {
   id: string;
@@ -26,7 +27,7 @@ const UNITS = ["ks", "kg", "t", "m", "m2", "m3", "bm", "l", "pytel", "bal", "pal
 export function MaterialForm({ material }: { material?: MaterialInput }) {
   const editing = !!material;
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useFormAction(
     editing ? updateMaterial : createMaterial,
     undefined,
   );

@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
 import { changePassword } from "@/server/actions/account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
-  const [state, action, pending] = useActionState(changePassword, undefined);
+  const [state, action, pending] = useFormAction(changePassword, undefined);
 
   return (
     <form action={action} className="max-w-sm space-y-4">

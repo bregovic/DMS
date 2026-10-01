@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
 import { importExpensesCsv } from "@/server/actions/import";
 import { Button } from "@/components/ui/button";
+import { useFormAction } from "@/components/ui/use-form-action";
 
 export function ImportForm() {
-  const [state, action, pending] = useActionState(importExpensesCsv, undefined);
+  const [state, action, pending] = useFormAction(importExpensesCsv, undefined);
 
   return (
     <form action={action} className="space-y-5">

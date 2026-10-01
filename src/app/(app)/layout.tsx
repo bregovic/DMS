@@ -4,7 +4,9 @@ import { Sidebar } from "@/components/app/sidebar";
 import { UserMenu } from "@/components/app/user-menu";
 import { MobileNav } from "@/components/app/mobile-nav";
 import { MobileTabBar } from "@/components/app/mobile-tabbar";
+import { VersionWatch } from "@/components/app/version-watch";
 import { unreadCount } from "@/server/notify";
+import { appVersion } from "@/lib/version";
 
 export default async function AppLayout({
   children,
@@ -46,6 +48,7 @@ export default async function AppLayout({
         </main>
       </div>
       <MobileTabBar />
+      <VersionWatch version={appVersion()} />
     </div>
   );
 }
