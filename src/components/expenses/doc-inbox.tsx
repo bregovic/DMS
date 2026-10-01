@@ -33,9 +33,11 @@ export type InboxDoc = {
   duplicate: boolean;
 };
 
-function formOf(projectId: string) {
+function formOf(projectId: string, subProjectId?: string | null) {
   const fd = new FormData();
   fd.set("projectId", projectId);
+  // Doklad nahraný ve složce patří do té složky, ne do kořene projektu.
+  if (subProjectId) fd.set("subProjectId", subProjectId);
   return fd;
 }
 
@@ -56,6 +58,7 @@ export function DocInbox({
   projectId,
   projectName,
   canScan,
+  subProjectId,
   categories,
   subProjects,
   docs,
@@ -64,6 +67,8 @@ export function DocInbox({
   projectName: string;
   /** smí spustit vytěžení (vlastník, spolusprávce, nebo komu to vlastník povolil) */
   canScan: boolean;
+  /** Otevřená složka projektu – doklad se zařadí do ní. */
+  subProjectId?: string | null;
   categories: { key: string; label: string }[];
   subProjects: { id: string; name: string; parentId?: string | null }[];
   docs: InboxDoc[];
@@ -110,7 +115,7 @@ export function DocInbox({
               setMsg(null);
               start(async () => {
                 try {
-                  const r = await applyReadyScans(formOf(projectId));
+                  const r = await applyReadyScans(formOf(projectId, subProjectId));
                   if ("error" in r && r.error) setErr(r.error);
                   else {
                     const skipped = r.skipped ?? [];
@@ -200,6 +205,7 @@ export function DocInbox({
                     scanId={d.scanId}
                     documentId={d.id}
                     projectId={projectId}
+                    subProjectId={subProjectId}
                     subProjects={subProjects}
                     categories={categories}
                     label={d.status === "ready" ? "Zkontrolovat" : d.status === "error" ? "Zkusit znovu" : "Přečíst doklad"}

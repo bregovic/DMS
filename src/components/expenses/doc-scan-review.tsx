@@ -36,6 +36,7 @@ export function DocScanReview({
   scanId,
   documentId,
   projectId,
+  subProjectId: vychoziSub = null,
   subProjects = [],
   categories,
   label = "Zkontrolovat doklad",
@@ -46,6 +47,8 @@ export function DocScanReview({
   scanId: string | null;
   documentId: string | null;
   projectId: string | null;
+  /** Otevřená složka projektu – předvyplní zařazení dokladu. */
+  subProjectId?: string | null;
   subProjects?: { id: string; name: string }[];
   categories: { key: string; label: string }[];
   label?: string;
@@ -121,8 +124,8 @@ export function DocScanReview({
         vatBase: String(r.totalBase ?? ""),
         vatAmount: String(r.totalVat ?? ""),
         category: issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"),
-        subProjectId: r.subProjectId ?? "",
-        zarazeni: r.projectId ? `${r.projectId}:${r.subProjectId ?? ""}` : "",
+        subProjectId: r.subProjectId ?? vychoziSub ?? "",
+        zarazeni: r.projectId ? `${r.projectId}:${r.subProjectId ?? vychoziSub ?? ""}` : "",
         deductible: "1",
         paid: r.docType === "receipt" ? "1" : "0",
       });

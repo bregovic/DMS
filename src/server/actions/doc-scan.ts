@@ -709,6 +709,8 @@ export async function myReceipts() {
  */
 export async function applyReadyScans(formData: FormData) {
   const projectId = String(formData.get("projectId"));
+  // Složka, ve které uživatel doklady zakládá (kořen projektu = prázdné).
+  const vychoziSub = String(formData.get("subProjectId") || "");
   const user = await requireUser();
   const role = await getProjectRole(projectId, user);
   if (!canWrite(role)) return { error: "Nemáš oprávnění." };
@@ -775,6 +777,7 @@ export async function applyReadyScans(formData: FormData) {
       put("category", issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"));
       put("deductible", "1");
       put("paid", r.docType === "receipt" ? "1" : "0");
+      put("subProjectId", r.subProjectId ?? vychoziSub);
       fd.set("vatRows", JSON.stringify(r.vatBreakdown ?? []));
       fd.set("items", JSON.stringify(r.items ?? []));
       await applyDocScan(fd);

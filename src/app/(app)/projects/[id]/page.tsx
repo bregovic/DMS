@@ -38,6 +38,7 @@ import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-di
 import { EditTaskForm } from "@/components/tasks/edit-task-form";
 import { parseStatusFilter } from "@/lib/list-filter";
 import { extractable } from "@/server/extraction";
+import { payeeAccounts } from "@/server/payee";
 import { RememberProject } from "@/components/projects/remember-project";
 import { TodoList } from "@/components/tasks/todo-list";
 import { UploadDialog } from "@/components/documents/upload-dialog";
@@ -115,7 +116,7 @@ export default async function ProjectDetailPage({
         expenses: {
           orderBy: [{ status: "desc" }, { date: "desc" }],
           include: {
-            vendor: { select: { id: true, name: true, bankAccount: true } },
+            vendor: { select: { id: true, name: true, email: true, bankAccount: true } },
             createdBy: { select: { name: true, email: true } },
             documents: {
               select: { id: true, originalName: true, mimeType: true },
@@ -735,6 +736,8 @@ export default async function ProjectDetailPage({
     .map(([value, label]) => ({ value, label: label ?? value }))
     .sort((a, b) => a.label.localeCompare(b.label, "cs"));
 
+  const ucetDodavatele = await payeeAccounts(shownExpenses.map((e) => e.vendor));
+
   const expenseItems = shownExpenses.map((e) => ({
     id: e.id,
     title: e.title,
@@ -752,7 +755,7 @@ export default async function ProjectDetailPage({
     exported: !!e.exportedAt,
     dueLabel: e.dueDate ? formatDate(e.dueDate) : null,
     overdue: !isExpensePaid(e.stage) && !!e.dueDate && new Date(e.dueDate) < todayStart,
-    hasBank: Boolean(e.vendor?.bankAccount),
+    hasBank: Boolean(ucetDodavatele(e.vendor)),
     docs: e.documents.map((d) => ({ id: d.id, originalName: d.originalName, mimeType: d.mimeType })),
     createdByLabel: e.createdBy.name ?? e.createdBy.email ?? "?",
     edit: {
@@ -1179,6 +1182,7 @@ export default async function ProjectDetailPage({
           projectId={project.id}
           projectName={project.name}
           canScan={canScanDocs}
+          subProjectId={sub}
           categories={categories.map((c) => ({ key: c.key, label: c.label }))}
           subProjects={project.subProjects.map((x) => ({ id: x.id, name: x.name }))}
           docs={inboxDocs}
