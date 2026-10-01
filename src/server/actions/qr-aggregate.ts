@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getProjectAccess, managedProjectIds } from "@/server/access";
 import { buildSpd, resolveIban } from "@/lib/payment";
 import { isExpensePaid } from "@/lib/constants";
+import { payeeAccounts } from "@/server/payee";
 
 export type QrGroup = {
   accountLabel: string; // původní účet dodavatele (nebo IBAN)
@@ -45,10 +46,12 @@ export async function aggregateExpensesQr(
   const expenses = await prisma.expense.findMany({
     where: { id: { in: idList }, ...(projectId ? { projectId } : { projectId: { in: scope! } }) },
     include: {
-      vendor: { select: { name: true, bankAccount: true } },
+      vendor: { select: { name: true, email: true, bankAccount: true } },
     },
   });
   if (expenses.length === 0) return { error: "Nebyly vybrány žádné výdaje." };
+
+  const ucetDodavatele = await payeeAccounts(expenses.map((e) => e.vendor));
 
   let skippedPaid = 0;
   const skippedNoBank: string[] = [];
@@ -72,7 +75,8 @@ export async function aggregateExpensesQr(
       skippedPaid++;
       continue;
     }
-    const iban = resolveIban(e.vendor?.bankAccount);
+    const ucet = ucetDodavatele(e.vendor);
+    const iban = resolveIban(ucet);
     if (!iban) {
       skippedNoBank.push(e.title);
       continue;
@@ -82,7 +86,7 @@ export async function aggregateExpensesQr(
       map.get(key) ??
       {
         iban,
-        accountLabel: e.vendor?.bankAccount ?? iban,
+        accountLabel: ucet ?? iban,
         vendorName: e.vendor?.name ?? "—",
         currency: e.currency,
         amount: 0,

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { buildSpd, resolveIban } from "@/lib/payment";
+import { payeeAccount } from "@/server/payee";
 
 export async function GET(
   _req: NextRequest,
@@ -19,11 +20,11 @@ export async function GET(
 
   const e = await prisma.expense.findFirst({
     where: { id, project: access },
-    include: { vendor: { select: { bankAccount: true } } },
+    include: { vendor: { select: { email: true, bankAccount: true } } },
   });
   if (!e) return new Response("Not found", { status: 404 });
 
-  const iban = resolveIban(e.vendor?.bankAccount);
+  const iban = resolveIban(await payeeAccount(e.vendor));
   if (!iban) {
     return new Response("Dodavatel nemá platný bankovní účet.", { status: 400 });
   }

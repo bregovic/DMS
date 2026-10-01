@@ -13,6 +13,7 @@ import { PAY_FORM_ID } from "@/lib/bulk-ids";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Prisma } from "@/generated/prisma/client";
+import { payeeAccounts } from "@/server/payee";
 
 export default async function PaymentsPage({
   searchParams,
@@ -75,10 +76,12 @@ export default async function PaymentsPage({
     where,
     include: {
       project: { select: { id: true, name: true } },
-      vendor: { select: { name: true, bankAccount: true } },
+      vendor: { select: { name: true, email: true, bankAccount: true } },
     },
     orderBy,
   });
+
+  const ucetDodavatele = await payeeAccounts(expenses.map((e) => e.vendor));
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const unpaidTotal = expenses
@@ -221,7 +224,7 @@ export default async function PaymentsPage({
                   paid={isExpensePaid(e.stage)}
                   dueLabel={e.dueDate ? formatDate(e.dueDate) : null}
                   overdue={!!e.dueDate && new Date(e.dueDate) < todayStart}
-                  hasBank={Boolean(e.vendor?.bankAccount)}
+                  hasBank={Boolean(ucetDodavatele(e.vendor))}
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
