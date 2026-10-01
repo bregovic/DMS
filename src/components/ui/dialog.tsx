@@ -23,7 +23,8 @@ const WIDTH = {
  *
  * - na telefonu přes celou obrazovku, na počítači karta uprostřed
  * - hlavička (titulek, ✕) zůstává při rolování nahoře
- * - DialogFooter drží Zrušit / Uložit přilepené dole
+ * - DialogFooter drží Zrušit / Uložit přilepené dole, i když je na telefonu
+ *   vytažená klávesnice (výška dialogu se bere z visualViewport)
  * - Esc zavře, pod dialogem se neroluje stránka
  * - klik mimo zavře jen tehdy, když stisk i puštění myši byly mimo
  *   (tažení při označování textu dialog nezavře) – viz ModalBackdrop
@@ -77,12 +78,37 @@ export function Dialog({
     };
   }, [titleId]);
 
+  /* S otevřenou klávesnicí se „fixed inset-0" pořád počítá na celou výšku
+     okna, takže přilepená patička (Uložit) zůstane schovaná pod klávesnicí.
+     Rozměry proto bere z visualViewport, který klávesnici zahrnuje. */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const apply = () => {
+      root.style.setProperty("--vv-h", `${vv.height}px`);
+      root.style.setProperty("--vv-t", `${vv.offsetTop}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+      // poslední zavřený dialog uklidí i proměnné
+      if (openStack.length === 0) {
+        root.style.removeProperty("--vv-h");
+        root.style.removeProperty("--vv-t");
+      }
+    };
+  }, []);
+
   if (!mounted) return null;
 
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-stone-950/30 sm:p-4 sm:py-12"
+      className="fixed left-0 right-0 top-[var(--vv-t,0px)] z-50 flex h-[var(--vv-h,100dvh)] items-start justify-center overflow-y-auto overscroll-contain bg-stone-950/30 sm:p-4 sm:py-12"
     >
       {/* patička počítá se zapuštěním do obsahu s p-5; když visí přímo
           v dialogu, záporné okraje se zruší, ať nepřečnívá přes okraj */}
