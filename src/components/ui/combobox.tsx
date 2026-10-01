@@ -22,7 +22,7 @@ export function Combobox({
   allowEmpty?: boolean;
   emptyLabel?: string;
   onSelect?: (item: ComboItem | null) => void;
-  // Předvyplněnou hodnotu při prvním kliknutí vynuluje, ať se hledá od začátku.
+  // Předvyplněnou hodnotu při prvním kliknutí označí, ať ji psaní přepíše.
   clearOnFocus?: boolean;
   /** Nabídka nad polem (pro lišty u spodního okraje). */
   dropUp?: boolean;
@@ -66,11 +66,11 @@ export function Combobox({
           setTouched(true);
           setOpen(true);
         }}
-        onFocus={() => {
-          // Předvyplněnou (nedotčenou) hodnotu při prvním kliknutí vynuluj → čisté hledání.
+        onFocus={(e) => {
+          // Předvyplněnou (nedotčenou) hodnotu označ – psaní ji přepíše, ale
+          // když uživatel jen proklikne dál, předvolba zůstane vybraná.
           if (clearOnFocus && !touched && query) {
-            setQuery("");
-            setId("");
+            e.currentTarget.select();
             setTouched(true);
           }
           setOpen(true);

@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createExpense } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SuggestInput } from "@/components/ui/suggest-input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
@@ -86,7 +87,6 @@ export function NewExpenseForm({
   const [subProject, setSubProject] = useState(
     subProjectId || d.subProjectId || "",
   );
-  const titleListId = useId();
 
   if (!open) {
     return (
@@ -129,6 +129,7 @@ export function NewExpenseForm({
                   currency: String(fd.get("currency") || ""),
                   amountMode: String(fd.get("amountMode") || ""),
                   subProjectId: String(fd.get("subProjectId") || ""),
+                  vendorId: String(fd.get("vendorId") || ""),
                 }),
               );
             } catch {}
@@ -169,22 +170,14 @@ export function NewExpenseForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="title">Název / popis činnosti</Label>
-            <Input
+            <SuggestInput
               id="title"
               name="title"
               placeholder="Např. Zdění příčky"
               required
               autoFocus
-              autoComplete="off"
-              list={titleSuggestions.length ? titleListId : undefined}
+              suggestions={titleSuggestions}
             />
-            {titleSuggestions.length > 0 && (
-              <datalist id={titleListId}>
-                {titleSuggestions.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            )}
           </div>
 
           {subProjects.length > 0 && (
