@@ -445,7 +445,7 @@ export function GanttChart({
           <button
             type="button"
             onClick={scrollToToday}
-            className="h-8 cursor-pointer border border-stone-300 px-3 text-xs text-stone-600 hover:border-stone-950"
+            className="h-11 cursor-pointer border border-stone-300 px-3 text-xs sm:h-8 text-stone-600 hover:border-stone-950"
           >
             Dnes
           </button>

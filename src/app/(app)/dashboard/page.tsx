@@ -178,7 +178,7 @@ export default async function DashboardPage({
         </label>
         <button
           type="submit"
-          className="h-8 cursor-pointer border border-stone-300 px-3 text-xs text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+          className="h-11 cursor-pointer border border-stone-300 px-3 text-xs sm:h-8 text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
         >
           Filtrovat
         </button>

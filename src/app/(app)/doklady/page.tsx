@@ -462,7 +462,7 @@ export default async function DocsPage({
             placeholder="Hledat číslo dokladu nebo protistranu…"
             className="h-9 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:w-80"
           />
-          <button type="submit" className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950">
+          <button type="submit" className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 sm:h-9">
             Hledat
           </button>
           {q && (

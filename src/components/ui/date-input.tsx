@@ -179,6 +179,9 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
             className={cn(
               "flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-base text-stone-950 transition-colors focus-visible:border-stone-950 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
               className,
+              // volající si někde zmenšuje výšku (h-8 ve filtrech); na prst
+              // musí zůstat 44 px, proto min-height, které se nepřebije
+              "min-h-11 sm:min-h-0",
             )}
           />
         </div>

@@ -179,7 +179,7 @@ export default async function ProjectPlanningPage({
     <div className="mx-auto max-w-7xl">
       <Link
         href={backHref}
-        className="inline-flex items-center gap-1.5 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
+        className="inline-flex min-h-9 items-center gap-1.5 text-xs text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline sm:min-h-0"
       >
         <ArrowLeft className="size-3.5" />
         {currentSub ? currentSub.name : project.name}

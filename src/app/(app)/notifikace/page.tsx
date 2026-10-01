@@ -44,7 +44,7 @@ export default async function NotificationsPage() {
         </div>
         {unreadIds.length > 0 && (
           <form action={markAllRead}>
-            <button type="submit" className="h-8 cursor-pointer border border-stone-300 px-3 text-xs text-stone-700 hover:border-stone-950">
+            <button type="submit" className="h-11 cursor-pointer border border-stone-300 px-3 text-xs sm:h-8 text-stone-700 hover:border-stone-950">
               Označit vše jako přečtené
             </button>
           </form>

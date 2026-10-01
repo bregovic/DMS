@@ -192,7 +192,7 @@ export function ReceiptScan({
                       type="button"
                       disabled={busy}
                       onClick={() => send([{ file: pending.original }])}
-                      className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60"
+                      className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
                     >
                       Přesto odeslat
                     </button>
@@ -212,7 +212,7 @@ export function ReceiptScan({
                         type="button"
                         disabled={busy}
                         onClick={() => send([{ file: pending.original, crop: false }])}
-                        className="h-9 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60"
+                        className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
                       >
                         Bez ořezu
                       </button>

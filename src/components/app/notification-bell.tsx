@@ -25,7 +25,7 @@ export function NotificationBell({ initial }: { initial: number }) {
       href="/notifikace"
       title={count ? `Oznámení (${count} nových)` : "Oznámení"}
       aria-label={count ? `Oznámení, ${count} nových` : "Oznámení"}
-      className="relative flex size-9 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
+      className="relative flex size-11 items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white sm:size-9"
     >
       <Bell className="size-4" />
       {count > 0 && (
