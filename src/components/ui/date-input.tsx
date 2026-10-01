@@ -15,6 +15,9 @@ import { cn } from "@/lib/utils";
  * Ven se pořád posílá ISO (RRRR-MM-DD) skrytým polem s `name`, aby serverové
  * akce i FormData fungovaly beze změny. Kalendář z prohlížeče zůstává
  * dostupný přes ikonu.
+ *
+ * Na dotykovém zařízení se místo psaní ukáže rovnou nativní pole s datem –
+ * telefon na něj má vlastní kalendář a ten je palcem rychlejší než číslice.
  */
 
 /** Číslice na „DD.MM.RRRR" – tečky se doplňují průběžně při psaní. */
@@ -107,6 +110,13 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
     textRef.current = text;
     const boxRef = React.useRef<HTMLDivElement>(null);
 
+    /* Dotykové zařízení pozná až prohlížeč, proto se to zjišťuje po připojení
+       (na serveru by se vykreslilo něco jiného než na klientovi). */
+    const [dotykove, setDotykove] = React.useState(false);
+    React.useEffect(() => {
+      setDotykove(window.matchMedia("(pointer: coarse)").matches);
+    }, []);
+
     // u řízeného pole přijmout změnu zvenčí, ale nepřepisovat rozepsané psaní
     React.useEffect(() => {
       if (controlled && toIso(text) !== value) setText(fromIso(value));
@@ -149,6 +159,30 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
     };
 
     const iso = toIso(text);
+
+    if (dotykove)
+      return (
+        <div ref={boxRef} className="relative">
+          {name && <input ref={hiddenRef} type="hidden" name={name} value={iso} />}
+          <input
+            {...rest}
+            ref={ref}
+            id={id}
+            type="date"
+            disabled={disabled}
+            required={required}
+            value={iso}
+            onChange={(e) => {
+              push(fromIso(e.target.value));
+              onCommit?.(e.target.value);
+            }}
+            className={cn(
+              "flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-base text-stone-950 transition-colors focus-visible:border-stone-950 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+              className,
+            )}
+          />
+        </div>
+      );
 
     return (
       <div ref={boxRef} className="relative">
