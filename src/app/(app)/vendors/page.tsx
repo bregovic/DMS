@@ -8,15 +8,40 @@ import { NewVendorForm } from "@/components/vendors/new-vendor-form";
 import { EditVendorForm } from "@/components/vendors/edit-vendor-form";
 import { VendorAvailabilityDialog } from "@/components/vendors/vendor-availability-dialog";
 import { deleteVendor } from "@/server/actions/vendors";
-import { vendorCategoryLabel } from "@/lib/constants";
+import { VENDOR_CATEGORIES, vendorCategoryLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { ListFilters } from "@/components/ui/list-filters";
 
-export default async function VendorsPage() {
+export default async function VendorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
+  const str = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
+  const q = str(sp.dq).trim();
+  const kategorie = str(sp.dcat);
+  const sort = str(sp.dsort) || "name";
+  const dir = str(sp.ddir) === "desc" ? "desc" : "asc";
 
-  const [vendors, totals] = await Promise.all([
+  const [vendors, totals, kategorie_vsechny] = await Promise.all([
     prisma.vendor.findMany({
-      where: { ownerId: user.id },
+      where: {
+        ownerId: user.id,
+        ...(kategorie ? { category: kategorie } : {}),
+        // hledá se všude, kde dodavatele poznáš: název, e-mail, IČO, popis
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { email: { contains: q, mode: "insensitive" } },
+                { ico: { contains: q.replace(/\D/g, "") || q } },
+                { description: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { name: "asc" },
       include: { _count: { select: { expenses: true, projects: true } } },
     }),
@@ -25,9 +50,24 @@ export default async function VendorsPage() {
       where: { project: { ownerId: user.id } },
       _sum: { amount: true },
     }),
+    // Kategorie do filtru se berou z celé evidence, ne z vyfiltrovaného
+    // výsledku – jinak by zvolená kategorie zůstala jediná na výběr.
+    prisma.vendor.groupBy({ by: ["category"], where: { ownerId: user.id } }),
   ]);
 
   const totalByVendor = new Map(totals.map((t) => [t.vendorId, Number(t._sum.amount ?? 0)]));
+  const spentOf = (id: string) => totalByVendor.get(id) ?? 0;
+  const znak = dir === "asc" ? 1 : -1;
+  const shown = [...vendors].sort((a, b) =>
+    sort === "spent"
+      ? (spentOf(a.id) - spentOf(b.id)) * znak
+      : sort === "expenses"
+        ? (a._count.expenses - b._count.expenses) * znak
+        : a.name.localeCompare(b.name, "cs") * znak,
+  );
+  const filtrovano = Boolean(q || kategorie);
+  // Nabízí se jen kategorie, které v evidenci opravdu jsou.
+  const pritomne = new Set(kategorie_vsechny.map((r) => r.category));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -36,14 +76,41 @@ export default async function VendorsPage() {
         <NewVendorForm />
       </header>
 
-      {vendors.length === 0 ? (
+      <ListFilters
+        prefix="d"
+        placeholder="Hledat podle názvu, e-mailu nebo IČO…"
+        dates={false}
+        sortOptions={[
+          { value: "name", label: "Název" },
+          { value: "spent", label: "Utraceno" },
+          { value: "expenses", label: "Počet výdajů" },
+        ]}
+        selects={[
+          {
+            key: "cat",
+            label: "Kategorie",
+            chips: true,
+            allLabel: "Všechny",
+            options: VENDOR_CATEGORIES.filter((c) => pritomne.has(c.value)).map((c) => ({
+              value: c.value,
+              label: c.label,
+            })),
+          },
+        ]}
+      />
+
+      {shown.length === 0 ? (
         <EmptyState
-          title="Žádní dodavatelé"
-          description="Přidej prvního dodavatele tlačítkem výše."
+          title={filtrovano ? "Nic neodpovídá filtru" : "Žádní dodavatelé"}
+          description={
+            filtrovano
+              ? "Zkus jiný výraz nebo zruš kategorii."
+              : "Přidej prvního dodavatele tlačítkem výše."
+          }
         />
       ) : (
         <ul className="border-t border-stone-300/80">
-          {vendors.map((v) => {
+          {shown.map((v) => {
             const spent = totalByVendor.get(v.id) ?? 0;
             return (
               <li
