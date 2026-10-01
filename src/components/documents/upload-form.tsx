@@ -20,6 +20,7 @@ export function UploadForm({
   types,
   defaultType = "other",
   compact = false,
+  onUploaded,
 }: {
   projectId: string;
   types: DocType[];
@@ -27,6 +28,8 @@ export function UploadForm({
   defaultType?: string;
   /** Kompaktní režim – jen řádek s výběrem a tlačítkem. */
   compact?: boolean;
+  /** Kolik souborů prošlo a kolik selhalo – volající podle toho zavře dialog. */
+  onUploaded?: (vysledek: { ok: number; failed: number }) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -63,6 +66,7 @@ export function UploadForm({
     if (failed.length) setError(failed.join(" · "));
     if (inputRef.current) inputRef.current.value = "";
     setNewType("");
+    onUploaded?.({ ok: files.length - failed.length, failed: failed.length });
   }
 
   return (

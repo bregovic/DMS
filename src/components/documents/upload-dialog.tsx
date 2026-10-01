@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { UploadForm } from "@/components/documents/upload-form";
 
 /**
@@ -29,6 +30,10 @@ export function UploadDialog({
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const zavrit = () => {
+    setOpen(false);
+    router.refresh();
+  };
   const cls =
     variant === "primary"
       ? "border-stone-950 bg-stone-950 text-white hover:bg-stone-800"
@@ -44,18 +49,25 @@ export function UploadDialog({
         {label}
       </button>
       {open && (
-        <Dialog
-          title={title}
-          size="lg"
-          onClose={() => {
-            setOpen(false);
-            router.refresh();
-          }}
-        >
+        <Dialog title={title} size="lg" onClose={zavrit}>
           <div className="space-y-3 p-5">
             {hint && <p className="text-xs text-stone-500">{hint}</p>}
-            <UploadForm projectId={projectId} types={types} defaultType={defaultType} />
+            <UploadForm
+              projectId={projectId}
+              types={types}
+              defaultType={defaultType}
+              // Nahráno bez chyby = hotovo, dialog nemá co dál nabízet.
+              // Když něco selhalo, zůstane otevřený s hláškou.
+              onUploaded={({ failed }) => {
+                if (!failed) zavrit();
+              }}
+            />
           </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={zavrit}>
+              Hotovo
+            </Button>
+          </DialogFooter>
         </Dialog>
       )}
     </>
