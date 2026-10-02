@@ -122,7 +122,7 @@ export function ForecastReport({
         </p>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="hscroll overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-stone-300 text-left text-stone-500">

@@ -484,7 +484,7 @@ export default async function DocsPage({
             description="Nahraj účtenku nebo fakturu výše – systém ji přečte a připraví ke kontrole. Vystavené faktury z vykázané práce se sem přidají samy."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="hscroll overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">

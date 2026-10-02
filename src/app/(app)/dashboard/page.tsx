@@ -193,7 +193,7 @@ export default async function DashboardPage({
           a saldo. Dřív tu byly jen součty za všechno dohromady. */}
       {rows.length > 0 && (
         <section className="mb-12 border border-stone-200 bg-white shadow-soft">
-          <div className="-mx-px overflow-x-auto">
+          <div className="hscroll -mx-px overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-stone-200 text-left">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { StickyNote } from "lucide-react";
 import { createTextNote } from "@/server/actions/documents";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 /** Nová textová poznámka k dokumentaci projektu (používá ji i plánování). */
 export function TextNoteForm({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
+  const focus = useAutoFocus<HTMLTextAreaElement>(open);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -44,10 +46,10 @@ export function TextNoteForm({ projectId }: { projectId: string }) {
               className="flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
             />
             <textarea
+              ref={focus}
               name="text"
               rows={10}
               required
-              autoFocus
               placeholder={"Např.\n– střecha plochá místo sedlové\n– okna Kömmerling 76, trojsklo\n– zednické práce svépomocí\n– elektro bez rozvodů v podlaze"}
               className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
             />

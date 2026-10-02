@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Mail, Paperclip, Sparkles, Upload } from "lucide-react";
 import { attachRequestFiles, deleteDocument } from "@/server/actions/documents";
@@ -30,6 +31,7 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
+  const focus = useAutoFocus<HTMLTextAreaElement>(ask);
   if (!d.canExtract) return null;
 
   // Spuštění s volitelným pokynem („je to technický list“, „jen položky HS portálu“…).
@@ -59,9 +61,9 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
         <label className="block text-xs text-stone-500">
           Upřesnění (volitelné)
           <textarea
+            ref={focus}
             name="instructions"
             rows={3}
-            autoFocus
             placeholder="Např. je to technický list k HS portálu; nebo: nabídka platí jen pro okna v přízemí"
             className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"
           />

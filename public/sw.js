@@ -1,7 +1,15 @@
 // Minimální service worker – kvůli instalovatelnosti PWA.
-const CACHE = "dms-shell-v2";
+const CACHE = "dms-shell-v3";
+const OFFLINE = "/offline";
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
+  // stránka pro stav bez připojení se musí uložit dopředu
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.add(new Request(OFFLINE, { cache: "reload" })))
+      .catch(() => {}),
+  );
   self.skipWaiting();
 });
 
@@ -22,7 +30,20 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   // HTML navigace necacheovat (vždy ze sítě) – ať se data needrží zastaralá.
-  if (req.mode === "navigate") return;
+  // Když síť není, podstrčíme vlastní stránku místo chyby prohlížeče.
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req).catch(
+        async () =>
+          (await caches.match(OFFLINE)) ||
+          new Response("Bez připojení.", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          }),
+      ),
+    );
+    return;
+  }
   // Ostatní GET: network-first s tichým fallbackem do cache.
   event.respondWith(
     fetch(req)

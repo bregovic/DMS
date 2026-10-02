@@ -86,7 +86,7 @@ export default async function MaterialsPage({
           {materials.length === 0 ? (
             <EmptyState title="Nic neodpovídá filtru" />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="hscroll overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-stone-300 text-left text-stone-500">

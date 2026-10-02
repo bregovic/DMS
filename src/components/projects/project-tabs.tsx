@@ -52,7 +52,7 @@ export function ProjectTabs({
   return (
     <nav
       aria-label="Sekce projektu"
-      className="-mx-4 mt-8 overflow-x-auto border-b border-stone-300/80 px-4 sm:mx-0 sm:px-0"
+      className="hscroll -mx-4 mt-8 overflow-x-auto border-b border-stone-300/80 px-4 [--hs-bg:#f4f3f0] sm:mx-0 sm:px-0"
     >
       <ul className="flex min-w-max gap-1">
         {tabs.map((t) => {

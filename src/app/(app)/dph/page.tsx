@@ -401,7 +401,7 @@ export default async function VatPage({
           {a4.length > 0 && (
             <section className="mb-8">
               <h2 className="kicker mb-1">Kontrolní hlášení · oddíl A.4 (vystavené doklady od {formatCurrency(KH_LIMIT)})</h2>
-              <div className="overflow-x-auto">
+              <div className="hscroll overflow-x-auto">
                 <table className="w-full min-w-[720px] text-xs">
                   <thead>
                     <tr className="border-b border-stone-300 text-left text-stone-500">
@@ -458,7 +458,7 @@ export default async function VatPage({
             {b2.length === 0 ? (
               <p className="text-sm text-stone-500">Žádný doklad do B.2.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="hscroll overflow-x-auto">
                 <table className="w-full min-w-[720px] text-xs">
                   <thead>
                     <tr className="border-b border-stone-300 text-left text-stone-500">

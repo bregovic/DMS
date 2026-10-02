@@ -1237,7 +1237,7 @@ export default async function ProjectDetailPage({
               Porovnává jednotkové ceny z dokladů (přepočtené na ceny s DPH) s ceníkem katalogu. Kladné číslo = nakoupeno
               dráž než ceník, záporné = levněji. Když je položka soustavně dražší, může být zastaralá cena v katalogu.
             </p>
-            <div className="mt-3 overflow-x-auto">
+            <div className="hscroll mt-3 overflow-x-auto">
               <table className="w-full min-w-[640px] text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-left text-stone-500">

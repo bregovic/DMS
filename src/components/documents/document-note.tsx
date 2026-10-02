@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { MessageSquare } from "lucide-react";
 import { updateDocumentNote } from "@/server/actions/documents";
 
@@ -11,6 +12,7 @@ import { updateDocumentNote } from "@/server/actions/documents";
 export function DocumentNote({ id, note, canEdit }: { id: string; note: string | null; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const focus = useAutoFocus<HTMLTextAreaElement>(open);
 
   if (!open)
     return note ? (
@@ -49,9 +51,9 @@ export function DocumentNote({ id, note, canEdit }: { id: string; note: string |
     >
       <input type="hidden" name="id" value={id} />
       <textarea
+        ref={focus}
         name="note"
         rows={3}
-        autoFocus
         defaultValue={note ?? ""}
         placeholder="Např. střecha místo sedlové plochá; okno v kuchyni posunuté o 40 cm; zateplení 200 mm místo 160 mm"
         className="flex w-full rounded-none border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"

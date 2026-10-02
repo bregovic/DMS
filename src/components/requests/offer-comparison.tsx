@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Scale } from "lucide-react";
 import { startBundleComparison, startComparison } from "@/server/actions/extraction";
@@ -43,6 +44,7 @@ export function OfferComparison({
 }) {
   const router = useRouter();
   const [ask, setAsk] = useState(false);
+  const focus = useAutoFocus<HTMLTextAreaElement>(ask);
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -214,9 +216,9 @@ export function OfferComparison({
             <label className="block text-xs text-stone-500">
               Na co se zaměřit (volitelné)
               <textarea
+                ref={focus}
                 name="prompt"
                 rows={3}
-                autoFocus
                 defaultValue={comparison?.prompt ?? ""}
                 placeholder="Např. důraz na tepelnou izolaci (Uw) a záruku; montáž musí být v ceně; rozpočet do 200 tis."
                 className="mt-1 flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none"

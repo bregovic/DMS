@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { Clock, Paperclip } from "lucide-react";
 import { logTaskExpense } from "@/server/actions/my-tasks";
 import { prepareUpload } from "@/lib/client-upload";
@@ -39,6 +40,8 @@ export function LogTaskExpense({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const hodinyFocus = useAutoFocus<HTMLInputElement>(open && mode === "hours");
+  const castkaFocus = useAutoFocus<HTMLInputElement>(open && mode === "amount");
 
   const h = Number(hours.replace(",", "."));
   const r = Number(rate.replace(",", "."));
@@ -113,9 +116,9 @@ export function LogTaskExpense({
             <label className="block text-xs text-stone-600">
               Hodin
               <input
+                ref={hodinyFocus}
                 name="hours"
                 inputMode="decimal"
-                autoFocus
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
                 placeholder="např. 4,5"
@@ -142,7 +145,7 @@ export function LogTaskExpense({
           <div className="grid grid-cols-2 items-end gap-3">
             <label className="block text-xs text-stone-600">
               Částka Kč
-              <input name="amount" inputMode="decimal" autoFocus placeholder="např. 1 250" className={`${fieldClass} mt-1`} />
+              <input ref={castkaFocus} name="amount" inputMode="decimal" placeholder="např. 1 250" className={`${fieldClass} mt-1`} />
             </label>
             <label className="block text-xs text-stone-600">
               Hodin <span className="text-stone-400">(nepovinné)</span>
