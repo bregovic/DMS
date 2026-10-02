@@ -20,6 +20,7 @@ export function UploadForm({
   types,
   defaultType = "other",
   compact = false,
+  allowNewType = true,
   onUploaded,
 }: {
   projectId: string;
@@ -28,6 +29,8 @@ export function UploadForm({
   defaultType?: string;
   /** Kompaktní režim – jen řádek s výběrem a tlačítkem. */
   compact?: boolean;
+  /** Smí uživatel zavést nový typ dokumentu? (ve frontě dokladů ne) */
+  allowNewType?: boolean;
   /** Kolik souborů prošlo a kolik selhalo – volající podle toho zavře dialog. */
   onUploaded?: (vysledek: { ok: number; failed: number }) => void;
 }) {
@@ -82,7 +85,7 @@ export function UploadForm({
               {d.label}
             </option>
           ))}
-          <option value="__new__">+ Přidat typ…</option>
+          {allowNewType && <option value="__new__">+ Přidat typ…</option>}
         </select>
         {type === "__new__" && (
           <input

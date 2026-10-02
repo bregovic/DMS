@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyExpenseAdded } from "@/server/notify";
 import { deleteWithFiles } from "@/server/document-files";
 import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite, managedProjectIds } from "@/server/access";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { storage } from "@/lib/storage";
 import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
 import { claimedTotals } from "@/lib/vat";
@@ -52,6 +53,11 @@ export async function createExpense(formData: FormData) {
     });
     if (!sub) subProjectId = null;
   }
+
+  // Denní strop nahrávání ohlídat dřív, než vznikne výdaj – jinak by výdaj
+  // zůstal založený a akce spadla až na skenu.
+  const scan = formData.get("file");
+  if (scan instanceof File && scan.size > 0) await assertUploadQuota(user, projectId, scan.size);
 
   // Per-subprojekt přístup: smí přidávat jen do své složky (a jejích pod-složek)
   if (access.scopeSubIds) {

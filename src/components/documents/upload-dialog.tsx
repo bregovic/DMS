@@ -19,6 +19,7 @@ export function UploadDialog({
   title = "Nahrát dokumenty",
   hint,
   variant = "outline",
+  allowNewType = true,
 }: {
   projectId: string;
   types: { value: string; label: string }[];
@@ -27,6 +28,8 @@ export function UploadDialog({
   title?: string;
   hint?: string;
   variant?: "outline" | "primary";
+  /** Smí uživatel zavést nový typ dokumentu? (ve frontě dokladů ne) */
+  allowNewType?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -56,6 +59,7 @@ export function UploadDialog({
               projectId={projectId}
               types={types}
               defaultType={defaultType}
+              allowNewType={allowNewType}
               // Nahráno bez chyby = hotovo, dialog nemá co dál nabízet.
               // Když něco selhalo, zůstane otevřený s hláškou.
               onUploaded={({ failed }) => {

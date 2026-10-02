@@ -103,6 +103,7 @@ export function DocInbox({
           title="Nahrát účtenku nebo fakturu"
           hint="Přetáhni soubory sem nebo je vyber. Fotky se ořežou a narovnají."
           variant="primary"
+          allowNewType={false}
         />
         <ReceiptScan compact projects={[{ id: projectId, name: projectName, autoRead: false }]} initial={[]} />
         {canScan && readyClean.length > 0 && (

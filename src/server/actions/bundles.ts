@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { deleteWithFiles, bundleFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
@@ -265,6 +266,7 @@ export async function attachBundleOfferFile(formData: FormData) {
   if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
   if (file.size > 8 * 1024 * 1024) throw new Error("Soubor je větší než 8 MB.");
 
+  await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(buffer, file.name, `${bundleFolder(ownerId, projectId, offer.bundleId)}/nabidky`);
   await prisma.document.create({

@@ -7,6 +7,7 @@ import { notifyTaskAssigned } from "@/server/notify";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
 import { deleteWithFiles, requestFolder } from "@/server/document-files";
 import { storage } from "@/lib/storage";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { dropComparisons } from "@/server/comparisons";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -151,7 +152,7 @@ export async function updateOffer(formData: FormData) {
 // Příloha k nabídce (PDF/sken nabídky). Owner + aktivní dodavatel (svou nabídku).
 export async function attachOfferFile(formData: FormData) {
   const id = String(formData.get("id"));
-  const { offer, projectId, canEdit } = await offerCtx(id);
+  const { user, offer, projectId, canEdit } = await offerCtx(id);
   if (!canEdit) throw new Error("K této nabídce nemůžeš přidat přílohu.");
 
   const file = formData.get("file");
@@ -164,6 +165,7 @@ export async function attachOfferFile(formData: FormData) {
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
+  await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
     buffer,

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyExpenseAdded } from "@/server/notify";
 import { storage } from "@/lib/storage";
 import { canWrite, getProjectAccess } from "@/server/access";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { scheduleProject } from "@/server/schedule";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -78,6 +79,10 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
     const access = await getProjectAccess(task.projectId, user);
     if (!access || !canWrite(access.role)) throw new Error(`Na úkol „${task.title}“ nemůžeš vykazovat.`);
   }
+  // Denní strop nahrávání ohlídat dřív, než vznikne výdaj – jinak by výkaz
+  // zůstal založený a akce spadla až na příloze.
+  if (inp.files.length)
+    await assertUploadQuota(user, task.projectId, inp.files.reduce((a, f) => a + f.size, 0));
 
   let amount: number | null = null;
   const worked = !!inp.hours && inp.hours > 0;

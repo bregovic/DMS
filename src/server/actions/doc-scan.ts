@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { canWrite, getProjectRole, getTaskOnlyAccess, isManager, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { createDocScan, createMailScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
 import { AI_MODEL } from "@/server/extraction";
 import { Prisma } from "@/generated/prisma/client";
@@ -555,20 +556,6 @@ export async function vendorsForScan(projectId: string | null) {
  * dodavatel, který v projektu má jen přidělené úkoly. Soubor se uloží jako
  * příloha a rovnou se přečte; výdaj z něj založí správce po kontrole.
  */
-/** Vlastník a spolusprávci projektu – jim chodí oznámení o nových dokladech. */
-async function managerIds(projectId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { name: true, ownerId: true, memberships: { where: { role: "member" }, select: { email: true } } },
-  });
-  if (!project) return null;
-  const emails = project.memberships.map((m) => m.email);
-  const members = emails.length
-    ? await prisma.user.findMany({ where: { email: { in: emails, mode: "insensitive" } }, select: { id: true } })
-    : [];
-  return { name: project.name, ownerId: project.ownerId, ids: [project.ownerId, ...members.map((m) => m.id)] };
-}
-
 /** Smí tenhle člověk spustit vytěžení? Vlastník, spolusprávce, nebo komu to vlastník povolil. */
 async function mayScan(projectId: string, user: { id: string; email?: string | null }, role: string | null) {
   if (isManager(role)) return true;
@@ -595,6 +582,7 @@ export async function uploadReceipt(formData: FormData) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
   if (!project) throw new Error("Projekt nenalezen.");
   const docType = formData.get("type") === "invoice" ? "invoice" : "receipt";
+  await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(buffer, file.name, `${project.ownerId}/${projectId}/${docType}`);
   const doc = await prisma.document.create({
@@ -613,21 +601,8 @@ export async function uploadReceipt(formData: FormData) {
   // Doklady se nečtou samy – nahrají se a vytěžení se pouští v přehledu
   // (po jednom, nebo celá dávka). Správcům dáme vědět, že přibyl doklad.
   if (!isManager(role)) {
-    const mgr = await managerIds(projectId);
-    if (mgr) {
-      const { notifyUsers } = await import("@/server/notify");
-      await notifyUsers(
-        mgr.ids.filter((id) => id !== user.id),
-        {
-          kind: "doc_uploaded",
-          title: `Nový doklad od ${user.name ?? user.email ?? "dodavatele"}`,
-          body: `${mgr.name} · ${file.name}`,
-          href: "/doklady",
-          projectId,
-          dedupeKey: `docup:${doc.id}`,
-        },
-      );
-    }
+    const { notifyDocUploaded } = await import("@/server/notify");
+    await notifyDocUploaded(projectId, user, { id: doc.id, name: file.name });
   }
   revalidatePath("/ukoly");
   revalidatePath("/doklady");

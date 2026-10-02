@@ -263,3 +263,41 @@ export async function ensureReminders(user: { id: string; email?: string | null 
 export async function unreadCount(userId: string) {
   return prisma.notification.count({ where: { userId, readAt: null } });
 }
+
+/**
+ * Doklad nahraný někým, kdo ho nezpracovává (dodavatel). Vlastník a
+ * spolusprávci o něm musí vědět – přečtení a zaúčtování je na nich.
+ */
+export async function notifyDocUploaded(
+  projectId: string,
+  actor: { id: string; name?: string | null; email?: string | null },
+  doc: { id: string; name: string },
+) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      name: true,
+      ownerId: true,
+      memberships: { where: { role: "member" }, select: { email: true } },
+    },
+  });
+  if (!project) return;
+  const emails = project.memberships.map((m) => m.email);
+  const members = emails.length
+    ? await prisma.user.findMany({
+        where: { email: { in: emails, mode: "insensitive" } },
+        select: { id: true },
+      })
+    : [];
+  await notifyUsers(
+    [project.ownerId, ...members.map((m) => m.id)].filter((id) => id !== actor.id),
+    {
+      kind: "doc_uploaded",
+      title: `Nový doklad od ${actor.name ?? actor.email ?? "dodavatele"}`,
+      body: `${project.name} · ${doc.name}`,
+      href: "/doklady",
+      projectId,
+      dedupeKey: `docup:${doc.id}`,
+    },
+  );
+}

@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { getProjectRole, isManager, canWrite } from "@/server/access";
+import { assertUploadQuota } from "@/server/upload-quota";
 import { resolveDocTypeKey } from "@/server/document-types";
 import { emlSummary, parseEmlHeader } from "@/lib/eml";
 
@@ -85,6 +86,7 @@ export async function attachExpenseScan(formData: FormData) {
   if (!project) throw new Error("Projekt nenalezen.");
 
   const docType = String(formData.get("type") || "receipt");
+  await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
     buffer,
@@ -122,18 +124,26 @@ export async function uploadDocument(formData: FormData) {
     throw new Error("Soubor je větší než 14 MB.");
   }
 
-  // Vlastník i spolusprávce (dřív jen vlastník).
-  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Dokumenty projektu nahrává správce projektu.");
+  // Doklad (účtenka, faktura) nahraje i dodavatel – ten je na stavbě a má ho
+  // v ruce. Ostatní dokumentace projektu (smlouvy, revize, pojistky) i zakládání
+  // nového typu zůstává vlastníkovi a spolusprávci.
+  const rawType = String(formData.get("type") || "other");
+  const role = await getProjectRole(projectId, user);
+  const isReceipt = rawType === "receipt" || rawType === "invoice";
+  if (!isManager(role) && !(isReceipt && canWrite(role)))
+    throw new Error("Dokumenty projektu nahrává správce projektu.");
+
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { id: true, ownerId: true },
   });
   if (!project) throw new Error("Projekt nenalezen.");
 
-  let docType = String(formData.get("type") || "other");
+  let docType = rawType;
   if (docType === "__new__") {
     docType = await resolveDocTypeKey(String(formData.get("newType") || ""));
   }
+  await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
     buffer,
@@ -157,7 +167,13 @@ export async function uploadDocument(formData: FormData) {
 
   // Doklady se nečtou samy: nahrávají se průběžně a vytěžení se pouští
   // tlačítkem (po jednom, nebo celá dávka najednou) v přehledu dokladů.
+  // Doklad od dodavatele proto správcům ohlásíme, jinak by o něm nevěděli.
+  if (!isManager(role)) {
+    const { notifyDocUploaded } = await import("@/server/notify");
+    await notifyDocUploaded(projectId, user, { id: doc.id, name: doc.originalName });
+  }
 
+  revalidatePath("/doklady");
   revalidatePath(`/projects/${projectId}`);
 }
 
@@ -201,6 +217,7 @@ export async function attachRequestFiles(formData: FormData) {
   }
   const tooBig = files.find((f) => f.size > MAX_UPLOAD);
   if (tooBig) throw new Error(`Soubor „${tooBig.name}" je větší než 14 MB.`);
+  await assertUploadQuota(user, projectId, files.reduce((a, f) => a + f.size, 0));
 
   const [emailType, offerType] = await Promise.all([
     resolveDocTypeKey("E-mail"),
