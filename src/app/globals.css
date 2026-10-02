@@ -47,10 +47,12 @@ body {
    (scroll): jak se roluje, krytí stín odkryje. `--hs-bg` musí odpovídat
    podkladu (bílá karta, nebo pozadí stránky). */
 .hscroll {
-  --hs-bg: #fff;
+  /* Výchozí podklad je bílá karta; `[--hs-bg:…]` na prvku ji přebije.
+     Hodnota se bere jako fallback ve var() – deklarace by tu vyhrála nad
+     utilitou Tailwindu (pravidlo je mimo @layer). */
   background-image:
-    linear-gradient(to right, var(--hs-bg), transparent),
-    linear-gradient(to left, var(--hs-bg), transparent),
+    linear-gradient(to right, var(--hs-bg, #fff), transparent),
+    linear-gradient(to left, var(--hs-bg, #fff), transparent),
     linear-gradient(to right, rgba(41, 37, 36, 0.18), transparent),
     linear-gradient(to left, rgba(41, 37, 36, 0.18), transparent);
   background-position: left center, right center, left center, right center;
