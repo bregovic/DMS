@@ -35,7 +35,8 @@ function rateSlot(rate: number): 1 | 2 | 3 {
   return 3;
 }
 
-export async function buildKhXml(userId: string, period: KhPeriod, projectId?: string | null) {
+/** Kontrolní hlášení se podává za subjekt, ne za projekt – rozsah je vždy celý. */
+export async function buildKhXml(userId: string, period: KhPeriod) {
   const { year } = period;
   const from = period.quarter
     ? new Date(Date.UTC(year, (period.quarter - 1) * 3, 1))
@@ -72,7 +73,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     }),
     prisma.expense.findMany({
       where: {
-        projectId: projectId ? projectId : { in: scope },
+        projectId: { in: scope },
         deductible: true,
         OR: [
           { taxDate: { gte: from, lt: to } },
@@ -96,7 +97,7 @@ export async function buildKhXml(userId: string, period: KhPeriod, projectId?: s
     }),
     prisma.income.findMany({
       where: {
-        projectId: projectId ? projectId : { in: scope },
+        projectId: { in: scope },
         taxable: true,
         OR: [
           { taxDate: { gte: from, lt: to } },

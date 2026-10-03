@@ -22,13 +22,11 @@ export function FilingDialog({
   kind,
   period,
   year,
-  projectId,
   label,
 }: {
   kind: "dp3" | "kh";
   period: string;
   year: number;
-  projectId: string | null;
   label: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -43,14 +41,14 @@ export function FilingDialog({
     setData(null);
     setErr(null);
     setDone(null);
-    previewFiling(kind, period, year, projectId)
+    previewFiling(kind, period, year)
       .then(setData)
       .catch((e) => setErr(e instanceof Error ? e.message : "Náhled se nepodařilo načíst."));
-  }, [open, kind, period, year, projectId]);
+  }, [open, kind, period, year]);
 
   const info = data && !("error" in data) ? data : null;
   const ready = !!info && info.configured && !!info.recipient;
-  const xmlUrl = `/api/export/${kind === "dp3" ? "dp3" : "kh"}?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`;
+  const xmlUrl = `/api/export/${kind === "dp3" ? "dp3" : "kh"}?year=${year}&period=${period}`;
 
   return (
     <>
@@ -142,7 +140,7 @@ export function FilingDialog({
                   if (!window.confirm("Opravdu odeslat podání na finanční úřad? Odeslání nejde vzít zpět.")) return;
                   setBusy(true);
                   setErr(null);
-                  const res = await sendFiling(kind, period, year, projectId);
+                  const res = await sendFiling(kind, period, year);
                   setBusy(false);
                   if ("error" in res) setErr(res.error ?? "Odeslání selhalo.");
                   else {

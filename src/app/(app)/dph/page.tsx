@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FinanceNav } from "@/components/invoices/finance-nav";
 import { PeriodPicker } from "@/components/invoices/period-picker";
 import { FilingDialog } from "@/components/invoices/filing-dialog";
+import { ClaimToggle } from "@/components/invoices/claim-toggle";
+import { getExpenseCategories } from "@/server/expense-categories";
 import { buildDp3 } from "@/server/dp3-xml";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { amountCzk, rateMissing, vatRowsCzk, vatTotalsCzk } from "@/lib/vat";
@@ -37,7 +39,7 @@ function periodRange(period: string, year: number): [Date, Date, string] {
 export default async function VatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; year?: string; period?: string }>;
+  searchParams: Promise<{ project?: string; year?: string; period?: string; polozky?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
@@ -81,6 +83,19 @@ export default async function VatPage({
       project: { select: { id: true, name: true } },
       vendor: { select: { name: true, dic: true, ico: true } },
       documents: { select: { id: true }, take: 1 },
+      // Položky kvůli sekci Položky v nároku – nárok je po řádcích.
+      items: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          vatRate: true,
+          category: true,
+          deductible: true,
+          deductibleNote: true,
+        },
+      },
     },
   });
 
@@ -139,9 +154,49 @@ export default async function VatPage({
           await buildDp3(
             user.id,
             period.startsWith("q") ? { year, quarter: Number(period.slice(1)) } : { year, month: Number(period.replace("m", "")) },
-            projectId || null,
           )
         ).summary;
+
+  /* Položky dokladů v období: nárok je po řádcích, takže tady se dá projít,
+     co se uplatňuje a co ne, bez otevírání dokladu po dokladu. */
+  const jenNeuplatnene = sp?.polozky === "ne";
+  const polozky = expenses
+    .flatMap((e) =>
+      e.items.map((i) => ({
+        id: i.id,
+        description: i.description,
+        amount: Number(i.amount),
+        vatRate: i.vatRate != null ? Number(i.vatRate) : null,
+        category: i.category,
+        deductible: i.deductible,
+        note: i.deductibleNote,
+        docNumber: e.docNumber,
+        party: e.vendor?.name ?? e.title,
+        project: e.project.name,
+        date: e.taxDate ?? e.date,
+        /** Odškrtnutý celý doklad – jednotlivá položka s tím nic nespraví. */
+        docOff: !e.deductible,
+      })),
+    )
+    .filter((i) => !jenNeuplatnene || !i.deductible || i.docOff)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const catLabel = new Map((await getExpenseCategories()).map((c) => [c.key, c.label]));
+  const qs = (over: Record<string, string>) => {
+    const u = new URLSearchParams({
+      ...(projectId ? { project: projectId } : {}),
+      period,
+      year: String(year),
+      ...(jenNeuplatnene ? { polozky: "ne" } : {}),
+      ...over,
+    });
+    for (const [k, v] of [...u.entries()]) if (!v) u.delete(k);
+    return `/dph?${u.toString()}`;
+  };
+  const chip = (active: boolean) =>
+    `inline-flex min-h-9 items-center border px-2.5 py-0.5 text-[11px] uppercase tracking-wide transition-colors sm:min-h-0 ${
+      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
+    }`;
 
   const taxed = expenses.filter((e) => e.deductible && (e.vatAmount != null || e.vatBase != null));
   const skipped = expenses.filter((e) => !e.deductible && (e.vatAmount != null || e.vatBase != null));
@@ -201,7 +256,14 @@ export default async function VatPage({
       </header>
       <FinanceNav />
       <div className="mb-6 mt-6 flex flex-wrap items-end justify-between gap-3">
-        <p className="kicker">DPH · přijatá plnění podle DUZP · {periodLabel}</p>
+        <div>
+          <p className="kicker">DPH · přijatá plnění podle DUZP · {periodLabel}</p>
+          {projectId && (
+            <p className="mt-1 text-xs text-amber-700">
+              Seznam je zúžený na jeden projekt. Přiznání a hlášení se podávají za celou evidenci.
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/api/export/dph?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
@@ -211,7 +273,7 @@ export default async function VatPage({
           </Link>
           {period !== "rok" && (
             <Link
-              href={`/api/export/dp3?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+              href={`/api/export/dp3?year=${year}&period=${period}`}
               className="flex h-9 items-center border border-stone-950 bg-stone-950 px-3 text-sm text-white transition-colors hover:bg-stone-800"
             >
               XML přiznání k DPH
@@ -219,7 +281,7 @@ export default async function VatPage({
           )}
           {period !== "rok" && (
             <Link
-              href={`/api/export/kh?year=${year}&period=${period}${projectId ? `&project=${projectId}` : ""}`}
+              href={`/api/export/kh?year=${year}&period=${period}`}
               className="flex h-9 items-center border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
             >
               XML kontrolního hlášení
@@ -227,8 +289,8 @@ export default async function VatPage({
           )}
           {period !== "rok" && (
             <>
-              <FilingDialog kind="dp3" period={period} year={year} projectId={projectId || null} label="Podat přiznání" />
-              <FilingDialog kind="kh" period={period} year={year} projectId={projectId || null} label="Podat hlášení" />
+              <FilingDialog kind="dp3" period={period} year={year} label="Podat přiznání" />
+              <FilingDialog kind="kh" period={period} year={year} label="Podat hlášení" />
             </>
           )}
         </div>
@@ -272,6 +334,81 @@ export default async function VatPage({
               </table>
               <p className="mt-2 text-[11px] text-stone-400">
                 Vystavené doklady se poznají podle IČO a DIČ v Nastavení → Fakturace a daně; v přiznání jsou to řádky 1 a 2.
+              </p>
+            </section>
+          )}
+
+          {polozky.length > 0 && (
+            <section className="mb-8">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="kicker">Položky v nároku · {polozky.length}</h2>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <Link href={qs({ polozky: "" })} className={chip(!jenNeuplatnene)}>
+                    Vše
+                  </Link>
+                  <Link href={qs({ polozky: "ne" })} className={chip(jenNeuplatnene)}>
+                    Jen neuplatněné
+                  </Link>
+                </div>
+              </div>
+              <div className="hscroll overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-stone-300 text-left text-stone-500">
+                      <th className="w-10 py-2 pl-2 text-center font-medium">V&nbsp;nároku</th>
+                      <th className="py-2 font-medium">Položka</th>
+                      <th className="hidden py-2 font-medium sm:table-cell">Doklad</th>
+                      <th className="py-2 text-right font-medium">Částka</th>
+                      <th className="hidden py-2 text-right font-medium sm:table-cell">Sazba</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {polozky.map((i) => (
+                      <tr key={i.id} className={`border-b border-stone-100 ${i.deductible && !i.docOff ? "" : "text-stone-400"}`}>
+                        <td className="py-1.5 pl-2 text-center align-top">
+                          <ClaimToggle
+                            itemId={i.id}
+                            deductible={i.deductible && !i.docOff}
+                            label={i.description}
+                            disabled={i.docOff}
+                          />
+                        </td>
+                        <td className="max-w-[16rem] py-1.5 align-top">
+                          <span className="block truncate text-stone-900" title={i.description}>
+                            {i.description}
+                          </span>
+                          <span className="block truncate text-[11px] text-stone-400">
+                            {i.project}
+                            {i.category ? ` · ${catLabel.get(i.category) ?? i.category}` : ""}
+                            <span className="sm:hidden">
+                              {i.party ? ` · ${i.party}` : ""}
+                            </span>
+                          </span>
+                          {i.docOff ? (
+                            <span className="block text-[11px] text-amber-700">Odškrtnutý je celý doklad.</span>
+                          ) : (
+                            !i.deductible && i.note && <span className="block text-[11px] text-stone-500">{i.note}</span>
+                          )}
+                        </td>
+                        <td className="hidden max-w-[12rem] py-1.5 align-top text-stone-600 sm:table-cell">
+                          <span className="block truncate" title={i.party ?? undefined}>
+                            {i.party}
+                          </span>
+                          <span className="block text-[11px] text-stone-400">
+                            {i.docNumber ?? "—"} · {formatDate(i.date)}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">{formatCurrency(i.amount)}</td>
+                        <td className="hidden py-1.5 text-right align-top text-stone-500 sm:table-cell">
+                          {i.vatRate != null ? `${i.vatRate} %` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[11px] text-stone-400">
+                Odškrtnutím se krátí nárok z dokladu podílem, který na položku připadá.
               </p>
             </section>
           )}

@@ -631,6 +631,8 @@ model ExpenseItem {
   vatRate     Decimal? @db.Decimal(5, 2)
   /** Jde tahle položka do přiznání? Osobní spotřeba na dokladu se odškrtne. */
   deductible  Boolean  @default(true)
+  /** Proč položka v nároku není – aby šel návrh ověřit, ne jen odkliknout. */
+  deductibleNote String?
   /** Kategorie položky – doklad může mít víc druhů nákupu naráz. */
   category    String?
   // porovnání s katalogem (materiál nebo úkon)

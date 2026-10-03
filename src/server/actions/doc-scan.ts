@@ -387,6 +387,7 @@ export async function applyDocScan(formData: FormData) {
     vatRate: number | null;
     category?: string | null;
     deductible?: boolean;
+    deductibleNote?: string | null;
   }[];
   // Kategorie, kterou číselník nemá, se založí – z dialogu přijde jako "__new__:Název".
   const resolveCat = async (v: unknown, fallback: string) => {
@@ -506,6 +507,7 @@ export async function applyDocScan(formData: FormData) {
           vatRate: i.vatRate ?? null,
           category: i.category || null,
           deductible: i.deductible !== false,
+          deductibleNote: i.deductible === false ? i.deductibleNote || null : null,
         })),
       },
     },

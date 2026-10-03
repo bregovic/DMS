@@ -8,13 +8,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const year = Number(url.searchParams.get("year")) || new Date().getUTCFullYear();
   const period = url.searchParams.get("period") || `m${new Date().getUTCMonth() + 1}`;
-  const projectId = url.searchParams.get("project") || null;
   if (period === "rok") return new Response("Kontrolní hlášení se podává za měsíc nebo čtvrtletí.", { status: 400 });
 
   const { xml } = await buildKhXml(
     session.user.id,
     period.startsWith("q") ? { year, quarter: Number(period.slice(1)) } : { year, month: Number(period.replace("m", "")) },
-    projectId,
   );
   return new Response(xml, {
     headers: {

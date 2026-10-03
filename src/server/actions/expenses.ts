@@ -9,7 +9,7 @@ import { getProjectRole, getProjectAccess, expandScope, isManager, canWrite, man
 import { assertUploadQuota } from "@/server/upload-quota";
 import { storage } from "@/lib/storage";
 import { EXPENSE_PAID_STAGE, EXPENSE_TOPAY_STAGE } from "@/lib/constants";
-import { claimedTotals } from "@/lib/vat";
+import { prepocetNaroku } from "@/server/expense-claim";
 
 function num(v: FormDataEntryValue | null): number | null {
   if (v == null) return null;
@@ -270,47 +270,15 @@ export async function updateExpense(formData: FormData) {
   const variableSymbol =
     String(formData.get("variableSymbol") || "").trim() || null;
 
-  // Položky dokladu: kategorie a co jde do přiznání. Nárok se přepočítá
-  // z původního rozpisu dokladu, ne z toho, co je uložené – jinak by se
-  // jednou odškrtnutá položka nedala vrátit zpátky.
+  // Položky dokladu: kategorie a co jde do přiznání. Přepočet nároku je
+  // sdílený s přehledem DPH (server/expense-claim.ts).
   const itemsRaw = String(formData.get("items") || "");
-  type VatRow = { rate: number; base: number; vat: number };
-  let vat: { vatBase: number | null; vatAmount: number | null; vatBreakdown?: VatRow[] } | null = null;
-  if (itemsRaw) {
-    const upravene = JSON.parse(itemsRaw) as { id: string; category: string | null; deductible: boolean }[];
-    const doc = await prisma.expense.findUnique({
-      where: { id },
-      select: { vatBase: true, vatAmount: true, vatBaseDoc: true, vatAmountDoc: true, vatBreakdown: true, vatBreakdownDoc: true, items: true },
-    });
-    if (doc) {
-      const zmena = new Map(upravene.map((u) => [u.id, u]));
-      await prisma.$transaction(
-        doc.items
-          .filter((i) => zmena.has(i.id))
-          .map((i) =>
-            prisma.expenseItem.update({
-              where: { id: i.id },
-              data: { category: zmena.get(i.id)!.category || null, deductible: zmena.get(i.id)!.deductible },
-            }),
-          ),
-      );
-      const rows = (doc.vatBreakdownDoc ?? doc.vatBreakdown ?? []) as VatRow[];
-      const proPocet = doc.items.map((i) => ({
-        amount: Number(i.amount),
-        vatRate: i.vatRate != null ? Number(i.vatRate) : null,
-        deductible: zmena.get(i.id)?.deductible ?? i.deductible,
-      }));
-      const c = claimedTotals(rows, proPocet);
-      const plny = proPocet.every((i) => i.deductible);
-      const baseDoc = doc.vatBaseDoc != null ? Number(doc.vatBaseDoc) : doc.vatBase != null ? Number(doc.vatBase) : null;
-      const vatDoc = doc.vatAmountDoc != null ? Number(doc.vatAmountDoc) : doc.vatAmount != null ? Number(doc.vatAmount) : null;
-      vat = {
-        vatBase: plny ? baseDoc : c.base,
-        vatAmount: plny ? vatDoc : c.vat,
-        vatBreakdown: (plny ? rows : c.rows).length ? (plny ? rows : c.rows) : undefined,
-      };
-    }
-  }
+  const vat = itemsRaw
+    ? await prepocetNaroku(
+        id,
+        JSON.parse(itemsRaw) as { id: string; category: string | null; deductible: boolean }[],
+      )
+    : null;
 
   await prisma.expense.update({
     where: { id },
@@ -542,4 +510,30 @@ export async function getExpenseEditData(expenseId: string) {
       deductible: i.deductible,
     })),
   };
+}
+
+/**
+ * Zaškrtnutí nároku u jedné položky dokladu – z přehledu DPH, bez otevírání
+ * dokladu. Nárok dokladu se přepočítá stejně jako v úpravě výdaje.
+ */
+export async function setItemClaim(formData: FormData) {
+  const user = await requireUser();
+  const itemId = String(formData.get("itemId"));
+  const deductible = formData.get("deductible") === "1";
+
+  const item = await prisma.expenseItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, expense: { select: { id: true, projectId: true } } },
+  });
+  if (!item) throw new Error("Položka nenalezena.");
+  // Nárok je věc evidence vlastníka – mění ho jen vlastník a spolusprávce.
+  const ids = await managedProjectIds(user);
+  if (!ids.includes(item.expense.projectId)) throw new Error("Nemáš oprávnění.");
+
+  const patch = await prepocetNaroku(item.expense.id, [{ id: itemId, deductible }]);
+  if (patch) await prisma.expense.update({ where: { id: item.expense.id }, data: patch });
+
+  revalidatePath("/dph");
+  revalidatePath("/doklady");
+  revalidatePath(`/projects/${item.expense.projectId}`);
 }

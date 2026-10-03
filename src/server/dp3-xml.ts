@@ -41,7 +41,13 @@ export type Dp3Summary = {
   missing: string[];
 };
 
-export async function buildDp3(userId: string, period: Dp3Period, projectId?: string | null) {
+/**
+ * Přiznání k DPH se podává za subjekt, ne za projekt – rozsah je proto vždy
+ * celý (vlastní projekty + kde jsem spolusprávce). Dřív šel z přehledu
+ * poslat filtr na projekt a vzniklo nekompletní přiznání, které vypadalo
+ * normálně.
+ */
+export async function buildDp3(userId: string, period: Dp3Period) {
   const { year } = period;
   const from = period.quarter
     ? new Date(Date.UTC(year, (period.quarter - 1) * 3, 1))
@@ -82,11 +88,11 @@ export async function buildDp3(userId: string, period: Dp3Period, projectId?: st
       },
     }),
     prisma.expense.findMany({
-      where: { projectId: projectId ? projectId : { in: scope }, deductible: true, ...win },
+      where: { projectId: { in: scope }, deductible: true, ...win },
       select: { vatBase: true, vatAmount: true, vatBreakdown: true, currency: true, exchangeRate: true },
     }),
     prisma.income.findMany({
-      where: { projectId: projectId ? projectId : { in: scope }, taxable: true, ...win },
+      where: { projectId: { in: scope }, taxable: true, ...win },
       select: { vatBase: true, vatAmount: true, vatBreakdown: true, currency: true, exchangeRate: true },
     }),
   ]);

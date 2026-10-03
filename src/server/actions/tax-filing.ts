@@ -30,9 +30,10 @@ function periodLabel(period: string, year: number) {
   return period.startsWith("q") ? `${period.slice(1)}. čtvrtletí ${year}` : `${period.replace("m", "")}/${year}`;
 }
 
-async function build(kind: Kind, period: string, year: number, projectId: string | null, userId: string) {
+/** Podání je vždy za celý subjekt – filtr na projekt se do něj nepropisuje. */
+async function build(kind: Kind, period: string, year: number, userId: string) {
   if (kind === "dp3") {
-    const { xml, summary } = await buildDp3(userId, periodArg(period, year), projectId);
+    const { xml, summary } = await buildDp3(userId, periodArg(period, year));
     return {
       xml,
       missing: summary.missing,
@@ -43,7 +44,7 @@ async function build(kind: Kind, period: string, year: number, projectId: string
       ],
     };
   }
-  const kh = await buildKhXml(userId, periodArg(period, year), projectId);
+  const kh = await buildKhXml(userId, periodArg(period, year));
   return {
     xml: kh.xml,
     missing: kh.missing,
@@ -56,7 +57,8 @@ async function build(kind: Kind, period: string, year: number, projectId: string
 }
 
 /** Náhled podání: co odejde, komu a co ještě chybí. */
-export async function previewFiling(kind: Kind, period: string, year: number, projectId: string | null) {
+/** Podání je za celý subjekt, takže se neeviduje po projektech. */
+export async function previewFiling(kind: Kind, period: string, year: number) {
   const user = await requireUser();
   const me = await prisma.user.findUnique({
     where: { id: user.id },
@@ -64,12 +66,12 @@ export async function previewFiling(kind: Kind, period: string, year: number, pr
   });
   const cred = { login: me?.isdsLogin, password: decryptSecret(me?.isdsPassword), test: me?.isdsTest ?? false };
   const sent = await prisma.taxFiling.findFirst({
-    where: { userId: user.id, kind, year, period, projectId },
+    where: { userId: user.id, kind, year, period, projectId: null },
     orderBy: { sentAt: "desc" },
     select: { messageId: true, sentAt: true },
   });
   try {
-    const { missing, lines } = await build(kind, period, year, projectId, user.id);
+    const { missing, lines } = await build(kind, period, year, user.id);
     return {
       label: LABEL[kind],
       periodLabel: periodLabel(period, year),
@@ -87,7 +89,7 @@ export async function previewFiling(kind: Kind, period: string, year: number, pr
 }
 
 /** Odeslání podání do datové schránky finančního úřadu (po potvrzení). */
-export async function sendFiling(kind: Kind, period: string, year: number, projectId: string | null) {
+export async function sendFiling(kind: Kind, period: string, year: number) {
   const user = await requireUser();
   const me = await prisma.user.findUnique({
     where: { id: user.id },
@@ -102,7 +104,7 @@ export async function sendFiling(kind: Kind, period: string, year: number, proje
 
   let built;
   try {
-    built = await build(kind, period, year, projectId, user.id);
+    built = await build(kind, period, year, user.id);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Podání se nepodařilo připravit." };
   }
@@ -122,7 +124,7 @@ export async function sendFiling(kind: Kind, period: string, year: number, proje
       kind,
       year,
       period,
-      projectId,
+      projectId: null,
       recipient,
       messageId: res.messageId,
       summary: built.lines.join(" · ").slice(0, 500),
