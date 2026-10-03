@@ -232,16 +232,17 @@ export function photoQuality(src: ImageData): PhotoQuality {
   const sharpness = Math.round(Math.max(0, m2 / n - (m / n) ** 2));
   let level: PhotoQuality["level"] = "ok";
   let note: string | null = null;
+  // Hlášku drž na jedné krátké větě – co dělat, říká tlačítko pod ní.
   if (sharpness < BLUR_BAD) {
     level = "bad";
-    note = "Fotka je rozmazaná – text se nejspíš nepřečte. Zkus to znovu: doklad na rovnou plochu, kolmo shora a chvíli nehýbat.";
+    note = "Snímek je nečitelný.";
   } else if (sharpness < BLUR_SOFT) {
     level = "borderline";
-    note = "Fotka je trochu měkká. Půjde to, ale ostřejší snímek se přečte líp.";
+    note = "Snímek je měkčí, ale čitelný.";
   }
   if (level !== "bad" && brightness < 55) {
     level = "borderline";
-    note = "Fotka je dost tmavá – přisviť nebo odstup od stínu.";
+    note = "Snímek je tmavý, ale čitelný.";
   }
   return { sharpness, brightness: Math.round(brightness), level, note };
 }

@@ -60,7 +60,6 @@ export function ReceiptScan({
   // co se chystá odeslat – u fotky napřed náhled (ořez papíru a kontrola ostrosti)
   const [pending, setPending] = useState<{
     original: File;
-    ready: File;
     preview: string | null;
     cropped: boolean;
     quality: PhotoQuality | null;
@@ -89,7 +88,7 @@ export function ReceiptScan({
       setMsg(null);
       const r = await processDocumentPhoto(list[0], { crop: true });
       setBusy(false);
-      setPending({ original: list[0], ready: r.file, preview: r.preview, cropped: r.cropped, quality: r.quality });
+      setPending({ original: list[0], preview: r.preview, cropped: r.cropped, quality: r.quality });
       return;
     }
     await send(list.map((f) => ({ file: f })));
@@ -187,79 +186,72 @@ export function ReceiptScan({
       )}
 
       {pending && (
-        <div className="mt-3 border border-stone-200 p-3">
-          <div className="flex flex-wrap items-start gap-3">
-            {pending.preview && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={pending.preview} alt="Náhled dokladu" className="max-h-64 w-auto border border-stone-200" />
-            )}
-            <div className="min-w-0 flex-1 space-y-2 text-sm">
-              {pending.quality && (
-                <p className={`font-medium ${QUALITY_STYLE[pending.quality.level]}`}>
-                  {pending.quality.level === "ok" ? "Fotka je ostrá a čitelná." : pending.quality.note}
-                </p>
-              )}
-              <p className="text-stone-700">
-                {pending.cropped ? "Doklad jsem našel, ořízl a narovnal." : "Papír se nepodařilo najít – fotka se jen zmenšila."}
-                <span className="block text-xs text-stone-500">
-                  {Math.round(pending.original.size / 1024)} kB → {Math.round(pending.ready.size / 1024)} kB
-                </span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {bad ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        setPending(null);
-                        camRef.current?.click();
-                      }}
-                      className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
-                    >
-                      Vyfotit znovu
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => send([{ file: pending.original }])}
-                      className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
-                    >
-                      Přesto odeslat
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => send([{ file: pending.original }])}
-                      className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
-                    >
-                      Odeslat
-                    </button>
-                    {pending.cropped && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => send([{ file: pending.original, crop: false }])}
-                        className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
-                      >
-                        Bez ořezu
-                      </button>
-                    )}
-                  </>
-                )}
+        /* Náhled, hláška a tlačítka pod sebou – vedle sebe se to na telefonu rozsype. */
+        <div className="mt-3 space-y-3 border border-stone-200 p-3 text-sm">
+          {pending.preview && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={pending.preview}
+              alt="Náhled dokladu"
+              className="max-h-72 w-full border border-stone-200 object-contain"
+            />
+          )}
+          <p className={`font-medium ${QUALITY_STYLE[pending.quality?.level ?? "ok"]}`}>
+            {pending.quality?.note ?? "Snímek je v pořádku."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {bad ? (
+              <>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setPending(null)}
-                  className="h-9 cursor-pointer px-3 text-sm text-stone-500 hover:text-stone-950 disabled:opacity-60"
+                  onClick={() => {
+                    setPending(null);
+                    camRef.current?.click();
+                  }}
+                  className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
                 >
-                  Zahodit
+                  Vyfotit znovu
                 </button>
-              </div>
-            </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => send([{ file: pending.original }])}
+                  className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
+                >
+                  Přesto odeslat
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => send([{ file: pending.original }])}
+                  className="h-9 cursor-pointer border border-stone-950 bg-stone-950 px-3 text-sm text-white disabled:opacity-60"
+                >
+                  Odeslat
+                </button>
+                {pending.cropped && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => send([{ file: pending.original, crop: false }])}
+                    className="h-11 cursor-pointer border border-stone-300 px-3 text-sm text-stone-700 hover:border-stone-950 disabled:opacity-60 sm:h-9"
+                  >
+                    Bez ořezu
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setPending(null)}
+              className="h-9 cursor-pointer px-3 text-sm text-stone-500 hover:text-stone-950 disabled:opacity-60"
+            >
+              Zahodit
+            </button>
           </div>
         </div>
       )}
