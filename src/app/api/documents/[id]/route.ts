@@ -14,11 +14,28 @@ export async function GET(
 
   const { id } = await ctx.params;
   const email = session.user.email?.toLowerCase();
-  const projectAccess = email
-    ? { OR: [{ ownerId: session.user.id }, { memberships: { some: { email } } }] }
-    : { ownerId: session.user.id };
+  /**
+   * Kdo smí soubor otevřít:
+   *  - kdo ho nahrál (dodavatel se jen přidělenými úkoly členství nemá),
+   *  - vlastník projektu a člen celého projektu,
+   *  - člen složky, ve které doklad leží.
+   * Dřív stačilo jen vlastnictví nebo členství v projektu, takže nahrávající
+   * dodavatel dostal na svůj vlastní doklad 404.
+   */
   const doc = await prisma.document.findFirst({
-    where: { id, project: projectAccess },
+    where: {
+      id,
+      OR: [
+        { uploadedById: session.user.id },
+        { project: { ownerId: session.user.id } },
+        ...(email
+          ? [
+              { project: { memberships: { some: { email } } } },
+              { subProject: { memberships: { some: { email } } } },
+            ]
+          : []),
+      ],
+    },
   });
   if (!doc) return new Response("Not found", { status: 404 });
 

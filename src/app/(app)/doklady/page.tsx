@@ -42,6 +42,13 @@ type Row = {
   status: string;
   href: string;
   doc?: { id: string; name: string; mimeType: string } | null;
+  /**
+   * Přečtený doklad, ze kterého ještě nevznikl výdaj. Je v seznamu jako
+   * ostatní, jen se stavem „ke kontrole" a s akcemi místo mazání výdaje.
+   * Období ani filtry ho neschovají – jinak by se čekající doklad dal
+   * ztratit přepnutím měsíce.
+   */
+  scan?: { id: string; nabidka: boolean; zaseklo: boolean } | null;
 };
 
 const KIND_LABEL: Record<Row["kind"], string> = {
@@ -125,7 +132,7 @@ export default async function DocsPage({
         status: true,
         result: true,
         updatedAt: true,
-        document: { select: { id: true, originalName: true } },
+        document: { select: { id: true, originalName: true, mimeType: true } },
         inboundAttachment: {
           select: { id: true, originalName: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } },
         },
@@ -285,18 +292,66 @@ export default async function DocsPage({
       href: `/faktury/${inv.id}`,
     });
   }
+  // Přečtené doklady, ze kterých ještě nevznikl výdaj – do seznamu mezi
+  // ostatní, se stavem „ke kontrole". Dřív stály v samostatné sekci nad ním.
+  for (const sc of scans) {
+    const r = sc.result as {
+      supplier?: { name?: string | null };
+      total?: number | null;
+      number?: string | null;
+      docKind?: string | null;
+      docType?: string | null;
+      taxDate?: string | null;
+      issueDate?: string | null;
+      totalVat?: number | null;
+      currency?: string | null;
+    } | null;
+    const nazev = sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument";
+    // Čtení běží na pozadí; nasazení ho utne a stav „running" by pak zůstal
+    // navždy. Po deseti minutách ho bereme jako nedokončené.
+    const zaseklo = sc.status === "running" && Date.now() - sc.updatedAt.getTime() > 10 * 60_000;
+    const datum = r?.taxDate ?? r?.issueDate ?? null;
+    rows.push({
+      id: `s${sc.id}`,
+      kind: r?.docType === "receipt" ? "receipt" : "invoice-in",
+      direction: "in",
+      date: datum ? new Date(datum) : sc.updatedAt,
+      docNumber: r?.number ?? null,
+      party: r?.supplier?.name ?? nazev,
+      projectId: sc.projectId ?? "",
+      projectName: sc.projectId
+        ? (projName.get(sc.projectId) ?? "")
+        : sc.inboundAttachment
+          ? `z pošty · ${sc.inboundAttachment.mail.fromName ?? sc.inboundAttachment.mail.fromAddress}`
+          : "",
+      amount: r?.total != null ? Number(r.total) : 0,
+      currency: r?.currency ?? "CZK",
+      vat: r?.totalVat != null ? Number(r.totalVat) : null,
+      status:
+        sc.status === "ready" ? "ke kontrole" : sc.status === "error" ? "nepřečteno" : zaseklo ? "nedokončeno" : "čtu doklad…",
+      href: "/doklady",
+      doc: sc.document ? { id: sc.document.id, name: nazev, mimeType: sc.document.mimeType } : null,
+      scan: { id: sc.id, nabidka: r?.docKind === "nabidka", zaseklo },
+    });
+  }
+
   const shown = rows
     .filter(
       (r) =>
-        (!smer || r.direction === smer) &&
-        (!typ || r.kind === typ) &&
-        (!q ||
-          (r.docNumber ?? "").toLowerCase().includes(q) ||
-          (r.party ?? "").toLowerCase().includes(q) ||
-          r.projectName.toLowerCase().includes(q)),
+        // Doklad ke kontrole je rozdělaná práce – období ani filtry ho neschovají.
+        r.scan ||
+        ((!smer || r.direction === smer) &&
+          (!typ || r.kind === typ) &&
+          (!q ||
+            (r.docNumber ?? "").toLowerCase().includes(q) ||
+            (r.party ?? "").toLowerCase().includes(q) ||
+            r.projectName.toLowerCase().includes(q))),
     )
     .sort((a, b) => b.date.getTime() - a.date.getTime());
-  const sum = (dir: "in" | "out") => shown.filter((r) => r.direction === dir).reduce((a, r) => a + r.amount, 0);
+  // Doklad ke kontrole ještě zaúčtovaný není, do součtů se nepočítá.
+  const sum = (dir: "in" | "out") =>
+    shown.filter((r) => !r.scan && r.direction === dir).reduce((a, r) => a + r.amount, 0);
+  const keKontrole = shown.filter((r) => r.scan?.id && r.status === "ke kontrole");
 
   const years = [now.getUTCFullYear() + 1, now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2, year]
     .filter((y, i, a) => a.indexOf(y) === i)
@@ -404,93 +459,6 @@ export default async function DocsPage({
         ))}
       </InboxQueue>
 
-      {scans.length > 0 && (
-        <section className="mt-6">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="kicker">Ke kontrole · {scans.length}</h2>
-            <DocScanQueue
-              scans={scans
-                .filter((sc) => sc.status === "ready")
-                .map((sc) => ({
-                  id: sc.id,
-                  documentId: sc.document?.id ?? null,
-                  projectId: sc.projectId,
-                  originalName: sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument",
-                }))}
-              categories={categories.map((c) => ({ key: c.key, label: c.label }))}
-            />
-          </div>
-          <ul className="border-t border-stone-200">
-            {scans.map((sc) => {
-              const r = sc.result as {
-                supplier?: { name?: string | null };
-                total?: number | null;
-                number?: string | null;
-                docKind?: string | null;
-              } | null;
-              const nazev = sc.document?.originalName ?? sc.inboundAttachment?.originalName ?? "dokument";
-              // Čtení běží na pozadí; nasazení ho utne a stav „running" by pak
-              // zůstal navždy. Po deseti minutách ho bereme jako nedokončené.
-              const zaseklo = sc.status === "running" && Date.now() - sc.updatedAt.getTime() > 10 * 60_000;
-              const odkud = sc.projectId
-                ? projName.get(sc.projectId)
-                : sc.inboundAttachment
-                  ? `z pošty · ${sc.inboundAttachment.mail.fromName ?? sc.inboundAttachment.mail.fromAddress}`
-                  : null;
-              return (
-                <li key={sc.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-                  <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={nazev}>
-                    {nazev}
-                    {r?.supplier?.name && <span className="text-xs text-stone-500"> · {r.supplier.name}</span>}
-                    {r?.number && <span className="text-xs text-stone-400"> · č. {r.number}</span>}
-                  </span>
-                  {r?.docKind === "nabidka" && (
-                    <span className="border border-stone-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">nabídka</span>
-                  )}
-                  <span className="text-xs text-stone-500">{odkud}</span>
-                  {r?.total != null && <span className="font-mono text-stone-950">{formatCurrency(r.total)}</span>}
-                  <span className={`w-28 text-right text-xs ${sc.status === "ready" ? "text-orange-700" : sc.status === "error" || zaseklo ? "text-red-600" : "text-stone-500"}`}>
-                    {sc.status === "ready"
-                      ? "ke kontrole"
-                      : sc.status === "error"
-                        ? "nepřečteno"
-                        : zaseklo
-                          ? "nedokončeno"
-                          : "čtu doklad…"}
-                  </span>
-                  {/* Přečíst znovu jde u všeho, co zrovna neběží – i u hotového,
-                      když se návrh netrefil nebo vznikal starší verzí. */}
-                  {(sc.status !== "running" || zaseklo) && (
-                    <form action={restartScan}>
-                      <input type="hidden" name="scanId" value={sc.id} />
-                      <button
-                        type="submit"
-                        title="Přečíst znovu"
-                        className="flex size-8 cursor-pointer items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
-                      >
-                        <RotateCcw className="size-4" />
-                      </button>
-                    </form>
-                  )}
-                  <DeleteButton
-                    action={deleteScan}
-                    fields={{ scanId: sc.id }}
-                    confirm="Zahodit přečtení? Soubor zůstane mezi nezpracovanými a půjde přečíst znovu."
-                  />
-                  <DocScanReview
-                    scanId={sc.id}
-                    documentId={sc.document?.id ?? null}
-                    projectId={sc.projectId}
-                    categories={categories.map((c) => ({ key: c.key, label: c.label }))}
-                    label={sc.status === "error" ? "Zkusit znovu" : "Otevřít"}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
       <section className="mt-8 space-y-3">
         <PeriodPicker period={period} year={year} projectId={projectId} projects={projects} years={years} allowAll />
         <div className="flex flex-wrap items-center gap-1.5">
@@ -535,10 +503,24 @@ export default async function DocsPage({
             </Link>
           )}
         </form>
-        <p className="text-xs text-stone-500">
-          {shown.length} dokladů · přijaté <span className="font-mono">{formatCurrency(sum("in"))}</span> · vystavené{" "}
-          <span className="font-mono">{formatCurrency(sum("out"))}</span>
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-stone-500">
+            {shown.length} dokladů · přijaté <span className="font-mono">{formatCurrency(sum("in"))}</span> · vystavené{" "}
+            <span className="font-mono">{formatCurrency(sum("out"))}</span>
+            {keKontrole.length > 0 && <span className="text-orange-700"> · {keKontrole.length} ke kontrole</span>}
+          </p>
+          {keKontrole.length > 0 && (
+            <DocScanQueue
+              scans={keKontrole.map((r) => ({
+                id: r.scan!.id,
+                documentId: r.doc?.id ?? null,
+                projectId: r.projectId || null,
+                originalName: r.doc?.name ?? r.party ?? "dokument",
+              }))}
+              categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+            />
+          )}
+        </div>
       </section>
 
       <section className="mt-4">
@@ -568,7 +550,9 @@ export default async function DocsPage({
                   <tr key={r.id} className="border-b border-stone-100">
                     <td className="py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
                     <td className="py-1.5">
-                      <span className={r.direction === "out" ? "text-emerald-700" : "text-stone-700"}>{KIND_LABEL[r.kind]}</span>
+                      <span className={r.direction === "out" ? "text-emerald-700" : "text-stone-700"}>
+                        {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
+                      </span>
                     </td>
                     <td className="py-1.5">
                       <Link href={r.href} className="text-stone-900 underline-offset-2 hover:underline">
@@ -591,19 +575,52 @@ export default async function DocsPage({
                           otevřít
                         </Link>
                       )}
-                      {(r.kind === "receipt" || r.kind === "invoice-in") && (
-                        <DeleteButton
-                          action={deleteExpense}
-                          fields={{ id: r.id.slice(1), projectId: r.projectId }}
-                          confirm={`Smazat doklad ${r.docNumber ?? ""} i s přílohou?`}
-                        />
-                      )}
-                      {r.kind === "invoice-out" && (
-                        <DeleteButton
-                          action={deleteIncome}
-                          fields={{ id: r.id.slice(1), projectId: r.projectId }}
-                          confirm={`Smazat doklad ${r.docNumber ?? ""}?`}
-                        />
+                      {r.scan ? (
+                        <>
+                          {/* Přečíst znovu jde u všeho, co zrovna neběží – i u hotového,
+                              když se návrh netrefil nebo vznikal starší verzí. */}
+                          {(r.status !== "čtu doklad…" || r.scan.zaseklo) && (
+                            <form action={restartScan}>
+                              <input type="hidden" name="scanId" value={r.scan.id} />
+                              <button
+                                type="submit"
+                                title="Přečíst znovu"
+                                className="flex size-8 cursor-pointer items-center justify-center text-stone-400 transition-colors hover:bg-stone-950 hover:text-white"
+                              >
+                                <RotateCcw className="size-4" />
+                              </button>
+                            </form>
+                          )}
+                          <DeleteButton
+                            action={deleteScan}
+                            fields={{ scanId: r.scan.id }}
+                            confirm="Zahodit přečtení? Soubor zůstane mezi nezpracovanými a půjde přečíst znovu."
+                          />
+                          <DocScanReview
+                            scanId={r.scan.id}
+                            documentId={r.doc?.id ?? null}
+                            projectId={r.projectId || null}
+                            categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                            label={r.status === "nepřečteno" ? "Zkusit znovu" : "Otevřít"}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          {(r.kind === "receipt" || r.kind === "invoice-in") && (
+                            <DeleteButton
+                              action={deleteExpense}
+                              fields={{ id: r.id.slice(1), projectId: r.projectId }}
+                              confirm={`Smazat doklad ${r.docNumber ?? ""} i s přílohou?`}
+                            />
+                          )}
+                          {r.kind === "invoice-out" && (
+                            <DeleteButton
+                              action={deleteIncome}
+                              fields={{ id: r.id.slice(1), projectId: r.projectId }}
+                              confirm={`Smazat doklad ${r.docNumber ?? ""}?`}
+                            />
+                          )}
+                        </>
                       )}
                       </span>
                     </td>
