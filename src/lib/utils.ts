@@ -29,3 +29,15 @@ export function formatDate(date: Date | string) {
     year: "numeric",
   }).format(new Date(date));
 }
+
+/**
+ * Krátké datum do tabulek (1. 10. 2026). Dlouhý název měsíce z formatDate
+ * je v úzkém sloupci na telefonu širší než sloupec sám a přeteče do souseda.
+ */
+export function formatDateShort(date: Date | string) {
+  return new Intl.DateTimeFormat("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).format(new Date(date));
+}

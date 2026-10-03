@@ -186,16 +186,9 @@ export function ReceiptScan({
       )}
 
       {pending && (
-        /* Náhled, hláška a tlačítka pod sebou – vedle sebe se to na telefonu rozsype. */
+        /* Hláška a tlačítka nad náhledem: fotka je na telefonu vysoká a Odeslat
+           by se muselo dorolovat. Vedle sebe to nejde, rozsype se to. */
         <div className="mt-3 space-y-3 border border-stone-200 p-3 text-sm">
-          {pending.preview && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={pending.preview}
-              alt="Náhled dokladu"
-              className="max-h-72 w-full border border-stone-200 object-contain"
-            />
-          )}
           <p className={`font-medium ${QUALITY_STYLE[pending.quality?.level ?? "ok"]}`}>
             {pending.quality?.note ?? "Snímek je v pořádku."}
           </p>
@@ -253,6 +246,14 @@ export function ReceiptScan({
               Zahodit
             </button>
           </div>
+          {pending.preview && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={pending.preview}
+              alt="Náhled dokladu"
+              className="max-h-72 w-full border border-stone-200 object-contain"
+            />
+          )}
         </div>
       )}
       {msg && <p className="mt-2 text-xs text-emerald-700">{msg}</p>}

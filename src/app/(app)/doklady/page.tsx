@@ -8,6 +8,7 @@ import { PeriodPicker } from "@/components/invoices/period-picker";
 import { DocUploadBox } from "@/components/expenses/doc-upload-box";
 import { DocScanReview } from "@/components/expenses/doc-scan-review";
 import { DocScanQueue } from "@/components/expenses/doc-scan-queue";
+import { DocFilters } from "@/components/invoices/doc-filters";
 import { InboxQueue } from "@/components/expenses/inbox-queue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
@@ -18,7 +19,7 @@ import { deleteExpense } from "@/server/actions/expenses";
 import { deleteIncome } from "@/server/actions/incomes";
 import { deleteScan, restartScan } from "@/server/actions/doc-scan";
 import { getExpenseCategories } from "@/server/expense-categories";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateShort } from "@/lib/utils";
 import { isExpensePaid } from "@/lib/constants";
 
 /**
@@ -49,6 +50,8 @@ type Row = {
    * ztratit přepnutím měsíce.
    */
   scan?: { id: string; nabidka: boolean; zaseklo: boolean } | null;
+  /** Nahraný soubor, který ještě nikdo nečetl. */
+  unread?: { documentId: string } | null;
 };
 
 const KIND_LABEL: Record<Row["kind"], string> = {
@@ -72,7 +75,15 @@ function range(period: string, year: number): [Date, Date] | null {
 export default async function DocsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; year?: string; period?: string; smer?: string; typ?: string; q?: string }>;
+  searchParams: Promise<{
+    project?: string;
+    year?: string;
+    period?: string;
+    smer?: string;
+    typ?: string;
+    q?: string;
+    stav?: string;
+  }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
@@ -82,6 +93,7 @@ export default async function DocsPage({
   const projectId = sp?.project || "";
   const smer = sp?.smer === "in" || sp?.smer === "out" ? sp.smer : "";
   const typ = sp?.typ ?? "";
+  const stav = sp?.stav ?? "";
   const q = (sp?.q ?? "").trim().toLowerCase();
   const win = range(period, year);
   const inWin = (d: Date) => !win || (d >= win[0] && d < win[1]);
@@ -154,6 +166,7 @@ export default async function DocsPage({
         mimeType: true,
         createdAt: true,
         projectId: true,
+        type: true,
         uploadedBy: { select: { name: true, email: true } },
       },
     }),
@@ -348,37 +361,59 @@ export default async function DocsPage({
     });
   }
 
+  // Nahrané doklady před přečtením – taky do seznamu, ať se dají filtrovat
+  // a nejsou ve zvláštním bloku nad ním.
+  for (const d of pendingDocs) {
+    rows.push({
+      id: `u${d.id}`,
+      kind: d.type === "invoice" ? "invoice-in" : "receipt",
+      direction: "in",
+      date: d.createdAt,
+      docNumber: null,
+      party: d.originalName,
+      projectId: d.projectId,
+      projectName: projName.get(d.projectId) ?? "",
+      amount: 0,
+      currency: "CZK",
+      vat: null,
+      status: "nepřečteno",
+      href: "/doklady",
+      doc: { id: d.id, name: d.originalName, mimeType: d.mimeType },
+      unread: { documentId: d.id },
+    });
+  }
+
+  const rozdelane = (r: Row) => !!r.scan || !!r.unread;
   const shown = rows
-    .filter(
-      (r) =>
-        // Doklad ke kontrole je rozdělaná práce – období ani filtry ho neschovají.
-        r.scan ||
-        ((!smer || r.direction === smer) &&
-          (!typ || r.kind === typ) &&
-          (!q ||
-            (r.docNumber ?? "").toLowerCase().includes(q) ||
-            (r.party ?? "").toLowerCase().includes(q) ||
-            r.projectName.toLowerCase().includes(q))),
-    )
+    .filter((r) => {
+      const hledani =
+        !q ||
+        (r.docNumber ?? "").toLowerCase().includes(q) ||
+        (r.party ?? "").toLowerCase().includes(q) ||
+        r.projectName.toLowerCase().includes(q);
+      if (!hledani) return false;
+      // Výslovný filtr na stav platí i pro rozdělanou práci.
+      if (stav === "prace") return rozdelane(r);
+      if (stav === "uhrazeno") return !rozdelane(r) && (r.status === "uhrazeno" || r.status === "přijato");
+      if (stav === "neuhrazeno") return !rozdelane(r) && r.status === "k úhradě";
+      // Jinak rozdělanou práci období ani ostatní filtry neschovají – jinak
+      // by se čekající doklad dal ztratit přepnutím měsíce.
+      return rozdelane(r) || ((!smer || r.direction === smer) && (!typ || r.kind === typ));
+    })
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   // Doklad ke kontrole ještě zaúčtovaný není, do součtů se nepočítá.
   const sum = (dir: "in" | "out") =>
-    shown.filter((r) => !r.scan && r.direction === dir).reduce((a, r) => a + r.amount, 0);
+    shown.filter((r) => !r.scan && !r.unread && r.direction === dir).reduce((a, r) => a + r.amount, 0);
   const keKontrole = shown.filter((r) => r.scan?.id && r.status === "ke kontrole");
 
   const years = [now.getUTCFullYear() + 1, now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2, year]
     .filter((y, i, a) => a.indexOf(y) === i)
     .sort((a, b) => b - a);
   const qs = (over: Record<string, string>) => {
-    const u = new URLSearchParams({ ...(projectId ? { project: projectId } : {}), period, year: String(year), ...(smer ? { smer } : {}), ...(typ ? { typ } : {}), ...(q ? { q } : {}), ...over });
+    const u = new URLSearchParams({ ...(projectId ? { project: projectId } : {}), period, year: String(year), ...(smer ? { smer } : {}), ...(typ ? { typ } : {}), ...(stav ? { stav } : {}), ...(q ? { q } : {}), ...over });
     for (const [k, v] of [...u.entries()]) if (!v) u.delete(k);
     return `/doklady?${u.toString()}`;
   };
-  const chip = (active: boolean) =>
-    `inline-flex min-h-9 items-center border px-2.5 py-0.5 text-[11px] uppercase tracking-wide transition-colors sm:min-h-0 ${
-      active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 text-stone-500 hover:border-stone-950"
-    }`;
-
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-4">
@@ -437,6 +472,8 @@ export default async function DocsPage({
         </section>
       )}
 
+      {/* Pošta, u které se teprve pozná, co to je – nahrané soubory jsou
+          v seznamu níž, aby se daly filtrovat. */}
       <InboxQueue
         mails={mailsWaiting.map((m) => ({
           id: m.id,
@@ -444,57 +481,23 @@ export default async function DocsPage({
           from: m.fromName ?? m.fromAddress,
           files: m.attachments.map((a) => a.originalName),
         }))}
-        files={pendingDocs.map((d) => ({
-          id: d.id,
-          name: d.originalName,
-          place: projName.get(d.projectId) ?? null,
-          by: d.uploadedBy.name ?? d.uploadedBy.email,
-        }))}
-      >
-        {pendingDocs.map((d) => (
-          <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-200 py-2.5 text-sm">
-            <span className="min-w-0 flex-1 basis-56 truncate text-stone-900" title={d.originalName}>
-              {d.originalName}
-              <span className="text-xs text-stone-500"> · {d.uploadedBy.name ?? d.uploadedBy.email}</span>
-            </span>
-            <span className="text-xs text-stone-500">{projName.get(d.projectId)}</span>
-            <span className="text-xs text-stone-400">{formatDate(d.createdAt)}</span>
-            <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
-            <DeleteButton action={deleteDocument} fields={{ id: d.id }} confirm="Smazat nahraný doklad?" />
-            <DocScanReview
-              scanId={null}
-              documentId={d.id}
-              projectId={d.projectId}
-              categories={categories.map((c) => ({ key: c.key, label: c.label }))}
-              label="Přečíst doklad"
-            />
-          </li>
-        ))}
-      </InboxQueue>
+        files={[]}
+      />
 
       <section className="mt-8 space-y-3">
         <PeriodPicker period={period} year={year} projectId={projectId} projects={projects} years={years} allowAll />
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="kicker mr-1 w-12">Směr</span>
-          <Link href={qs({ smer: "" })} className={chip(!smer)}>
-            Vše
-          </Link>
-          <Link href={qs({ smer: "in" })} className={chip(smer === "in")}>
-            Vstup (přijaté)
-          </Link>
-          <Link href={qs({ smer: "out" })} className={chip(smer === "out")}>
-            Výstup (vystavené)
-          </Link>
-          <span className="kicker ml-4 mr-1 w-12">Typ</span>
-          <Link href={qs({ typ: "" })} className={chip(!typ)}>
-            Vše
-          </Link>
-          {(Object.keys(KIND_LABEL) as Row["kind"][]).map((k) => (
-            <Link key={k} href={qs({ typ: k })} className={chip(typ === k)}>
-              {KIND_LABEL[k]}
-            </Link>
-          ))}
-        </div>
+        <DocFilters
+          smer={smer}
+          typ={typ}
+          stav={stav}
+          typy={(Object.keys(KIND_LABEL) as Row["kind"][]).map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+          stavy={[
+            { value: "prace", label: "Rozdělané (nepřečtené a ke kontrole)" },
+            { value: "neuhrazeno", label: "K úhradě" },
+            { value: "uhrazeno", label: "Uhrazené" },
+          ]}
+          base={(over) => qs(over)}
+        />
         <form method="get" action="/doklady" className="flex flex-wrap items-center gap-2">
           {projectId && <input type="hidden" name="project" value={projectId} />}
           <input type="hidden" name="period" value={period} />
@@ -547,25 +550,25 @@ export default async function DocsPage({
              dlouhé texty se krátí (celé jsou v title) a DPH s projektem
              se schová – obojí je v detailu dokladu. */
           <div className="hscroll overflow-x-auto">
-            <table className="w-full min-w-[520px] table-fixed text-sm sm:min-w-[820px] sm:table-auto">
+            <table className="w-full min-w-[560px] table-fixed text-sm sm:min-w-[820px]">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">
-                  <th className="w-20 py-2 pl-2 font-medium sm:w-auto">Datum</th>
-                  <th className="hidden py-2 font-medium sm:table-cell">Typ</th>
-                  <th className="py-2 font-medium">Číslo</th>
+                  <th className="w-[5.5rem] py-2 pl-2 font-medium">Datum</th>
+                  <th className="hidden w-32 py-2 font-medium sm:table-cell">Typ</th>
+                  <th className="w-24 py-2 font-medium sm:w-32">Číslo</th>
                   <th className="py-2 font-medium">Protistrana</th>
-                  <th className="hidden py-2 font-medium sm:table-cell">Projekt</th>
-                  <th className="py-2 text-right font-medium">Částka</th>
-                  <th className="hidden py-2 text-right font-medium sm:table-cell">DPH</th>
-                  <th className="py-2 text-right font-medium">Stav</th>
-                  <th className="py-2" />
+                  <th className="hidden w-40 py-2 font-medium sm:table-cell">Projekt</th>
+                  <th className="w-24 py-2 text-right font-medium sm:w-28">Částka</th>
+                  <th className="hidden w-24 py-2 text-right font-medium sm:table-cell">DPH</th>
+                  <th className="w-[5.5rem] py-2 text-right font-medium sm:w-24">Stav</th>
+                  <th className="w-[4.5rem] py-2 sm:w-32" />
                 </tr>
               </thead>
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className="border-b border-stone-100">
                     <td className="py-1.5 pl-2 align-top whitespace-nowrap">
-                      {formatDate(r.date)}
+                      {formatDateShort(r.date)}
                       {/* Druh a projekt se na telefonu vejdou jen pod datum. */}
                       <span className="block truncate text-[11px] text-stone-400 sm:hidden">
                         {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
@@ -576,7 +579,7 @@ export default async function DocsPage({
                         {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
                       </span>
                     </td>
-                    <td className="max-w-[7rem] py-1.5 align-top sm:max-w-none">
+                    <td className="py-1.5 align-top">
                       <Link
                         href={r.href}
                         title={r.docNumber ?? undefined}
@@ -585,13 +588,13 @@ export default async function DocsPage({
                         {r.docNumber ?? "—"}
                       </Link>
                     </td>
-                    <td className="max-w-[9rem] py-1.5 align-top text-stone-600 sm:max-w-none">
+                    <td className="py-1.5 align-top text-stone-600">
                       <span className="block truncate" title={r.party ?? undefined}>
                         {r.party ?? "—"}
                       </span>
                       <span className="block truncate text-[11px] text-stone-400 sm:hidden">{r.projectName}</span>
                     </td>
-                    <td className="hidden max-w-[12rem] py-1.5 align-top text-stone-600 sm:table-cell">
+                    <td className="hidden py-1.5 align-top text-stone-600 sm:table-cell">
                       <span className="block truncate" title={r.projectName}>
                         {r.projectName}
                       </span>
@@ -602,7 +605,7 @@ export default async function DocsPage({
                       {r.status}
                     </td>
                     <td className="py-1.5 pl-2 text-right align-top">
-                      <span className="inline-flex items-center justify-end gap-1">
+                      <span className="flex flex-wrap items-center justify-end gap-1">
                       {r.doc ? (
                         <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
                       ) : (
@@ -610,7 +613,18 @@ export default async function DocsPage({
                           otevřít
                         </Link>
                       )}
-                      {r.scan ? (
+                      {r.unread ? (
+                        <>
+                          <DeleteButton action={deleteDocument} fields={{ id: r.unread.documentId }} confirm="Smazat nahraný doklad?" />
+                          <DocScanReview
+                            scanId={null}
+                            documentId={r.unread.documentId}
+                            projectId={r.projectId}
+                            categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                            label="Přečíst"
+                          />
+                        </>
+                      ) : r.scan ? (
                         <>
                           {/* Přečíst znovu jde u všeho, co zrovna neběží – i u hotového,
                               když se návrh netrefil nebo vznikal starší verzí. */}
