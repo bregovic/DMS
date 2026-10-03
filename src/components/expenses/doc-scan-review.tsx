@@ -189,6 +189,8 @@ export function DocScanReview({
       fd.set("scanId", scan!.id);
       for (const [k, v] of Object.entries(form)) fd.set(k, v);
       fd.set("vatRows", JSON.stringify(rows));
+      // Vytěžení to přečetlo jako nabídku, uživatel to přepnul na doklad.
+      if (scan?.result?.docKind === "nabidka") fd.set("jakoDoklad", "1");
       if (force) fd.set("force", "1");
       fd.set("items", JSON.stringify(items));
       if (!projectId) {
@@ -309,28 +311,22 @@ export function DocScanReview({
 
             {/* Vytěžení druh jen navrhuje – z nabídky se dá udělat rovnou doklad. */}
             <FormSection title="Co to je">
-              <div className="flex flex-wrap gap-1.5">
-                {([
-                  { v: false, label: "Doklad (účtenka, faktura)" },
-                  { v: true, label: "Nabídka" },
-                ] as const).map((o) => (
-                  <button
-                    key={String(o.v)}
-                    type="button"
-                    onClick={() => setJakoNabidka(o.v)}
-                    className={`h-9 cursor-pointer border px-3 text-sm transition-colors ${
-                      jeNabidka === o.v
-                        ? "border-stone-950 bg-stone-950 text-white"
-                        : "border-stone-300 text-stone-700 hover:border-stone-950"
-                    }`}
+              <FormGrid>
+                <Field label="Druh" htmlFor="ds-kind">
+                  <select
+                    id="ds-kind"
+                    className={input}
+                    value={jeNabidka ? "nabidka" : "doklad"}
+                    onChange={(e) => setJakoNabidka(e.target.value === "nabidka")}
                   >
-                    {o.label}
-                  </button>
-                ))}
+                    <option value="doklad">Doklad – účtenka nebo faktura</option>
+                    <option value="nabidka">Nabídka</option>
+                  </select>
+                </Field>
                 {scan.result?.docKind === "nabidka" && !jeNabidka && (
-                  <span className="flex h-9 items-center text-xs text-stone-500">přečteno jako nabídka</span>
+                  <p className="self-end text-xs text-stone-500">Přečteno jako nabídka.</p>
                 )}
-              </div>
+              </FormGrid>
             </FormSection>
 
             {!jeNabidka && (

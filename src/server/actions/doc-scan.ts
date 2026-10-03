@@ -299,10 +299,11 @@ export async function applyDocScan(formData: FormData) {
   });
   if (!scan) throw new Error("Návrh nenalezen.");
   if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl.");
-  // Nabídka není doklad k zaúčtování – výdaj by z ní udělal náklad, který
-  // nevznikl. Zakládání nabídek se dodělává (#42).
-  if ((scan.result as { docKind?: string } | null)?.docKind === "nabidka")
-    throw new Error("Tohle je nabídka, ne doklad k zaúčtování. Zakládání nabídek se ještě dodělává.");
+  /* Nabídka není doklad k zaúčtování – výdaj by z ní udělal náklad, který
+     nevznikl. Vytěžení se ale občas netrefí (ceník, zakázkový list), takže
+     když uživatel v dialogu druh přepne na doklad, platí jeho volba. */
+  if ((scan.result as { docKind?: string } | null)?.docKind === "nabidka" && formData.get("jakoDoklad") !== "1")
+    throw new Error("Tohle je nabídka, ne doklad k zaúčtování. Přepni druh na doklad, nebo z ní založ nabídku.");
 
   /* Doklad z pošty projekt nemá – zvolí se až tady, v kontrole. Teprve
      potvrzením se soubor přesune do projektu a vznikne dokument; do té doby

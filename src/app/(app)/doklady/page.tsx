@@ -530,17 +530,20 @@ export default async function DocsPage({
             description="Nahraj účtenku nebo fakturu výše – systém ji přečte a připraví ke kontrole. Vystavené faktury z vykázané práce se sem přidají samy."
           />
         ) : (
+          /* Na telefonu se tabulka nesmí roztáhnout dlouhým číslem dokladu:
+             dlouhé texty se krátí (celé jsou v title) a DPH s projektem
+             se schová – obojí je v detailu dokladu. */
           <div className="hscroll overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[520px] table-fixed text-sm sm:min-w-[820px] sm:table-auto">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">
-                  <th className="py-2 font-medium">Datum / DUZP</th>
-                  <th className="py-2 font-medium">Typ</th>
+                  <th className="w-20 py-2 pl-2 font-medium sm:w-auto">Datum</th>
+                  <th className="hidden py-2 font-medium sm:table-cell">Typ</th>
                   <th className="py-2 font-medium">Číslo</th>
                   <th className="py-2 font-medium">Protistrana</th>
-                  <th className="py-2 font-medium">Projekt</th>
+                  <th className="hidden py-2 font-medium sm:table-cell">Projekt</th>
                   <th className="py-2 text-right font-medium">Částka</th>
-                  <th className="py-2 text-right font-medium">DPH</th>
+                  <th className="hidden py-2 text-right font-medium sm:table-cell">DPH</th>
                   <th className="py-2 text-right font-medium">Stav</th>
                   <th className="py-2" />
                 </tr>
@@ -548,25 +551,44 @@ export default async function DocsPage({
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className="border-b border-stone-100">
-                    <td className="py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
-                    <td className="py-1.5">
+                    <td className="py-1.5 pl-2 align-top whitespace-nowrap">
+                      {formatDate(r.date)}
+                      {/* Druh a projekt se na telefonu vejdou jen pod datum. */}
+                      <span className="block truncate text-[11px] text-stone-400 sm:hidden">
+                        {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
+                      </span>
+                    </td>
+                    <td className="hidden py-1.5 sm:table-cell">
                       <span className={r.direction === "out" ? "text-emerald-700" : "text-stone-700"}>
                         {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
                       </span>
                     </td>
-                    <td className="py-1.5">
-                      <Link href={r.href} className="text-stone-900 underline-offset-2 hover:underline">
+                    <td className="max-w-[7rem] py-1.5 align-top sm:max-w-none">
+                      <Link
+                        href={r.href}
+                        title={r.docNumber ?? undefined}
+                        className="block truncate text-stone-900 underline-offset-2 hover:underline"
+                      >
                         {r.docNumber ?? "—"}
                       </Link>
                     </td>
-                    <td className="py-1.5 text-stone-600">{r.party ?? "—"}</td>
-                    <td className="py-1.5 text-stone-600">{r.projectName}</td>
-                    <td className="py-1.5 text-right font-mono">{formatCurrency(r.amount, r.currency)}</td>
-                    <td className="py-1.5 text-right font-mono text-stone-500">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
-                    <td className={`py-1.5 text-right text-xs ${r.status === "uhrazeno" || r.status === "přijato" ? "text-emerald-700" : r.status === "stornováno" ? "text-stone-400" : "text-orange-700"}`}>
+                    <td className="max-w-[9rem] py-1.5 align-top text-stone-600 sm:max-w-none">
+                      <span className="block truncate" title={r.party ?? undefined}>
+                        {r.party ?? "—"}
+                      </span>
+                      <span className="block truncate text-[11px] text-stone-400 sm:hidden">{r.projectName}</span>
+                    </td>
+                    <td className="hidden max-w-[12rem] py-1.5 text-stone-600 sm:table-cell">
+                      <span className="block truncate" title={r.projectName}>
+                        {r.projectName}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">{formatCurrency(r.amount, r.currency)}</td>
+                    <td className="hidden py-1.5 text-right font-mono text-stone-500 sm:table-cell">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
+                    <td className={`py-1.5 text-right align-top text-xs ${r.status === "uhrazeno" || r.status === "přijato" ? "text-emerald-700" : r.status === "stornováno" ? "text-stone-400" : "text-orange-700"}`}>
                       {r.status}
                     </td>
-                    <td className="py-1.5 pl-2 text-right">
+                    <td className="py-1.5 pl-2 text-right align-top">
                       <span className="inline-flex items-center justify-end gap-1">
                       {r.doc ? (
                         <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
