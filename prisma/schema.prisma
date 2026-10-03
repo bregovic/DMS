@@ -30,6 +30,12 @@ model User {
   billingAccount String? // číslo účtu nebo IBAN
   vatPayer       Boolean   @default(false)
   // Údaje pro daňová podání (kontrolní hlášení, přiznání)
+  /**
+   * Předměty podnikání vlastníka (volný text, např. „programování,
+   * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
+   * si lešení neuplatní, stavební firma ano.
+   */
+  businessActivities String?
   taxSubjectType  String? // FO | PO
   firstName       String?
   lastName        String?

@@ -699,7 +699,13 @@ export function DocScanReview({
                               />
                             </td>
                           )}
-                          <td className="py-1 pr-2">{i.description}</td>
+                          <td className="py-1 pr-2">
+                            {i.description}
+                            {/* Proč položka není v nároku – ať jde návrh zkontrolovat. */}
+                            {i.deductible === false && i.deductibleNote && (
+                              <span className="block text-[11px] text-stone-500">{i.deductibleNote}</span>
+                            )}
+                          </td>
                           <td className="py-1 pr-2">
                             <select
                               value={katKlic(i.category) ?? ""}

@@ -12,6 +12,7 @@ export type BillingValues = {
   billingAddress: string | null;
   billingAccount: string | null;
   vatPayer: boolean;
+  businessActivities: string | null;
   taxSubjectType: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -165,6 +166,20 @@ export function BillingForm({ b }: { b: BillingValues }) {
             Plátce DPH
           </label>
         </FormGrid>
+        <label className={lab}>
+          Předměty podnikání
+          <textarea
+            name="businessActivities"
+            rows={2}
+            value={v.businessActivities ?? ""}
+            onChange={(e) => set("businessActivities", e.target.value)}
+            placeholder="např. programování, poradenství v oblasti IT"
+            className={`${field} mt-1 h-auto py-2`}
+          />
+          <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-stone-500">
+            Podle toho se u dokladů posuzuje nárok na odpočet.
+          </span>
+        </label>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

@@ -58,6 +58,8 @@ export async function updateBilling(formData: FormData) {
       billingAddress: t("billingAddress"),
       billingAccount: t("billingAccount"),
       vatPayer: formData.get("vatPayer") === "1",
+      // Předměty podnikání – kontext pro posouzení nároku na odpočet.
+      businessActivities: String(formData.get("businessActivities") || "").trim().slice(0, 1000) || null,
       // údaje pro daňová podání (kontrolní hlášení)
       taxSubjectType: formData.get("taxSubjectType") === "PO" ? "PO" : "FO",
       firstName: t("firstName"),

@@ -27,6 +27,8 @@ export type ScanItem = {
   category: string | null;
   /** Návrh, jestli položka patří do přiznání (osobní spotřeba ne). */
   deductible: boolean;
+  /** Proč položka v nároku není – aby šel návrh zkontrolovat, ne jen uvěřit. */
+  deductibleNote: string | null;
 };
 export type ScanResult = {
   docType: "receipt" | "invoice" | "proforma" | "credit_note" | "other";
@@ -112,6 +114,7 @@ const SCHEMA = obj({
       vatRate: n,
       category: str,
       deductible: { type: "boolean" },
+      deductibleNote: str,
     }),
   },
   warnings: { type: "array", items: { type: "string" } },
@@ -124,11 +127,40 @@ const SCHEMA = obj({
 export type Misto = { kod: string; nazev: string; projectId: string; subProjectId: string | null };
 export type ZadankaVolba = { kod: string; nazev: string; misto: string; id: string };
 
+/** Kdo doklad uplatňuje – podle toho se posuzuje nárok na odpočet. */
+export type Platce = { activities: string | null; vatPayer: boolean };
+
+/**
+ * Pravidlo pro nárok na odpočet. Dřív tu stálo „u všeho ostatního true“, takže
+ * nárok vyšel i u nákupu, který s podnikáním vlastníka nemá nic společného.
+ * Teď se posuzuje proti předmětům podnikání a při pochybnosti se neuplatňuje:
+ * neuplatněnou položku si uživatel v kontrole zaškrtne, chybně uplatněnou
+ * nemusí najít.
+ */
+function pravidloNaroku(platce: Platce): string {
+  if (!platce.vatPayer)
+    return "- deductible u položky: vlastník není plátce DPH, nárok nevzniká – u všech položek vrať false a deductibleNote nech null.";
+
+  const cim = platce.activities?.trim();
+  return `- deductible u položky = uplatní si ji ten, kdo doklad účtuje?
+  ${
+    cim
+      ? `Podniká takto: ${cim}.`
+      : "Předměty podnikání vyplněné nejsou, takže kromě zjevně osobní spotřeby nemáš podklad k rozhodnutí – u zbytku vrať false a napiš to do deductibleNote."
+  }
+  Rozhoduj podle toho, jestli položka slouží tomuhle podnikání. Co s ním nesouvisí, vrať false – i když je to jinak běžný nákup: živnostník v IT si neuplatní lešení ani stavební práce, stavební firma ano.
+  Osobní spotřebu (jídlo, pití, občerstvení, tabák, drogerie, léky) vrať false vždy.
+  Zařazení ber v potaz: nákup do projektu, který s podnikáním nesouvisí (vlastní rodinný dům, soukromé auto), do nároku nepatří, i kdyby položka sama o sobě sedla.
+  **Když si nejsi jistý, vrať false.**
+  deductibleNote = u položek s false krátké vysvětlení do 60 znaků, proč. U true nech null.`;
+}
+
 const INSTRUCTIONS = (
   cats: { key: string; label: string }[],
   mista: Misto[],
   zadanky: ZadankaVolba[],
   kontext: string,
+  platce: Platce,
 ) => `Jsi účetní. Ze snímku nebo PDF přečti údaje přesně tak, jak jsou v dokumentu. Nic nedopočítávej odhadem.
 - docType: receipt = účtenka/paragon, invoice = faktura (daňový doklad), proforma = zálohová faktura, credit_note = dobropis.
 - supplier = kdo doklad vystavil (prodávající). ico = 8 číslic bez mezer, dic například CZ12345678. customer = odběratel, pokud je uveden.
@@ -141,7 +173,7 @@ const INSTRUCTIONS = (
 - items = jednotlivé položky (popis, množství, MJ, jednotková cena bez DPH pokud je uvedená, částka za položku, sazba). U účtenky s mnoha položkami vrať nejvýš 40 nejdůležitějších.
 - category = klíč kategorie nákupu ze seznamu níž. Vyber ten, který sedí nejlíp; když nesedí žádný, vrať null a do newCategory dej krátký název kategorie, která chybí (1–2 slova, prvním písmenem velkým).
 - U každé položky taky category = klíč ze stejného seznamu (doklad běžně míchá víc druhů nákupu, třeba palivo a občerstvení).
-- deductible u položky = patří do nároku na odpočet DPH? Vrať false jen u zjevně osobní spotřeby: jídlo, pití, občerstvení, cukrovinky, tabák, léky a drogerie pro osobní potřebu. U všeho ostatního true.
+${pravidloNaroku(platce)}
 - title = krátký název výdaje pro evidenci (dodavatel + co to je, max 60 znaků).
 - summary = 1–2 věty, co dokument obsahuje. warnings = co je nečitelné nebo nejisté.
 - docKind = co ten soubor je. "doklad" = faktura, účtenka nebo dobropis k zaúčtování. "nabidka" = cenová nabídka nebo ceník, ještě se neplatí. "ostatni" = technický list, katalog, leták, smlouva.
@@ -333,10 +365,21 @@ export async function runDocScan(scanId: string) {
     const kontext = m
       ? `\nE-mail, kterým dokument přišel:\nOd: ${m.fromName ?? ""} <${m.fromAddress}>\nPředmět: ${m.subject}\n${(m.bodyText ?? "").slice(0, 4000)}`
       : "";
+    // Nárok na odpočet se posuzuje proti tomu, co vlastník podniká.
+    const vlastnik = ownerId
+      ? await prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { businessActivities: true, vatPayer: true },
+        })
+      : null;
+    const platce: Platce = {
+      activities: vlastnik?.businessActivities ?? null,
+      vatPayer: vlastnik?.vatPayer ?? false,
+    };
     const buf = await storage.read(doc.fileName);
     const { data, costUsd } = await callModel<ScanResult>(
       scan.model,
-      INSTRUCTIONS(cats, mista, zadanky, kontext),
+      INSTRUCTIONS(cats, mista, zadanky, kontext, platce),
       [await filePart(buf, doc.originalName, doc.mimeType), { type: "input_text", text: `Soubor: ${doc.originalName}` }],
       "doc-scan",
       SCHEMA,
@@ -426,6 +469,7 @@ export function normalize(d: ScanResult, catKeys?: Set<string>): ScanResult {
     unitPrice: num(i.unitPrice),
     amount: num(i.amount) ?? 0,
     vatRate: num(i.vatRate),
+    deductibleNote: i.deductibleNote?.slice(0, 120) || null,
     category: cat(i.category),
     deductible: i.deductible !== false,
   }));
