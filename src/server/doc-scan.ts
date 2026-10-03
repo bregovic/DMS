@@ -226,26 +226,29 @@ async function volbyZarazeni(ownerId: string | null) {
   return { mista, zadanky };
 }
 
+/** Zařazení, které určil člověk – štítek v Gmailu, nebo složka u dokladu. */
+type Zadano = { projectId: string | null; subProjectId: string | null; duvod: string };
+
 /**
  * Kódy z odpovědi zpět na identifikátory; neznámé se zahodí.
  *
- * Zařazení ze štítku v Gmailu má přednost: uživatel ho určil sám, kdežto
- * model ho odhaduje z obsahu.
+ * Zadané zařazení má přednost: člověk ho určil sám, kdežto model ho
+ * odhaduje z obsahu.
  */
 function prelozZarazeni(
   d: ScanResult,
   mista: Misto[],
   zadanky: ZadankaVolba[],
-  zeStitku?: { projectId: string | null; subProjectId: string | null } | null,
+  zadano?: Zadano | null,
 ): ScanResult {
   const misto = mista.find((m) => m.kod === d.placeCode);
-  d.projectId = zeStitku?.projectId ?? misto?.projectId ?? null;
-  d.subProjectId = zeStitku?.projectId ? zeStitku.subProjectId : (misto?.subProjectId ?? null);
-  if (zeStitku?.projectId && !misto) d.placeReason = "Zařazeno podle štítku v Gmailu.";
+  d.projectId = zadano?.projectId ?? misto?.projectId ?? null;
+  d.subProjectId = zadano?.projectId ? zadano.subProjectId : (misto?.subProjectId ?? null);
+  if (zadano?.projectId && (!misto || zadano.subProjectId)) d.placeReason = zadano.duvod;
   const kody = new Set((d.requestCodes ?? []).map(String));
   d.requestIds = zadanky.filter((z) => kody.has(z.kod)).map((z) => z.id);
   // Žádanka určuje místo přesněji než odhad – když je vybraná, řídí se jí.
-  if (d.requestIds.length && !misto && !zeStitku?.projectId) {
+  if (d.requestIds.length && !misto && !zadano?.projectId) {
     const prvni = rq_misto(zadanky, d.requestIds[0], mista);
     if (prvni) {
       d.projectId = prvni.projectId;
@@ -268,7 +271,16 @@ export async function runDocScan(scanId: string) {
       select: {
         id: true,
         model: true,
-        document: { select: { fileName: true, originalName: true, mimeType: true, project: { select: { ownerId: true } } } },
+        document: {
+          select: {
+            fileName: true,
+            originalName: true,
+            mimeType: true,
+            projectId: true,
+            subProjectId: true,
+            project: { select: { ownerId: true } },
+          },
+        },
         inboundAttachment: {
           select: {
             fileName: true,
@@ -306,6 +318,14 @@ export async function runDocScan(scanId: string) {
     // U pošty jde do promptu i hlavička zprávy – u přeposlané nabídky bývá
     // dodavatel jen tam a v textu, ne v příloze.
     const m = scan.inboundAttachment?.mail;
+    // Zařazení, které určil člověk: štítek u pošty, nebo složka u nahraného
+    // dokladu. Bez toho model složku hádá z obsahu.
+    const d0 = scan.document;
+    const zadano: Zadano | null = m
+      ? { projectId: m.projectId, subProjectId: m.subProjectId, duvod: "Zařazeno podle štítku v Gmailu." }
+      : d0?.subProjectId
+        ? { projectId: d0.projectId, subProjectId: d0.subProjectId, duvod: "Složku vybral ten, kdo doklad nahrál." }
+        : null;
     const kontext = m
       ? `\nE-mail, kterým dokument přišel:\nOd: ${m.fromName ?? ""} <${m.fromAddress}>\nPředmět: ${m.subject}\n${(m.bodyText ?? "").slice(0, 4000)}`
       : "";
@@ -321,7 +341,7 @@ export async function runDocScan(scanId: string) {
       { effort: "medium", maxOutput: 20_000 },
     );
     const result = await fillExchangeRate(
-      prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky, m),
+      prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky, zadano),
     );
     const scanRow = await prisma.docScan.update({
       where: { id: scanId },

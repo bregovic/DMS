@@ -94,6 +94,7 @@ export function DocInbox({
       <div className="flex flex-wrap items-center gap-2">
         <UploadDialog
           projectId={projectId}
+          subProjectId={subProjectId}
           types={[
             { value: "receipt", label: "Účtenka" },
             { value: "invoice", label: "Faktura" },
@@ -105,7 +106,12 @@ export function DocInbox({
           variant="primary"
           allowNewType={false}
         />
-        <ReceiptScan compact projects={[{ id: projectId, name: projectName, autoRead: false }]} initial={[]} />
+        <ReceiptScan
+          compact
+          projects={[{ id: projectId, name: projectName, autoRead: false, subProjects: subProjects.map((x) => ({ id: x.id, name: x.name })) }]}
+          initial={[]}
+          defaultSubProjectId={subProjectId ?? ""}
+        />
         {canScan && readyClean.length > 0 && (
           <button
             type="button"

@@ -556,6 +556,14 @@ export async function vendorsForScan(projectId: string | null) {
  * dodavatel, který v projektu má jen přidělené úkoly. Soubor se uloží jako
  * příloha a rovnou se přečte; výdaj z něj založí správce po kontrole.
  */
+/** Složka z formuláře – jen když v projektu doopravdy je. */
+async function overSlozku(projectId: string, raw: FormDataEntryValue | null) {
+  const id = String(raw || "").trim();
+  if (!id) return null;
+  const sub = await prisma.subProject.findFirst({ where: { id, projectId }, select: { id: true } });
+  return sub?.id ?? null;
+}
+
 /** Smí tenhle člověk spustit vytěžení? Vlastník, spolusprávce, nebo komu to vlastník povolil. */
 async function mayScan(projectId: string, user: { id: string; email?: string | null }, role: string | null) {
   if (isManager(role)) return true;
@@ -582,12 +590,15 @@ export async function uploadReceipt(formData: FormData) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
   if (!project) throw new Error("Projekt nenalezen.");
   const docType = formData.get("type") === "invoice" ? "invoice" : "receipt";
+  // Složka, kterou vybral nahrávající – čtení ji pak nehádá z obsahu.
+  const subProjectId = await overSlozku(projectId, formData.get("subProjectId"));
   await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(buffer, file.name, `${project.ownerId}/${projectId}/${docType}`);
   const doc = await prisma.document.create({
     data: {
       projectId,
+      subProjectId,
       fileName: key,
       originalName: file.name,
       mimeType: file.type || "application/octet-stream",
@@ -616,6 +627,23 @@ export async function projectsForReceipts() {
   const { listProjectsForUser } = await import("@/server/access");
   const access = await listProjectsForUser(user);
   const list = access.filter((a) => canWrite(a.role) || a.role === "task");
+  // Složky k výběru – kam doklad patří, ví nahrávající, ne čtení.
+  const subs = await prisma.subProject.findMany({
+    where: { projectId: { in: list.map((a) => a.project.id) } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, parentId: true, projectId: true },
+  });
+  const slozky = (projectId: string) => {
+    const mine = subs.filter((x) => x.projectId === projectId);
+    const cesta = (sid: string): string => {
+      const sub = mine.find((x) => x.id === sid);
+      if (!sub) return "";
+      return sub.parentId ? `${cesta(sub.parentId)} › ${sub.name}` : sub.name;
+    };
+    return mine
+      .map((x) => ({ id: x.id, name: cesta(x.id) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  };
   const email = user.email?.toLowerCase();
   const allowed = email
     ? new Set(
@@ -635,6 +663,7 @@ export async function projectsForReceipts() {
       autoRead: isManager(a.role) || allowed.has(a.project.id),
       // přístup jen k úkolům = projekt si otevřít nemůže, doklad pošle odsud
       taskOnly: a.role === "task",
+      subProjects: slozky(a.project.id),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }

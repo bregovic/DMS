@@ -143,6 +143,11 @@ export async function uploadDocument(formData: FormData) {
   if (docType === "__new__") {
     docType = await resolveDocTypeKey(String(formData.get("newType") || ""));
   }
+  // Složka, ve které se nahrávalo – čtení ji pak nehádá z obsahu.
+  const subRaw = String(formData.get("subProjectId") || "").trim();
+  const subProjectId = subRaw
+    ? (await prisma.subProject.findFirst({ where: { id: subRaw, projectId }, select: { id: true } }))?.id ?? null
+    : null;
   await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await storage.save(
@@ -154,6 +159,7 @@ export async function uploadDocument(formData: FormData) {
   const doc = await prisma.document.create({
     data: {
       projectId,
+      subProjectId,
       expenseId,
       fileName: key,
       originalName: file.name,

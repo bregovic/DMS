@@ -384,6 +384,7 @@ model SubProject {
   incomes    Income[]
   requests   Request[]
   tasks      Task[]
+  documents  Document[]
   memberships SubProjectMembership[]
 
   @@index([projectId])
@@ -655,6 +656,7 @@ model DocScan {
 model Document {
   id           String   @id @default(cuid())
   projectId    String
+  subProjectId String? // složka, kam doklad patří – určil ten, kdo ho nahrál
   expenseId    String?
   offerId      String?
   bundleOfferId String? // příloha společné nabídky na balíček – vidět u všech jeho žádanek (#40)
@@ -673,6 +675,7 @@ model Document {
   extractions Extraction[]
   scan       DocScan?
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
   expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   offer      Offer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
   bundleOffer BundleOffer? @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
@@ -680,6 +683,7 @@ model Document {
   uploadedBy User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([projectId])
+  @@index([subProjectId])
   @@index([expenseId])
   @@index([offerId])
   @@index([bundleOfferId])

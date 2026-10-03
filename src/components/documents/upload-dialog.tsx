@@ -13,6 +13,7 @@ import { UploadForm } from "@/components/documents/upload-form";
  */
 export function UploadDialog({
   projectId,
+  subProjectId,
   types,
   defaultType = "other",
   label = "Nahrát dokumenty",
@@ -22,6 +23,8 @@ export function UploadDialog({
   allowNewType = true,
 }: {
   projectId: string;
+  /** Otevřená složka – doklad se do ní zařadí. */
+  subProjectId?: string | null;
   types: { value: string; label: string }[];
   defaultType?: string;
   label?: string;
@@ -57,6 +60,7 @@ export function UploadDialog({
             {hint && <p className="text-xs text-stone-500">{hint}</p>}
             <UploadForm
               projectId={projectId}
+              subProjectId={subProjectId}
               types={types}
               defaultType={defaultType}
               allowNewType={allowNewType}

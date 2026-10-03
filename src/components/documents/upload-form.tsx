@@ -17,6 +17,7 @@ const ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf,.zip,.txt,.csv,.eml
  */
 export function UploadForm({
   projectId,
+  subProjectId,
   types,
   defaultType = "other",
   compact = false,
@@ -24,6 +25,8 @@ export function UploadForm({
   onUploaded,
 }: {
   projectId: string;
+  /** Otevřená složka – doklad se do ní zařadí. */
+  subProjectId?: string | null;
   types: DocType[];
   /** Předvybraný typ (např. účtenka u dokladů). */
   defaultType?: string;
@@ -57,6 +60,7 @@ export function UploadForm({
         const prepared = await prepareUpload(files[i], { doc: type === "receipt" || type === "invoice" });
         const fd = new FormData();
         fd.set("projectId", projectId);
+        if (subProjectId) fd.set("subProjectId", subProjectId);
         fd.set("type", type);
         if (type === "__new__") fd.set("newType", newType.trim());
         fd.set("file", prepared);

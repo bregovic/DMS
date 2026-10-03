@@ -7,7 +7,13 @@ import { processDocumentPhoto, type PhotoQuality } from "@/lib/image-clean";
 import { prepareUpload } from "@/lib/client-upload";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type Project = { id: string; name: string; autoRead: boolean };
+type Project = {
+  id: string;
+  name: string;
+  autoRead: boolean;
+  /** Složky projektu – doklad se zařadí do vybrané, místo odhadu z obsahu. */
+  subProjects?: { id: string; name: string }[];
+};
 type Mine = Awaited<ReturnType<typeof myReceipts>>;
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -34,13 +40,17 @@ export function ReceiptScan({
   projects,
   initial,
   compact = false,
+  defaultSubProjectId = "",
 }: {
   projects: Project[];
   initial: Mine;
   /** V projektu: jen tlačítka a náhled, seznam dokladů je hned pod tím. */
   compact?: boolean;
+  /** Otevřená složka projektu – předvybere se. */
+  defaultSubProjectId?: string;
 }) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
+  const [subProjectId, setSubProjectId] = useState(defaultSubProjectId);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -56,7 +66,9 @@ export function ReceiptScan({
     quality: PhotoQuality | null;
   } | null>(null);
 
-  const autoRead = projects.find((p) => p.id === projectId)?.autoRead ?? false;
+  const projekt = projects.find((p) => p.id === projectId);
+  const autoRead = projekt?.autoRead ?? false;
+  const slozky = projekt?.subProjects ?? [];
 
   // dokud se něco čte, koukni po pár vteřinách, jestli je hotovo
   useEffect(() => {
@@ -91,6 +103,7 @@ export function ReceiptScan({
       for (const it of items) {
         const fd = new FormData();
         fd.set("projectId", projectId);
+        if (subProjectId) fd.set("subProjectId", subProjectId);
         fd.set("file", await prepareUpload(it.file, { doc: true, crop: it.crop !== false }));
         await uploadReceipt(fd);
       }
@@ -115,13 +128,31 @@ export function ReceiptScan({
         {projects.length > 1 && (
           <select
             value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setSubProjectId("");
+            }}
             aria-label="Projekt"
             className="h-9 rounded-none border border-stone-300 bg-white px-2 text-sm text-stone-700 focus-visible:border-stone-950 focus-visible:outline-none"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {slozky.length > 0 && (
+          <select
+            value={subProjectId}
+            onChange={(e) => setSubProjectId(e.target.value)}
+            aria-label="Složka"
+            className="h-9 max-w-[14rem] rounded-none border border-stone-300 bg-white px-2 text-sm text-stone-700 focus-visible:border-stone-950 focus-visible:outline-none"
+          >
+            <option value="">Složka – určí majitel</option>
+            {slozky.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
               </option>
             ))}
           </select>
