@@ -558,7 +558,7 @@ export default async function DocsPage({
                         {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
                       </span>
                     </td>
-                    <td className="hidden py-1.5 sm:table-cell">
+                    <td className="hidden py-1.5 align-top sm:table-cell">
                       <span className={r.direction === "out" ? "text-emerald-700" : "text-stone-700"}>
                         {r.scan?.nabidka ? "Nabídka" : KIND_LABEL[r.kind]}
                       </span>
@@ -578,13 +578,13 @@ export default async function DocsPage({
                       </span>
                       <span className="block truncate text-[11px] text-stone-400 sm:hidden">{r.projectName}</span>
                     </td>
-                    <td className="hidden max-w-[12rem] py-1.5 text-stone-600 sm:table-cell">
+                    <td className="hidden max-w-[12rem] py-1.5 align-top text-stone-600 sm:table-cell">
                       <span className="block truncate" title={r.projectName}>
                         {r.projectName}
                       </span>
                     </td>
                     <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">{formatCurrency(r.amount, r.currency)}</td>
-                    <td className="hidden py-1.5 text-right font-mono text-stone-500 sm:table-cell">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
+                    <td className="hidden py-1.5 text-right align-top font-mono text-stone-500 sm:table-cell">{r.vat != null ? formatCurrency(r.vat, r.currency) : "—"}</td>
                     <td className={`py-1.5 text-right align-top text-xs ${r.status === "uhrazeno" || r.status === "přijato" ? "text-emerald-700" : r.status === "stornováno" ? "text-stone-400" : "text-orange-700"}`}>
                       {r.status}
                     </td>
