@@ -184,7 +184,8 @@ export async function importPlanJson(
     }
 
     // Založení nového dodavatele (potřebuje e-mail kvůli unikátnosti).
-    const finalEmail = email || (ico ? `${ico}@ares.local` : null);
+    // E-mail se nevymýšlí: dodavatel bez něj je kontakt (identifikuje ho IČO).
+    const finalEmail = email || null;
     if (!finalEmail) return null; // bez e-mailu i IČO nelze – necháme volný text
 
     let aresName: string | null = null;

@@ -364,7 +364,7 @@ export async function applyDocScan(formData: FormData) {
       data: {
         ownerId: project.ownerId,
         name: (ares?.name || supplierName || ico || "Dodavatel").slice(0, 200),
-        email: `${ico ?? Date.now()}@ares.local`,
+        email: null,
         category: "other",
         ico,
         dic: dic ?? ares?.dic ?? null,
@@ -855,7 +855,7 @@ export async function applyOfferScan(formData: FormData) {
       data: {
         ownerId: project.ownerId,
         name: (ares?.name || supplierName || ico || "Dodavatel").slice(0, 200),
-        email: `${ico ?? Date.now()}@ares.local`,
+        email: null,
         category: "other",
         ico,
         dic: dic ?? ares?.dic ?? null,
