@@ -87,6 +87,29 @@ export default async function DocsPage({
   const ids = projects.map((p) => p.id);
   const scope = projectId ? [projectId] : ids;
 
+  // Doklady, které uživatel nahrál do cizích projektů (dodavatel). Vidí jen
+  // svoje a jejich stav – zpracování a účtování je na vlastníkovi projektu.
+  const myUploads = await prisma.document.findMany({
+    where: {
+      uploadedById: user.id,
+      type: { in: ["receipt", "invoice"] },
+      project: { ownerId: { not: user.id } },
+      projectId: { notIn: ids },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    select: {
+      id: true,
+      originalName: true,
+      createdAt: true,
+      mimeType: true,
+      expenseId: true,
+      project: { select: { name: true } },
+      subProject: { select: { name: true } },
+      scan: { select: { status: true, result: true, expenseId: true } },
+    },
+  });
+
   const [scans, pendingDocs, mailsWaiting, expenses, incomes, invoices] = await Promise.all([
     prisma.docScan.findMany({
       // Doklad z projektu, nebo příloha z pošty, u které se projekt teprve určuje.
@@ -298,12 +321,53 @@ export default async function DocsPage({
         when={scans.some((s) => s.status === "running" && Date.now() - s.updatedAt.getTime() < 10 * 60_000)}
       />
 
-      <div className="mt-6">
-        <DocUploadBox projects={projects} />
-        <p className="mt-2 text-[11px] text-stone-400">
-          Nahrané doklady i pošta čekají v Nezpracovaných, dokud je nepřečteš. Vlastní faktura se založí jako příjem.
-        </p>
-      </div>
+      {projects.length > 0 && (
+        <div className="mt-6">
+          <DocUploadBox projects={projects} />
+          <p className="mt-2 text-[11px] text-stone-400">
+            Nahrané doklady i pošta čekají v Nezpracovaných, dokud je nepřečteš. Vlastní faktura se založí jako příjem.
+          </p>
+        </div>
+      )}
+
+      {/* Dodavatel: co jsem nahrál do cizích projektů a jak na tom je. */}
+      {myUploads.length > 0 && (
+        <section className="mt-6">
+          <h2 className="kicker mb-2">Moje nahrané doklady · {myUploads.length}</h2>
+          <ul className="border-t border-stone-200">
+            {myUploads.map((d) => {
+              const r = (d.scan?.result ?? null) as { supplier?: { name?: string }; total?: number; currency?: string } | null;
+              const hotovo = !!d.expenseId || !!d.scan?.expenseId;
+              const stav = hotovo
+                ? { label: "zaúčtováno", cls: "text-emerald-700" }
+                : d.scan?.status === "running"
+                  ? { label: "čte se", cls: "text-stone-500" }
+                  : d.scan?.status === "ready"
+                    ? { label: "čeká na majitele projektu", cls: "text-orange-700" }
+                    : d.scan?.status === "error"
+                      ? { label: "zpracuje majitel projektu", cls: "text-stone-500" }
+                      : { label: "nahráno", cls: "text-stone-500" };
+              return (
+                <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-stone-100 py-2.5 text-sm">
+                  <span className="min-w-0 flex-1 basis-48 truncate text-stone-900" title={d.originalName}>
+                    {r?.supplier?.name ?? d.originalName}
+                    <span className="block text-[11px] text-stone-400">
+                      {d.project.name}
+                      {d.subProject ? ` › ${d.subProject.name}` : ""} · {formatDate(d.createdAt)}
+                    </span>
+                  </span>
+                  {r?.total != null && (
+                    <span className="font-mono text-stone-950">{formatCurrency(r.total, r.currency ?? "CZK")}</span>
+                  )}
+                  <span className={`text-xs ${stav.cls}`}>{stav.label}</span>
+                  <DocPreview documentId={d.id} name={d.originalName} mimeType={d.mimeType} />
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[11px] text-stone-400">Doklad zaúčtuje majitel projektu.</p>
+        </section>
+      )}
 
       <InboxQueue
         mails={mailsWaiting.map((m) => ({

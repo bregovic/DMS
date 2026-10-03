@@ -1,11 +1,12 @@
 import { requireUser } from "@/lib/dal";
 import { SettingsNav } from "@/components/account/settings-nav";
+import { AiKeyForm } from "@/components/account/ai-key-form";
 import { aiUsage } from "@/server/extraction";
 
 /** Technické: automatické zpracování (útrata, limity, co je zapnuté). */
 export default async function TechSettingsPage() {
-  await requireUser();
-  const u = await aiUsage();
+  const user = await requireUser();
+  const u = await aiUsage(user.id);
   const usd = (v: number) => `${v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
   const bar = (v: number, max: number) => (
     <div className="mt-1 h-1.5 w-full bg-stone-100">
@@ -19,25 +20,30 @@ export default async function TechSettingsPage() {
       </header>
       <SettingsNav />
       <section className="mt-8">
-        <h2 className="kicker mb-4">Automatické zpracování – útrata a limity</h2>
+        <h2 className="kicker mb-4">Automatické zpracování</h2>
+        <AiKeyForm keySet={u.keySet} />
+      </section>
+      <section className="mt-12">
+        <h2 className="kicker mb-4">Útrata a limity</h2>
         {!u.configured || u.limits.disabled ? (
           <p className="text-sm text-stone-500">Automatické zpracování je vypnuté.</p>
         ) : (
           <div className="grid max-w-xl gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm text-stone-700">
-                Tento měsíc <span className="font-mono">{usd(u.month)}</span> z {usd(u.limits.monthlyUsd)}
+                Tento měsíc <span className="font-mono">{usd(u.month)}</span> z {usd(u.limits.accountMonthlyUsd)}
               </p>
-              {bar(u.month, u.limits.monthlyUsd)}
+              {bar(u.month, u.limits.accountMonthlyUsd)}
             </div>
             <div>
               <p className="text-sm text-stone-700">
-                Dnes <span className="font-mono">{usd(u.today)}</span> z {usd(u.limits.dailyUsd)}
+                Dnes <span className="font-mono">{usd(u.today)}</span> z {usd(u.limits.accountDailyUsd)}
               </p>
-              {bar(u.today, u.limits.dailyUsd)}
+              {bar(u.today, u.limits.accountDailyUsd)}
             </div>
             <p className="text-xs text-stone-500 sm:col-span-2">
-              Nejvýš {u.limits.runsPerHour} spuštění za hodinu a {u.limits.parallel} najednou na uživatele, soubory do{" "}
+              Limit je na tvůj účet: doklady, nabídky i plány z tvých projektů, včetně těch, které nahráli dodavatelé.
+              Nejvýš {u.limits.runsPerHour} spuštění za hodinu a {u.limits.parallel} najednou, soubory do{" "}
               {Math.round(u.limits.maxFileBytes / 1048576)} MB, stejná příloha se nezpracovává dvakrát zároveň. Po dosažení
               limitu se zpracování do konce dne / měsíce nespustí – nic se nezaplatí navíc.
             </p>
@@ -52,7 +58,7 @@ export default async function TechSettingsPage() {
           <li>plán z dokumentace, odhad nákladů a návrh chybějících úkonů katalogu</li>
         </ul>
         <p className="mt-3 text-xs text-stone-400">
-          Nic se nezakládá samo – vždy vznikne návrh k potvrzení. Limity se mění proměnnými prostředí na Railway.
+          Nahraný doklad se přečte sám; výdaj z něj vznikne až po kontrole. Limity se mění proměnnými prostředí na Railway.
         </p>
       </section>
     </div>

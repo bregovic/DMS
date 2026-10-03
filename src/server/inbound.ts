@@ -3,6 +3,7 @@ import { storage } from "@/lib/storage";
 import { fetchUnseen, mailboxConfigured, type FetchedMail } from "@/lib/mailbox";
 import { mailTemplate, para, sendMail } from "@/lib/mailer";
 import {
+  aiAccountForUser,
   assertBudget,
   callModel,
   createExtraction,
@@ -233,16 +234,20 @@ export async function suggestRouting(
     return { ...data, projectId: project?.projectId ?? null, requestId: request ?? requestIds[0] ?? null, requestIds };
   };
 
+  // Rozřazení pošty platí majitel schránky.
+  const account = await aiAccountForUser(ownerId);
+
   const zeptejSe = async (obsah: unknown[]) => {
     const { data } = await callModel<MailSuggestion>(AI_MODEL, ROUTE_INSTRUCTIONS, obsah, "mail-routing", ROUTE_SCHEMA, {
       effort: "medium",
       maxOutput: 3_000,
+      account,
     });
     return uprav(data);
   };
 
   try {
-    await assertBudget();
+    await assertBudget(account);
   } catch {
     return null; // limity nebo vypnuté zpracování – pošta se uloží bez návrhu
   }
@@ -259,7 +264,7 @@ export async function suggestRouting(
   const citelne = mail.attachments.filter((a) => a.content?.length && extractable(a.mimeType, a.originalName)).slice(0, 2);
   if (citelne.length === 0) return vysledek;
   try {
-    await assertBudget();
+    await assertBudget(account);
     const casti = [];
     for (const a of citelne) {
       try {

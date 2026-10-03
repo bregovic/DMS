@@ -1,6 +1,7 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
-import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
+import { AI_MODEL, aiAccountForUser, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
 import { currencyCode } from "@/lib/utils";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { Prisma } from "@/generated/prisma/client";
@@ -311,9 +312,12 @@ export async function runDocScan(scanId: string) {
       });
       return;
     }
-    await assertBudget(); // limity zpracování až tady, ať je případná chyba vidět u dokladu
     const cats = await getExpenseCategories();
     const ownerId = scan.document?.project.ownerId ?? scan.inboundAttachment?.mail.ownerId ?? null;
+    // Platí vlastník projektu (u pošty majitel schránky), ne kdo čtení spustil.
+    const account = await aiAccountForUser(ownerId);
+    account.projectId = scan.document?.projectId ?? null;
+    await assertBudget(account); // limity až tady, ať je případná chyba vidět u dokladu
     const { mista, zadanky } = await volbyZarazeni(ownerId);
     // U pošty jde do promptu i hlavička zprávy – u přeposlané nabídky bývá
     // dodavatel jen tam a v textu, ne v příloze.
@@ -338,7 +342,7 @@ export async function runDocScan(scanId: string) {
       SCHEMA,
       // Zařazení k žádankám chce porovnávat položky s poptávkami – na "low"
       // se model nerozhodl a vracel prázdno i tam, kde to z dokumentu plyne.
-      { effort: "medium", maxOutput: 20_000 },
+      { effort: "medium", maxOutput: 20_000, account },
     );
     const result = await fillExchangeRate(
       prelozZarazeni(normalize(stripNul(data), new Set(cats.map((c) => c.key))), mista, zadanky, zadano),
@@ -535,4 +539,20 @@ export async function fetchAres(ico: string) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Čtení nahraného dokladu rovnou po nahrání. Platí ho vlastník projektu,
+ * takže se ověří jeho rozpočet a klíč; když chybí, doklad zůstane ve frontě
+ * nepřečtený a vlastník ho přečte tlačítkem. Nahrání to nikdy nerozbije.
+ */
+export async function scanAfterUpload(projectId: string, documentId: string, userId: string) {
+  try {
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+    await assertBudget(await aiAccountForUser(project?.ownerId ?? null));
+  } catch {
+    return; // bez klíče nebo po vyčerpání limitu se čte až na povel
+  }
+  const id = await createDocScan(projectId, documentId, userId);
+  after(() => runDocScan(id));
 }

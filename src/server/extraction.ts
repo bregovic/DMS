@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
+import { decryptSecret } from "@/lib/secret-box";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -21,19 +22,27 @@ import type { Prisma } from "@/generated/prisma/client";
 export const AI_MODEL = process.env.AI_MODEL || "gpt-5-mini";
 
 /**
- * Pojistky proti zbytečnému čerpání API (vše jde přepsat proměnnou prostředí):
- *  - AI_DISABLED=1            vypne všechna volání
- *  - AI_MONTHLY_LIMIT_USD     strop za kalendářní měsíc (5 USD)
- *  - AI_DAILY_LIMIT_USD       strop za den (1 USD)
- *  - AI_MAX_RUNS_PER_HOUR     max spuštění na uživatele za hodinu (20)
- *  - AI_MAX_PARALLEL          max souběžných běhů na uživatele (3)
- *  - AI_MAX_FILE_MB           větší soubor se modelu neposílá (12 MB)
+ * Pojistky proti zbytečnému čerpání API (vše jde přepsat proměnnou prostředí).
+ *
+ * Strop je na účet, který zpracování platí – dřív byl jeden společný pro celou
+ * appku, takže jeden účet dokázal vyčerpat den všem ostatním. Globální strop
+ * zůstal jako záchranná brzda nad součtem všech účtů.
+ *  - AI_DISABLED=1                  vypne všechna volání
+ *  - AI_ACCOUNT_MONTHLY_LIMIT_USD   strop účtu za kalendářní měsíc (5 USD)
+ *  - AI_ACCOUNT_DAILY_LIMIT_USD     strop účtu za den (1 USD)
+ *  - AI_MONTHLY_LIMIT_USD           brzda za celou appku / měsíc (25 USD)
+ *  - AI_DAILY_LIMIT_USD             brzda za celou appku / den (5 USD)
+ *  - AI_MAX_RUNS_PER_HOUR           max spuštění na uživatele za hodinu (20)
+ *  - AI_MAX_PARALLEL                max souběžných běhů na uživatele (3)
+ *  - AI_MAX_FILE_MB                 větší soubor se modelu neposílá (12 MB)
  * Model navíc dostává strop délky odpovědi a nízkou úroveň přemýšlení
  * (u plánu střední) – přemýšlení tvořilo ~70 % výstupních tokenů.
  */
 export const AI_LIMITS = {
-  monthlyUsd: Number(process.env.AI_MONTHLY_LIMIT_USD || 5),
-  dailyUsd: Number(process.env.AI_DAILY_LIMIT_USD || 1),
+  accountMonthlyUsd: Number(process.env.AI_ACCOUNT_MONTHLY_LIMIT_USD || 5),
+  accountDailyUsd: Number(process.env.AI_ACCOUNT_DAILY_LIMIT_USD || 1),
+  monthlyUsd: Number(process.env.AI_MONTHLY_LIMIT_USD || 25),
+  dailyUsd: Number(process.env.AI_DAILY_LIMIT_USD || 5),
   runsPerHour: Number(process.env.AI_MAX_RUNS_PER_HOUR || 20),
   parallel: Number(process.env.AI_MAX_PARALLEL || 3),
   maxFileBytes: Number(process.env.AI_MAX_FILE_MB || 12) * 1024 * 1024,
@@ -241,9 +250,40 @@ reputation: co se o firmě dá **doložit** z webu. Pravidla, která nesmíš po
 - reputace smí posunout total nejvýš o 10 bodů; zbytek stojí na nabídce samotné.
 `;
 
+/**
+ * Účet, který zpracování platí: jeho klíč k API a jeho rozpočet.
+ *
+ * Klíč si každý zadává v Nastavení. Dodavatel vlastní klíč mít nemusí –
+ * doklad v cizím projektu platí vlastník projektu, protože je to jeho
+ * evidence a jeho rozhodnutí, co se bude číst.
+ */
+export type AiAccount = { userId: string | null; projectId?: string | null; apiKey: string };
+
+async function klicUctu(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { openaiApiKey: true } });
+  return decryptSecret(u?.openaiApiKey) || null;
+}
+
+/** Účet uživatele – pro vlastní projekty, katalog, plán, poštu. */
+export async function aiAccountForUser(userId: string | null): Promise<AiAccount> {
+  return { userId, apiKey: (await klicUctu(userId)) ?? process.env.OPENAI_API_KEY ?? "" };
+}
+
+/** Účet vlastníka projektu – doklady a nabídky platí on, ne kdo tlačítko zmáčkl. */
+export async function aiAccountForProject(projectId: string | null): Promise<AiAccount> {
+  if (!projectId) return aiAccountForUser(null);
+  const p = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  const a = await aiAccountForUser(p?.ownerId ?? null);
+  return { ...a, projectId };
+}
+
 /** Útrata za AI od daného okamžiku (USD) – vytěžení, porovnání i plány. */
-async function aiSpendSince(since: Date) {
-  const a = await prisma.aiUsageLog.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } });
+async function aiSpendSince(since: Date, userId?: string | null) {
+  const a = await prisma.aiUsageLog.aggregate({
+    where: { createdAt: { gte: since }, ...(userId ? { userId } : {}) },
+    _sum: { costUsd: true },
+  });
   return a._sum.costUsd ?? 0;
 }
 
@@ -256,11 +296,30 @@ export async function monthlyAiSpend() {
 }
 
 /** Přehled útraty a limitů (pro Nastavení a dialogy AI). */
-export async function aiUsage() {
+export async function aiUsage(userId?: string | null) {
   const day = new Date();
   day.setUTCHours(0, 0, 0, 0);
-  const [month, today] = await Promise.all([monthlyAiSpend(), aiSpendSince(day)]);
-  return { month, today, limits: AI_LIMITS, configured: !!process.env.OPENAI_API_KEY };
+  const month = new Date();
+  month.setUTCDate(1);
+  month.setUTCHours(0, 0, 0, 0);
+  const [all, allToday, mine, mineToday, key] = await Promise.all([
+    aiSpendSince(month),
+    aiSpendSince(day),
+    userId ? aiSpendSince(month, userId) : Promise.resolve(0),
+    userId ? aiSpendSince(day, userId) : Promise.resolve(0),
+    userId ? klicUctu(userId) : Promise.resolve(null),
+  ]);
+  return {
+    // útrata účtu (to, co uživatele zajímá) a celé appky (brzda)
+    month: mine,
+    today: mineToday,
+    appMonth: all,
+    appToday: allToday,
+    limits: AI_LIMITS,
+    /** Má účet vlastní klíč? Bez něj zpracování nejede. */
+    keySet: !!key,
+    configured: !!key || !!process.env.OPENAI_API_KEY,
+  };
 }
 
 /** Zaseknuté běhy (restart serveru uprostřed volání) uzavřít jako chybu. */
@@ -279,15 +338,24 @@ async function closeStaleRuns() {
  * Pojistky před každým voláním AI: vypínač, měsíční a denní strop,
  * počet spuštění za hodinu a souběžné běhy uživatele.
  */
-export async function assertBudget(userId?: string) {
+export async function assertBudget(account?: AiAccount | string | null) {
+  // Starší volání posílala jen id uživatele – dohledáme k němu účet.
+  const acc: AiAccount =
+    typeof account === "string" || account == null
+      ? await aiAccountForUser(typeof account === "string" ? account : null)
+      : account;
   if (AI_LIMITS.disabled) throw new Error("Automatické zpracování je vypnuté.");
-  if (!process.env.OPENAI_API_KEY) throw new Error("Automatické zpracování není nastavené.");
+  if (!acc.apiKey) throw new Error("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
   await closeStaleRuns();
-  const u = await aiUsage();
-  if (u.month >= AI_LIMITS.monthlyUsd)
-    throw new Error(`Měsíční limit automatického zpracování (${AI_LIMITS.monthlyUsd} USD) je vyčerpaný.`);
-  if (u.today >= AI_LIMITS.dailyUsd)
-    throw new Error(`Denní limit automatického zpracování (${AI_LIMITS.dailyUsd} USD) je vyčerpaný – zkus to zítra.`);
+  const u = await aiUsage(acc.userId);
+  if (u.month >= AI_LIMITS.accountMonthlyUsd)
+    throw new Error(`Měsíční limit automatického zpracování (${AI_LIMITS.accountMonthlyUsd} USD) je vyčerpaný.`);
+  if (u.today >= AI_LIMITS.accountDailyUsd)
+    throw new Error(`Denní limit automatického zpracování (${AI_LIMITS.accountDailyUsd} USD) je vyčerpaný – zkus to zítra.`);
+  // Brzda nad součtem všech účtů – kdyby limit na účet někdo přenastavil.
+  if (u.appMonth >= AI_LIMITS.monthlyUsd || u.appToday >= AI_LIMITS.dailyUsd)
+    throw new Error("Limit automatického zpracování je vyčerpaný.");
+  const userId = acc.userId;
   if (userId) {
     const hour = new Date(Date.now() - 3600_000);
     const mine = { createdById: userId };
@@ -378,12 +446,15 @@ export async function callModel<T>(
   content: unknown[],
   name: string,
   schema: unknown,
-  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number; webSearch?: boolean } = {},
+  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number; webSearch?: boolean; account?: AiAccount } = {},
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
+  // Volá se klíčem toho, kdo zpracování platí; bez něj to nemá na čí účet jít.
+  const acc = opts.account ?? (await aiAccountForUser(null));
+  if (!acc.apiKey) throw new Error("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
   // Úloha na pozadí u OpenAI + průběžná kontrola: dlouhé volání (plán z mnoha
   // PDF trvá i přes 5 min) jinak spadne na výchozím limitu Node fetch
   // („fetch failed“ po 300 s čekání na hlavičky odpovědi).
-  const headers = { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" };
+  const headers = { Authorization: `Bearer ${acc.apiKey}`, "Content-Type": "application/json" };
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers,
@@ -424,7 +495,9 @@ export async function callModel<T>(
   const searches = (j.output ?? []).filter((o: { type: string }) => o.type === "web_search_call").length;
   const costUsd = (inTok * pin + outTok * pout) / 1_000_000 + searches * 0.01;
   // Útrata do trvalého záznamu (limity) – zaplacená je i useknutá odpověď.
-  await prisma.aiUsageLog.create({ data: { kind: name, model, costUsd } }).catch(() => {});
+  await prisma.aiUsageLog
+    .create({ data: { kind: name, model, costUsd, userId: acc.userId, projectId: acc.projectId ?? null } })
+    .catch(() => {});
   if (j.status === "incomplete")
     throw new Error("Výsledek byl useknutý (strop délky) – zkus menší dokument nebo užší upřesnění.");
   const text = j.output
@@ -445,7 +518,7 @@ export async function createExtraction(documentId: string, userId: string, instr
     select: { id: true, projectId: true, requestId: true },
   });
   if (!doc?.requestId) throw new Error("Příloha nepatří k žádance.");
-  await assertBudget(userId);
+  await assertBudget(await aiAccountForProject(doc.projectId));
   const busy = await prisma.extraction.findFirst({ where: { documentId: doc.id, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Tahle příloha se už zpracovává.");
   const ex = await prisma.extraction.create({
@@ -508,7 +581,7 @@ export async function runExtraction(extractionId: string) {
       ],
       "document",
       EXTRACT_SCHEMA,
-      { effort: "low", maxOutput: 14_000 },
+      { effort: "low", maxOutput: 14_000, account: await aiAccountForProject(ex.projectId) },
     );
     // requestId, který model vymyslel, zahodit
     const known = new Set(requests.map((r) => r.id));
@@ -547,7 +620,8 @@ export async function createComparison(
 ) {
   const offers = await prisma.offer.count({ where: { requestId } });
   if (offers === 0) throw new Error("Žádanka zatím nemá žádnou nabídku.");
-  await assertBudget(userId);
+  const rq = await prisma.request.findUnique({ where: { id: requestId }, select: { projectId: true } });
+  await assertBudget(await aiAccountForProject(rq?.projectId ?? null));
   const busy = await prisma.offerComparison.findFirst({ where: { requestId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
@@ -569,7 +643,8 @@ export async function createBundleComparison(
     prisma.offer.count({ where: { request: { bundleId } } }),
   ]);
   if (offers + parts === 0) throw new Error("Balíček zatím nemá žádnou nabídku.");
-  await assertBudget(userId);
+  const bn = await prisma.requestBundle.findUnique({ where: { id: bundleId }, select: { projectId: true } });
+  await assertBudget(await aiAccountForProject(bn?.projectId ?? null));
   const busy = await prisma.offerComparison.findFirst({ where: { bundleId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
@@ -635,7 +710,7 @@ export async function runBundleComparison(comparisonId: string) {
       ],
       "comparison",
       COMPARE_SCHEMA,
-      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch },
+      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch, account: await aiAccountForProject(ev.projectId) },
     );
     await prisma.offerComparison.update({
       where: { id: c.id },
@@ -661,6 +736,7 @@ export async function runComparison(comparisonId: string) {
     const req = await prisma.request.findUnique({
       where: { id: c.requestId },
       select: {
+        projectId: true,
         title: true,
         description: true,
         quantity: true,
@@ -751,7 +827,7 @@ export async function runComparison(comparisonId: string) {
       ],
       "comparison",
       COMPARE_SCHEMA,
-      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch },
+      { effort: "low", maxOutput: 10_000, webSearch: c.webSearch, account: await aiAccountForProject(req.projectId) },
     );
     await prisma.offerComparison.update({
       where: { id: c.id },

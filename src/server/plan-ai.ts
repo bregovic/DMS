@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
-import { AI_MODEL, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
+import { AI_MODEL, aiAccountForProject, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
 import { calcOperation } from "@/lib/process-calc";
 
 /** Plán z dokumentace potřebuje silnější model než vytěžení nabídky (AI_PLAN_MODEL). */
@@ -148,7 +148,7 @@ export async function createPlanDraft(
   prompt?: string | null,
   replaceExisting = false,
 ) {
-  await assertBudget(userId);
+  await assertBudget(await aiAccountForProject(projectId));
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
   if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
@@ -251,7 +251,7 @@ export async function runPlanDraft(draftId: string) {
       ],
       "plan",
       PLAN_SCHEMA,
-      { effort: "medium", maxOutput: 60_000 },
+      { effort: "medium", maxOutput: 60_000, account: await aiAccountForProject(d.project.id) },
     );
     await prisma.planDraft.update({
       where: { id: d.id },

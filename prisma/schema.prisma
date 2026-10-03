@@ -46,6 +46,12 @@ model User {
   /** Přihlášení do vlastní datové schránky pro odesílání podání (heslo šifrovaně). */
   isdsLogin        String?
   isdsPassword     String?
+  /**
+   * Vlastní klíč k OpenAI (šifrovaně). Kdo ho má zadaný, smí automatické
+   * zpracování používat – a platí ho. Dodavatelé jedou na klíč vlastníka
+   * projektu, protože zpracování jde z jeho rozpočtu.
+   */
+  openaiApiKey     String?
   /** Posílat přes veřejný test datových schránek (czebox) místo ostrého provozu. */
   isdsTest         Boolean @default(false)
   taxOfficeCode   String? // kód finančního úřadu (c_ufo)
@@ -905,13 +911,16 @@ model PlanDraft {
 // (limity počítají z něj, jinak by smazání projektu „vynulovalo“ útratu).
 model AiUsageLog {
   id        String   @id @default(cuid())
+  /** Účet, který zpracování platí – vlastník projektu, jinak sám uživatel. */
   userId    String?
+  projectId String?
   kind      String // extraction | comparison | plan
   model     String
   costUsd   Float
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 // Oznámení (zvoneček): přidělené úkoly, výdaje od ostatních, připomínky, úhrady.

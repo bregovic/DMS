@@ -93,3 +93,21 @@ export async function lookupVatAccounts(dic: string) {
   const { vatRegistry } = await import("@/server/vat-registry");
   return vatRegistry(dic);
 }
+
+/**
+ * Klíč k OpenAI u účtu. Kdo ho má zadaný, smí automatické zpracování
+ * používat – a platí ho. Dodavatelé v cizím projektu jedou na klíč
+ * vlastníka projektu, vlastní mít nemusí.
+ */
+export async function updateAiKey(formData: FormData) {
+  const user = await requireUser();
+  const key = String(formData.get("openaiApiKey") || "").trim();
+  if (formData.get("clear") === "1") {
+    await prisma.user.update({ where: { id: user.id }, data: { openaiApiKey: null } });
+  } else {
+    if (!key) throw new Error("Zadej klíč.");
+    if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) throw new Error("Tohle nevypadá na klíč k OpenAI (začíná „sk-“).");
+    await prisma.user.update({ where: { id: user.id }, data: { openaiApiKey: encryptSecret(key) } });
+  }
+  revalidatePath("/settings/technicke");
+}

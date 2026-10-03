@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { canWrite, getProjectRole, getTaskOnlyAccess, isManager, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { assertUploadQuota } from "@/server/upload-quota";
-import { createDocScan, createMailScan, fetchAres, runDocScan, type ScanResult } from "@/server/doc-scan";
+import { createDocScan, createMailScan, fetchAres, runDocScan, scanAfterUpload, type ScanResult } from "@/server/doc-scan";
 import { AI_MODEL } from "@/server/extraction";
 import { Prisma } from "@/generated/prisma/client";
 import { notifyExpenseAdded } from "@/server/notify";
@@ -609,8 +609,9 @@ export async function uploadReceipt(formData: FormData) {
     },
     select: { id: true },
   });
-  // Doklady se nečtou samy – nahrají se a vytěžení se pouští v přehledu
-  // (po jednom, nebo celá dávka). Správcům dáme vědět, že přibyl doklad.
+  // Doklad se přečte hned po nahrání – nahrávající (často dodavatel v terénu)
+  // už nic nevyplňuje a vlastník ho pak jen zkontroluje a zalistuje.
+  await scanAfterUpload(projectId, doc.id, user.id);
   if (!isManager(role)) {
     const { notifyDocUploaded } = await import("@/server/notify");
     await notifyDocUploaded(projectId, user, { id: doc.id, name: file.name });

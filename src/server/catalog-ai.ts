@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { evalFormula } from "@/lib/formula";
-import { AI_MODEL, assertBudget, callModel } from "@/server/extraction";
+import { AI_MODEL, aiAccountForUser, assertBudget, callModel } from "@/server/extraction";
 
 /**
  * Doplnění katalogu přes AI (#35): když „Z katalogu“ nic nenajde, AI podle
@@ -93,7 +93,8 @@ Formát katalogu (dodrž ho přesně):
 export async function proposeOperation(title: string, userId: string, note?: string | null): Promise<CatalogProposal> {
   const name = title.trim();
   if (name.length < 3) throw new Error("Zadej název činnosti.");
-  await assertBudget(userId);
+  const account = await aiAccountForUser(userId);
+  await assertBudget(account);
   const [materials, ops] = await Promise.all([
     prisma.material.findMany({ select: { code: true, name: true, unit: true, unitPrice: true }, orderBy: { code: "asc" }, take: 400 }),
     prisma.operation.findMany({ select: { code: true, name: true }, orderBy: { code: "asc" } }),

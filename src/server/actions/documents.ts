@@ -171,9 +171,12 @@ export async function uploadDocument(formData: FormData) {
     select: { id: true, mimeType: true, originalName: true },
   });
 
-  // Doklady se nečtou samy: nahrávají se průběžně a vytěžení se pouští
-  // tlačítkem (po jednom, nebo celá dávka najednou) v přehledu dokladů.
-  // Doklad od dodavatele proto správcům ohlásíme, jinak by o něm nevěděli.
+  // Doklad se přečte hned po nahrání; ostatní dokumentace projektu ne.
+  if (isReceipt) {
+    const { scanAfterUpload } = await import("@/server/doc-scan");
+    await scanAfterUpload(projectId, doc.id, user.id);
+  }
+  // Doklad od dodavatele správcům ohlásíme, jinak by o něm nevěděli.
   if (!isManager(role)) {
     const { notifyDocUploaded } = await import("@/server/notify");
     await notifyDocUploaded(projectId, user, { id: doc.id, name: doc.originalName });

@@ -112,7 +112,6 @@ export default async function ProjectDetailPage({
     prisma.project.findUnique({
       where: { id },
       include: {
-        owner: { select: { billingIco: true, billingDic: true } },
         expenses: {
           orderBy: [{ status: "desc" }, { date: "desc" }],
           include: {
@@ -221,21 +220,6 @@ export default async function ProjectDetailPage({
       })
     : [];
   const incomeDocById = new Map(incomeDocs.map((d) => [d.id, d]));
-
-  // doklady nahrané do projektu, které ještě nejsou zaúčtované
-  const inbox = await prisma.document.findMany({
-    where: { projectId: id, type: { in: ["receipt", "invoice"] }, expenseId: null },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    select: {
-      id: true,
-      originalName: true,
-      mimeType: true,
-      createdAt: true,
-      uploadedBy: { select: { name: true, email: true } },
-      scan: { select: { id: true, status: true, result: true } },
-    },
-  });
 
 
   const catMap = new Map(categories.map((c) => [c.key, c.label]));
@@ -462,11 +446,6 @@ export default async function ProjectDetailPage({
   // jen je-li úroveň v jeho rozsahu (root a nadřazené složky jsou jen k navigaci).
   const levelInScope = !scopeSet || (sub != null && scopeSet.has(sub));
   const canAdd = (role === "owner" || role === "active" || role === "member") && levelInScope;
-  // Vytěžení dokladů jede z rozpočtu vlastníka – spolupracovníkovi ho vlastník povoluje.
-  const canScanDocs =
-    isManager ||
-    project.memberships.some((m) => m.email.toLowerCase() === (user.email ?? "").toLowerCase() && m.canScan);
-
   const levelExpenses = levelInScope
     ? visExpenses.filter((e) => (e.subProjectId ?? null) === (sub ?? null))
     : [];
@@ -483,84 +462,6 @@ export default async function ProjectDetailPage({
   // Výkazy: vykázaná práce (k vyúčtování), doklady a příjmy na této úrovni
   const workExpenses = levelExpenses.filter((e) => e.kind === "work" || e.hours != null);
   const myWork = workExpenses.filter((e) => e.createdById === user.id);
-
-  // Vystavil doklad majitel projektu? Pak návrh míří do příjmů.
-  const ownerIco = (project.owner?.billingIco ?? "").replace(/\s/g, "");
-  const ownerDic = (project.owner?.billingDic ?? "").replace(/\s/g, "").toUpperCase();
-  const isMine = (ico?: string | null, dic?: string | null) => {
-    const i = (ico ?? "").replace(/\D/g, "");
-    const dd = (dic ?? "").replace(/\s/g, "").toUpperCase();
-    return (!!ownerIco && (i === ownerIco || dd.replace(/^CZ/, "") === ownerIco)) || (!!ownerDic && dd === ownerDic);
-  };
-  const inboxRaw = inbox
-    .filter((d) => !d.scan || ["running", "ready", "error"].includes(d.scan.status))
-    .map((d) => {
-      const r = (d.scan?.result ?? null) as {
-        supplier?: { name?: string; ico?: string; dic?: string };
-        customer?: { ico?: string; dic?: string };
-        number?: string;
-        total?: number;
-        currency?: string;
-        taxDate?: string;
-        totalVat?: number;
-        vatBreakdown?: { rate: number }[];
-        warnings?: string[];
-      } | null;
-      const mine = r ? isMine(r.supplier?.ico, r.supplier?.dic) : false;
-      return { d, r, target: r ? ((mine ? "income" : "expense") as "income" | "expense") : null };
-    });
-
-  // Stejné číslo dokladu od téže protistrany už v evidenci? Ptáme se najednou za všechny.
-  const inboxNumbers = inboxRaw.map((x) => x.r?.number).filter((x): x is string => !!x);
-  const [dupExpenses, dupIncomes] = inboxNumbers.length
-    ? await Promise.all([
-        prisma.expense.findMany({
-          where: { project: { ownerId: project.ownerId }, docNumber: { in: inboxNumbers } },
-          select: { docNumber: true, supplierIco: true, title: true },
-        }),
-        prisma.income.findMany({
-          where: { project: { ownerId: project.ownerId }, docNumber: { in: inboxNumbers } },
-          select: { docNumber: true, customerIco: true, title: true },
-        }),
-      ])
-    : [[], []];
-
-  const inboxDocs = inboxRaw.map(({ d, r, target }) => {
-    const issues: string[] = [];
-    if (r) {
-      const num = r.number ?? null;
-      const ico = (target === "income" ? r.customer?.ico : r.supplier?.ico)?.replace(/\D/g, "") ?? null;
-      const hit =
-        num == null
-          ? null
-          : target === "income"
-            ? dupIncomes.find((x) => x.docNumber === num && (!ico || !x.customerIco || x.customerIco === ico))
-            : dupExpenses.find((x) => x.docNumber === num && (!ico || !x.supplierIco || x.supplierIco === ico));
-      if (hit) issues.push(`už v evidenci: ${hit.title}`);
-      if (r.total == null) issues.push("chybí částka");
-      if (!r.supplier?.name) issues.push("chybí dodavatel");
-      if (!num) issues.push("chybí číslo dokladu");
-      if (!r.taxDate) issues.push("chybí DUZP");
-      if (!r.vatBreakdown?.length && r.totalVat == null) issues.push("bez rozpisu DPH");
-      for (const w of r.warnings ?? []) issues.push(w);
-    }
-    return {
-      id: d.id,
-      name: d.originalName,
-      mimeType: d.mimeType,
-      createdAt: d.createdAt.toISOString(),
-      uploader: d.uploadedBy.name ?? d.uploadedBy.email ?? "?",
-      scanId: d.scan?.id ?? null,
-      status: (d.scan?.status ?? "uploaded") as "uploaded" | "running" | "ready" | "error",
-      target,
-      supplier: r?.supplier?.name ?? null,
-      number: r?.number ?? null,
-      total: r?.total ?? null,
-      currency: r?.currency ?? null,
-      issues,
-      duplicate: issues.some((x) => x.startsWith("už v evidenci")),
-    };
-  });
 
   const incomeRows = levelIncomes.map((i) => ({
     id: i.id,
@@ -1181,11 +1082,8 @@ export default async function ProjectDetailPage({
         <DocInbox
           projectId={project.id}
           projectName={project.name}
-          canScan={canScanDocs}
           subProjectId={sub}
-          categories={categories.map((c) => ({ key: c.key, label: c.label }))}
           subProjects={project.subProjects.map((x) => ({ id: x.id, name: x.name }))}
-          docs={inboxDocs}
         />
       )}
 
