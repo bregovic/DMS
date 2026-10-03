@@ -171,7 +171,17 @@ export default async function DocsPage({
       },
     }),
     prisma.expense.findMany({
-      where: { projectId: { in: scope }, docNumber: { not: null } },
+      /* Doklad = má číslo, přiloženou účtenku/fakturu, nebo rozpis DPH.
+         Dřív stačilo jen číslo, takže přečtená účtenka bez čísla po založení
+         zmizela: ze fronty vypadla (je zpracovaná) a sem se nedostala. */
+      where: {
+        projectId: { in: scope },
+        OR: [
+          { docNumber: { not: null } },
+          { vatAmount: { not: null } },
+          { documents: { some: { type: { in: ["receipt", "invoice"] } } } },
+        ],
+      },
       orderBy: [{ taxDate: "desc" }, { date: "desc" }],
       take: 300,
       select: {
@@ -190,7 +200,10 @@ export default async function DocsPage({
       },
     }),
     prisma.income.findMany({
-      where: { projectId: { in: scope }, docNumber: { not: null } },
+      where: {
+        projectId: { in: scope },
+        OR: [{ docNumber: { not: null } }, { vatAmount: { not: null } }, { documentId: { not: null } }],
+      },
       orderBy: [{ taxDate: "desc" }, { date: "desc" }],
       take: 300,
       select: {
