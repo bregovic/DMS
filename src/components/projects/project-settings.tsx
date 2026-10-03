@@ -38,7 +38,7 @@ export function ProjectSettings({
   categories: { key: string; label: string }[];
   members: { email: string; role: string; canScan?: boolean }[];
   /** Dodavatelé z evidence – dají se přidat do projektu jedním klikem. */
-  vendors?: { id: string; name: string; email: string }[];
+  vendors?: { id: string; name: string; email: string | null }[];
 }) {
   const [open, setOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);

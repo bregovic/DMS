@@ -78,7 +78,7 @@ export async function getExtraction(extractionId: string) {
   const norm = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
   const match =
     (v?.ico && vendors.find((x) => norm(x.ico) && norm(x.ico) === norm(v.ico))) ||
-    (v?.email && vendors.find((x) => x.email.toLowerCase() === v.email!.toLowerCase())) ||
+    (v?.email && vendors.find((x) => x.email && x.email.toLowerCase() === v.email!.toLowerCase())) ||
     (v?.name && vendors.find((x) => x.name.trim().toLowerCase() === v.name!.trim().toLowerCase())) ||
     null;
 

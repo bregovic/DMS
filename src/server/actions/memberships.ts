@@ -96,6 +96,8 @@ export async function setVendorRole(formData: FormData) {
     select: { email: true },
   });
   if (!vendor) throw new Error("Dodavatel nenalezen.");
+  // Přístup se páruje podle e-mailu – přihlašuje se jím. Bez něj to nejde.
+  if (!vendor.email) throw new Error("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
   const email = vendor.email.toLowerCase();
 
   if (role === "vendor") {
@@ -132,6 +134,8 @@ export async function setVendorSubRole(formData: FormData) {
     select: { email: true },
   });
   if (!vendor) throw new Error("Dodavatel nenalezen.");
+  // Přístup se páruje podle e-mailu – přihlašuje se jím. Bez něj to nejde.
+  if (!vendor.email) throw new Error("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
   const email = vendor.email.toLowerCase();
 
   if (role === "vendor") {

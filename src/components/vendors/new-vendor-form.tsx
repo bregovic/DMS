@@ -40,8 +40,9 @@ export function NewVendorForm() {
         <form ref={formRef} action={action} className="space-y-5 p-5">
           <AresLookup autoFocus />
           <div className="space-y-1.5">
-            <Label htmlFor="email">E-mail (identifikátor)</Label>
-            <Input id="email" name="email" type="email" placeholder="dodavatel@firma.cz" required />
+            <Label htmlFor="email">E-mail</Label>
+            <Input id="email" name="email" type="email" placeholder="dodavatel@firma.cz" />
+            <p className="text-xs text-stone-500">Potřeba, jen když má mít přístup do projektu – přihlásí se jím.</p>
           </div>
           <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">

@@ -141,7 +141,7 @@ export function ProjectAccess({
   members: Member[];
   canManage: boolean;
   /** Dodavatelé z evidence – přidají se jedním klikem podle e-mailu. */
-  vendors?: { id: string; name: string; email: string }[];
+  vendors?: { id: string; name: string; email: string | null }[];
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Exclude<Role, "none">>("member");
@@ -149,7 +149,10 @@ export function ProjectAccess({
   const [err, setErr] = useState<string | null>(null);
 
   const known = new Set(members.map((m) => m.email.toLowerCase()));
-  const freeVendors = vendors.filter((v) => v.email && !known.has(v.email.toLowerCase()));
+  // Jen dodavatelé s e-mailem – podle něj se přístup páruje a přihlašují se jím.
+  const freeVendors = vendors.filter(
+    (v): v is { id: string; name: string; email: string } => !!v.email && !known.has(v.email.toLowerCase()),
+  );
 
   function invite(value?: string, asRole?: Exclude<Role, "none">) {
     const e = (value ?? email).trim().toLowerCase();

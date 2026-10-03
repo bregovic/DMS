@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type PayeeVendor = { email: string; bankAccount: string | null };
+export type PayeeVendor = { email: string | null; bankAccount: string | null };
 
 /**
  * Účet pro platbu dodavateli. Vlastní záznam v evidenci má přednost; když
@@ -14,8 +14,8 @@ export async function payeeAccounts(
   const emails = [
     ...new Set(
       vendors
-        .filter((v): v is PayeeVendor => !!v && !v.bankAccount && !!v.email)
-        .map((v) => v.email.toLowerCase()),
+        .filter((v) => !!v && !v.bankAccount && !!v.email)
+        .map((v) => v!.email!.toLowerCase()),
     ),
   ];
 
@@ -37,7 +37,8 @@ export async function payeeAccounts(
 
   return (vendor) => {
     if (!vendor) return null;
-    return vendor.bankAccount || byEmail.get(vendor.email.toLowerCase()) || null;
+    // Dodavatel bez e-mailu je jen kontakt – účet může mít jen u sebe v evidenci.
+    return vendor.bankAccount || (vendor.email ? byEmail.get(vendor.email.toLowerCase()) : null) || null;
   };
 }
 

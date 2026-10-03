@@ -17,7 +17,7 @@ const fieldClass =
 type Vendor = {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   category: string;
   phone: string | null;
   description: string | null;
@@ -57,8 +57,9 @@ export function EditVendorForm({ vendor }: { vendor: Vendor }) {
             initial={{ ico: vendor.ico, name: vendor.name, dic: vendor.dic, address: vendor.address }}
           />
           <div className="space-y-1.5">
-            <Label htmlFor="ev-email">E-mail (identifikátor)</Label>
-            <Input id="ev-email" name="email" type="email" defaultValue={vendor.email} required />
+            <Label htmlFor="ev-email">E-mail</Label>
+            <Input id="ev-email" name="email" type="email" defaultValue={vendor.email ?? ""} />
+            <p className="text-xs text-stone-500">Potřeba, jen když má mít přístup do projektu – přihlásí se jím.</p>
           </div>
           <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">

@@ -42,7 +42,7 @@ export async function matchVendor(ownerId: string, v: ExtractionResult["vendor"]
   });
   return (
     (v.ico && vendors.find((x) => cislice(x.ico) && cislice(x.ico) === cislice(v.ico))) ||
-    (v.email && vendors.find((x) => x.email.toLowerCase() === v.email!.toLowerCase())) ||
+    (v.email && vendors.find((x) => x.email && x.email.toLowerCase() === v.email!.toLowerCase())) ||
     (v.name && vendors.find((x) => x.name.trim().toLowerCase() === v.name!.trim().toLowerCase())) ||
     null
   );

@@ -129,7 +129,12 @@ model Vendor {
   id          String   @id @default(cuid())
   ownerId     String
   name        String
-  email       String
+  /**
+   * E-mail je nepovinný – dodavatel může být jen kontakt (IČO, telefon).
+   * Pro přístup k projektu je ale potřeba: přihlašuje se jím a páruje se
+   * podle něj členství i přidělené úkoly.
+   */
+  email       String?
   category    String   @default("other")
   phone       String?
   description String?
