@@ -547,7 +547,7 @@ export async function vendorsForScan(projectId: string | null) {
   return prisma.vendor.findMany({
     where: { ownerId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, ico: true },
+    select: { id: true, name: true, ico: true, dic: true, bankAccount: true },
   });
 }
 
@@ -819,7 +819,33 @@ export async function applyOfferScan(formData: FormData) {
   if (!scan) throw new Error("Návrh nenalezen.");
 
   const requestIds = (JSON.parse(String(formData.get("requestIds") || "[]")) as string[]).filter(Boolean);
-  if (requestIds.length === 0) throw new Error("Vyber aspoň jednu žádanku.");
+
+  /* Nabídka, ke které žádanka ještě není: založí se podle ní. Projekt a složka
+     se berou ze Zařazení v dialogu (nebo z projektu, kam doklad patří), protože
+     bez žádanky není z čeho je odvodit. */
+  if (requestIds.length === 0) {
+    const [zarProjekt, zarSub] = String(formData.get("zarazeni") || "").split(":");
+    const cilovy = zarProjekt || scan.projectId;
+    if (!cilovy) throw new Error("Vyber žádanku, nebo projekt, do kterého žádanka patří.");
+    const u = await writable(cilovy);
+    const nazev =
+      String(formData.get("requestTitle") || "").trim() ||
+      String(formData.get("supplierName") || "").trim() ||
+      "Nabídka";
+    const nova = await prisma.request.create({
+      data: {
+        projectId: cilovy,
+        subProjectId: zarSub || null,
+        title: nazev.slice(0, 200),
+        description: String(formData.get("description") || "").slice(0, 2000) || null,
+        price: num(formData.get("total")),
+        status: "nabidka",
+        createdById: u.id,
+      },
+      select: { id: true },
+    });
+    requestIds.push(nova.id);
+  }
 
   const zadanky = await prisma.request.findMany({
     where: { id: { in: requestIds } },

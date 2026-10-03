@@ -26,7 +26,7 @@ import type { ScanResult } from "@/server/doc-scan";
 const input =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none";
 
-type Vendor = { id: string; name: string; ico: string | null };
+type Vendor = { id: string; name: string; ico: string | null; dic: string | null; bankAccount: string | null };
 
 /**
  * Kontrola vytěženého dokladu: co systém přečetl, uživatel opraví a potvrdí –
@@ -70,6 +70,10 @@ export function DocScanReview({
   const [mista, setMista] = useState<{ value: string; label: string }[]>([]);
   const [zadanky, setZadanky] = useState<{ id: string; title: string; projectId: string; place: string }[]>([]);
   const [vybrane, setVybrane] = useState<string[]>([]);
+  /** Ruční přepnutí druhu (null = jak to přečetlo vytěžení). */
+  const [jakoNabidka, setJakoNabidka] = useState<boolean | null>(null);
+  const [novaZadanka, setNovaZadanka] = useState(false);
+  const [nazevZadanky, setNazevZadanky] = useState("");
   const router = useRouter();
 
   // Dřív se vracel volný text („palivo"), dnes klíč („fuel"). U starších skenů
@@ -99,7 +103,13 @@ export function DocScanReview({
       setRows(r.vatBreakdown ?? []);
       setNovaKat(r.newCategory ?? null);
       setVybrane(r.requestIds ?? []);
+      setJakoNabidka(null);
+      setNovaZadanka(false);
+      setNazevZadanky("");
       const match = vendors.find((v) => (r.supplier.ico && v.ico === r.supplier.ico) || v.name === r.supplier.name);
+      // Nabídka datum často nemá – bere se dnešní, ať se nemusí dopisovat.
+      const dnes = new Date().toISOString().slice(0, 10);
+      const nabidka = r.docKind === "nabidka";
       setForm({
         title: r.title ?? r.supplier.name ?? "Doklad",
         description: r.summary ?? "",
@@ -114,7 +124,7 @@ export function DocScanReview({
         vendorId: match?.id ?? "",
         createVendor: match ? "0" : "1",
         docNumber: r.number ?? "",
-        date: r.issueDate ?? "",
+        date: r.issueDate ?? (nabidka ? dnes : ""),
         taxDate: r.taxDate ?? r.issueDate ?? "",
         dueDate: r.dueDate ?? "",
         variableSymbol: r.variableSymbol ?? "",
@@ -197,7 +207,7 @@ export function DocScanReview({
     setBusy(false);
   }
 
-  const jeNabidka = scan?.result?.docKind === "nabidka";
+  const jeNabidka = jakoNabidka ?? scan?.result?.docKind === "nabidka";
 
   async function applyOffer() {
     setBusy(true);
@@ -206,7 +216,8 @@ export function DocScanReview({
       const fd = new FormData();
       fd.set("scanId", scan!.id);
       fd.set("requestIds", JSON.stringify(vybrane));
-      for (const k of ["supplierName", "supplierIco", "supplierDic", "vendorId", "total", "vatBase", "description"])
+      fd.set("requestTitle", nazevZadanky.trim() || form.title || "");
+      for (const k of ["supplierName", "supplierIco", "supplierDic", "vendorId", "total", "vatBase", "description", "zarazeni"])
         fd.set(k, form[k] ?? "");
       await applyOfferScan(fd);
       setOpen(false);
@@ -296,6 +307,32 @@ export function DocScanReview({
               </ul>
             )}
 
+            {/* Vytěžení druh jen navrhuje – z nabídky se dá udělat rovnou doklad. */}
+            <FormSection title="Co to je">
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { v: false, label: "Doklad (účtenka, faktura)" },
+                  { v: true, label: "Nabídka" },
+                ] as const).map((o) => (
+                  <button
+                    key={String(o.v)}
+                    type="button"
+                    onClick={() => setJakoNabidka(o.v)}
+                    className={`h-9 cursor-pointer border px-3 text-sm transition-colors ${
+                      jeNabidka === o.v
+                        ? "border-stone-950 bg-stone-950 text-white"
+                        : "border-stone-300 text-stone-700 hover:border-stone-950"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+                {scan.result?.docKind === "nabidka" && !jeNabidka && (
+                  <span className="flex h-9 items-center text-xs text-stone-500">přečteno jako nabídka</span>
+                )}
+              </div>
+            </FormSection>
+
             {!jeNabidka && (
             <FormSection title="Druh dokladu" hint="poznáme podle IČO a DIČ v Nastavení → Fakturace a daně">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -325,7 +362,7 @@ export function DocScanReview({
             </FormSection>
             )}
 
-            {!projectId && !jeNabidka && (
+            {!projectId && (!jeNabidka || novaZadanka) && (
               <FormSection
                 title="Zařazení"
                 hint={scan.result?.placeReason ?? undefined}
@@ -371,6 +408,28 @@ export function DocScanReview({
                   <p className="mt-2 border-t border-stone-200 pt-2 text-xs text-stone-600">
                     Nabídka pokrývá {vybrane.length} žádanky – sdruží se do balíčku a dokument bude u všech.
                   </p>
+                )}
+                {/* Nabídka na něco, co se zatím nepoptávalo – žádanka se založí z ní. */}
+                {vybrane.length === 0 && (
+                  <div className="mt-2 border-t border-stone-200 pt-2">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
+                      <input
+                        type="checkbox"
+                        checked={novaZadanka}
+                        onChange={(e) => setNovaZadanka(e.target.checked)}
+                        className="size-4 accent-stone-900"
+                      />
+                      Založit žádanku z této nabídky
+                    </label>
+                    {novaZadanka && (
+                      <input
+                        className={`${input} mt-2`}
+                        value={nazevZadanky}
+                        onChange={(e) => setNazevZadanky(e.target.value)}
+                        placeholder={form.title || form.supplierName || "Název žádanky"}
+                      />
+                    )}
+                  </div>
                 )}
               </FormSection>
             )}
@@ -463,7 +522,29 @@ export function DocScanReview({
               </FormGrid>
               <FormGrid>
                 <Field label="V evidenci" htmlFor="ds-vendor">
-                  <select id="ds-vendor" className={input} value={form.vendorId ?? ""} onChange={(e) => set("vendorId", e.target.value)}>
+                  <select
+                    id="ds-vendor"
+                    className={input}
+                    value={form.vendorId ?? ""}
+                    onChange={(e) => {
+                      const v = vendors.find((x) => x.id === e.target.value);
+                      // Vybraný dodavatel je v evidenci, takže se nezakládá
+                      // a jeho údaje přebijí odhad z dokladu.
+                      setForm((f) => ({
+                        ...f,
+                        vendorId: e.target.value,
+                        ...(v
+                          ? {
+                              createVendor: "0",
+                              supplierName: v.name,
+                              supplierIco: v.ico ?? "",
+                              supplierDic: v.dic ?? "",
+                              supplierBankAccount: v.bankAccount ?? f.supplierBankAccount ?? "",
+                            }
+                          : {}),
+                      }));
+                    }}
+                  >
                     <option value="">— nepřiřazovat —</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>
@@ -477,8 +558,9 @@ export function DocScanReview({
                   <input
                     type="checkbox"
                     checked={form.createVendor === "1"}
+                    disabled={!!form.vendorId}
                     onChange={(e) => set("createVendor", e.target.checked ? "1" : "0")}
-                    className="size-4 accent-stone-900"
+                    className="size-4 accent-stone-900 disabled:opacity-50"
                   />
                   Založit dodavatele z ARESu, když v evidenci není
                 </label>
@@ -690,12 +772,18 @@ export function DocScanReview({
             <Button
               type="button"
               onClick={jeNabidka ? applyOffer : apply}
-              disabled={busy || (!jeNabidka && !!scan.duplicate && !force) || (jeNabidka && vybrane.length === 0)}
+              disabled={
+                busy ||
+                (!jeNabidka && !!scan.duplicate && !force) ||
+                (jeNabidka && vybrane.length === 0 && !novaZadanka)
+              }
             >
               {busy
                 ? "Zakládám…"
                 : jeNabidka
-                  ? `Založit nabídku${vybrane.length > 1 ? ` (${vybrane.length} žádanky)` : ""}`
+                  ? `Založit nabídku${
+                      vybrane.length > 1 ? ` (${vybrane.length} žádanky)` : novaZadanka ? " a žádanku" : ""
+                    }`
                   : form.direction === "issued"
                     ? "Založit příjem"
                     : "Založit výdaj"}
