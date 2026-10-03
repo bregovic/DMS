@@ -1,5 +1,5 @@
 // Minimální service worker – kvůli instalovatelnosti PWA.
-const CACHE = "dms-shell-v3";
+const CACHE = "dms-shell-v4";
 const OFFLINE = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -44,16 +44,42 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  // Ostatní GET: network-first s tichým fallbackem do cache.
+  // Data a navigace mezi stránkami (RSC) nechat prohlížeči. Servisní worker
+  // u nich nemá co nabídnout a jeho selhání by z nich udělalo síťovou chybu
+  // místo běžné odpovědi serveru.
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.searchParams.has("_rsc") ||
+    req.headers.get("RSC") === "1" ||
+    req.headers.get("Next-Router-Prefetch") === "1"
+  ) {
+    return;
+  }
+
+  // Ostatní GET (statické soubory): network-first s tichým fallbackem do cache.
+  // Vždycky se musí vrátit Response – `caches.match` při minutí vrací
+  // undefined a prohlížeč pak hlásí „Failed to convert value to 'Response'“
+  // a celý požadavek označí za síťovou chybu.
   event.respondWith(
-    fetch(req)
-      .then((res) => {
+    (async () => {
+      try {
+        const res = await fetch(req);
         if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
-      })
-      .catch(() => caches.match(req)),
+      } catch {
+        const hit = await caches.match(req);
+        return (
+          hit ||
+          new Response("", {
+            status: 504,
+            statusText: "Offline",
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          })
+        );
+      }
+    })(),
   );
 });
