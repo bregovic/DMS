@@ -487,16 +487,12 @@ export default async function DocsPage({
       <section className="mt-8 space-y-3">
         <PeriodPicker period={period} year={year} projectId={projectId} projects={projects} years={years} allowAll />
         <DocFilters
-          smer={smer}
-          typ={typ}
-          stav={stav}
           typy={(Object.keys(KIND_LABEL) as Row["kind"][]).map((k) => ({ value: k, label: KIND_LABEL[k] }))}
           stavy={[
             { value: "prace", label: "Rozdělané (nepřečtené a ke kontrole)" },
             { value: "neuhrazeno", label: "K úhradě" },
             { value: "uhrazeno", label: "Uhrazené" },
           ]}
-          base={(over) => qs(over)}
         />
         <form method="get" action="/doklady" className="flex flex-wrap items-center gap-2">
           {projectId && <input type="hidden" name="project" value={projectId} />}
