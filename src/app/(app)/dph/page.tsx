@@ -81,6 +81,7 @@ export default async function VatPage({
       supplierDic: true,
       deductible: true,
       project: { select: { id: true, name: true } },
+      subProject: { select: { name: true } },
       vendor: { select: { name: true, dic: true, ico: true } },
       documents: { select: { id: true }, take: 1 },
       // Položky kvůli sekci Položky v nároku – nárok je po řádcích.
@@ -172,7 +173,7 @@ export default async function VatPage({
         note: i.deductibleNote,
         docNumber: e.docNumber,
         party: e.vendor?.name ?? e.title,
-        project: e.project.name,
+        project: e.subProject ? `${e.project.name} › ${e.subProject.name}` : e.project.name,
         date: e.taxDate ?? e.date,
         /** Odškrtnutý celý doklad – jednotlivá položka s tím nic nespraví. */
         docOff: !e.deductible,

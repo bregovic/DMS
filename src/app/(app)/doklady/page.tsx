@@ -166,6 +166,7 @@ export default async function DocsPage({
         mimeType: true,
         createdAt: true,
         projectId: true,
+        subProjectId: true,
         type: true,
         uploadedBy: { select: { name: true, email: true } },
       },
@@ -208,6 +209,7 @@ export default async function DocsPage({
         vatAmount: true,
         stage: true,
         projectId: true,
+        subProjectId: true,
         vendor: { select: { name: true } },
         documents: { select: { id: true, type: true, originalName: true, mimeType: true }, take: 1 },
       },
@@ -230,6 +232,7 @@ export default async function DocsPage({
         vatAmount: true,
         customerName: true,
         projectId: true,
+        subProjectId: true,
         documentId: true,
       },
     }),
@@ -255,6 +258,25 @@ export default async function DocsPage({
   ]);
 
   const projName = new Map(projects.map((p) => [p.id, p.name]));
+
+  /* Složky projektů: v seznamu je potřeba vidět „Dům › Garáž", ne jen „Dům" –
+     doklad patří do složky a podle ní se hledá. Jedním dotazem za všechny. */
+  const subs = await prisma.subProject.findMany({
+    where: { projectId: { in: ids } },
+    select: { id: true, name: true, parentId: true, projectId: true },
+  });
+  const subById = new Map(subs.map((x) => [x.id, x]));
+  const misto = (projectId: string, subProjectId: string | null | undefined) => {
+    const projekt = projName.get(projectId) ?? "";
+    if (!subProjectId) return projekt;
+    const cesta: string[] = [];
+    let cur = subById.get(subProjectId);
+    while (cur) {
+      cesta.unshift(cur.name);
+      cur = cur.parentId ? subById.get(cur.parentId) : undefined;
+    }
+    return cesta.length ? `${projekt} › ${cesta.join(" › ")}` : projekt;
+  };
   const rows: Row[] = [];
   for (const e of expenses) {
     const d = e.taxDate ?? e.date;
@@ -267,7 +289,7 @@ export default async function DocsPage({
       docNumber: e.docNumber,
       party: e.vendor?.name ?? e.title,
       projectId: e.projectId,
-      projectName: projName.get(e.projectId) ?? "",
+      projectName: misto(e.projectId, e.subProjectId),
       amount: Number(e.amount),
       currency: e.currency,
       vat: e.vatAmount != null ? Number(e.vatAmount) : null,
@@ -289,7 +311,7 @@ export default async function DocsPage({
       docNumber: i.docNumber,
       party: i.customerName ?? i.title,
       projectId: i.projectId,
-      projectName: projName.get(i.projectId) ?? "",
+      projectName: misto(i.projectId, i.subProjectId),
       amount: Number(i.amount),
       currency: i.currency,
       vat: i.vatAmount != null ? Number(i.vatAmount) : null,
@@ -327,6 +349,7 @@ export default async function DocsPage({
       number?: string | null;
       docKind?: string | null;
       docType?: string | null;
+      subProjectId?: string | null;
       taxDate?: string | null;
       issueDate?: string | null;
       totalVat?: number | null;
@@ -346,7 +369,7 @@ export default async function DocsPage({
       party: r?.supplier?.name ?? nazev,
       projectId: sc.projectId ?? "",
       projectName: sc.projectId
-        ? (projName.get(sc.projectId) ?? "")
+        ? misto(sc.projectId, r?.subProjectId)
         : sc.inboundAttachment
           ? `z pošty · ${sc.inboundAttachment.mail.fromName ?? sc.inboundAttachment.mail.fromAddress}`
           : "",
@@ -372,7 +395,7 @@ export default async function DocsPage({
       docNumber: null,
       party: d.originalName,
       projectId: d.projectId,
-      projectName: projName.get(d.projectId) ?? "",
+      projectName: misto(d.projectId, d.subProjectId),
       amount: 0,
       currency: "CZK",
       vat: null,
@@ -546,18 +569,18 @@ export default async function DocsPage({
              dlouhé texty se krátí (celé jsou v title) a DPH s projektem
              se schová – obojí je v detailu dokladu. */
           <div className="hscroll overflow-x-auto">
-            <table className="w-full min-w-[560px] table-fixed text-sm sm:min-w-[820px]">
+            <table className="w-full min-w-[560px] table-fixed text-sm sm:min-w-[820px] sm:table-auto">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">
-                  <th className="w-[5.5rem] py-2 pl-2 font-medium">Datum</th>
-                  <th className="hidden w-32 py-2 font-medium sm:table-cell">Typ</th>
-                  <th className="w-24 py-2 font-medium sm:w-32">Číslo</th>
+                  <th className="w-[5.5rem] py-2 pl-2 font-medium sm:w-auto">Datum</th>
+                  <th className="hidden py-2 font-medium sm:table-cell">Typ</th>
+                  <th className="w-24 py-2 font-medium sm:w-auto">Číslo</th>
                   <th className="py-2 font-medium">Protistrana</th>
-                  <th className="hidden w-40 py-2 font-medium sm:table-cell">Projekt</th>
-                  <th className="w-24 py-2 text-right font-medium sm:w-28">Částka</th>
-                  <th className="hidden w-24 py-2 text-right font-medium sm:table-cell">DPH</th>
-                  <th className="w-[5.5rem] py-2 text-right font-medium sm:w-24">Stav</th>
-                  <th className="w-[4.5rem] py-2 sm:w-32" />
+                  <th className="hidden py-2 font-medium sm:table-cell">Projekt</th>
+                  <th className="w-24 py-2 text-right font-medium sm:w-auto">Částka</th>
+                  <th className="hidden py-2 text-right font-medium sm:table-cell">DPH</th>
+                  <th className="w-[5.5rem] py-2 text-right font-medium sm:w-auto">Stav</th>
+                  <th className="w-[4.5rem] py-2 sm:w-auto" />
                 </tr>
               </thead>
               <tbody>
@@ -601,7 +624,7 @@ export default async function DocsPage({
                       {r.status}
                     </td>
                     <td className="py-1.5 pl-2 text-right align-top">
-                      <span className="flex flex-wrap items-center justify-end gap-1">
+                      <span className="flex flex-wrap items-center justify-end gap-1 sm:flex-nowrap sm:whitespace-nowrap">
                       {r.doc ? (
                         <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
                       ) : (
