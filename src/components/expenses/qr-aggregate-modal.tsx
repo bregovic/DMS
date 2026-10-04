@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Download } from "lucide-react";
 
 import {
   aggregateExpensesQr,
@@ -10,6 +11,36 @@ import {
 } from "@/server/actions/qr-aggregate";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
+
+/**
+ * Uložení QR z dialogu. Na telefonu nejde oskenovat vlastní displej, takže
+ * se kód uloží nebo pošle rovnou do bankovnictví; QR už je hotový obrázek,
+ * jen se z data URL udělá soubor.
+ */
+async function ulozitQr(qr: string, nazev: string) {
+  const blob = await (await fetch(qr)).blob();
+  const file = new File([blob], nazev, { type: "image/png" });
+  // Sdílení je na telefonu lepší než stahování – nabídne Uložit do fotek
+  // i poslání do jiné aplikace. Na počítači se soubor jen stáhne.
+  const nav = navigator as Navigator & {
+    canShare?: (d: { files: File[] }) => boolean;
+    share?: (d: { files: File[]; title?: string }) => Promise<void>;
+  };
+  if (nav.canShare?.({ files: [file] }) && nav.share) {
+    try {
+      await nav.share({ files: [file], title: nazev });
+    } catch {
+      // uživatel sdílení zavřel – nic dalšího neřešíme
+    }
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nazev;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function QrAggregateModal({
   projectId,
@@ -98,6 +129,20 @@ export function QrAggregateModal({
                     {g.vs ? ` · VS ${g.vs}` : ""} ·{" "}
                     {g.count === 1 ? "1 výdaj" : `${g.count} výdajů`}
                   </p>
+                  {g.qr && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ulozitQr(
+                          g.qr,
+                          `qr-${g.vendorName.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}-${Math.round(g.amount)}.png`,
+                        )
+                      }
+                      className="mt-2 flex h-9 cursor-pointer items-center gap-1.5 border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white"
+                    >
+                      <Download className="size-4" /> Uložit QR
+                    </button>
+                  )}
                   {g.count > 1 && (
                     <p className="mt-1 max-w-xs text-[11px] leading-snug text-stone-400">
                       {g.titles.join(", ")}
