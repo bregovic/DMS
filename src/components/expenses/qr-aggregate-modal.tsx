@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 
 import {
   aggregateExpensesQr,
+  settlePaymentWithOffsets,
   type QrGroup,
 } from "@/server/actions/qr-aggregate";
-import { bulkUpdateExpenses } from "@/server/actions/expenses";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 
@@ -27,13 +27,19 @@ export function QrAggregateModal({
   const [skippedPaid, setSkippedPaid] = useState(0);
   const [skippedNoBank, setSkippedNoBank] = useState<string[]>([]);
   const [paying, setPaying] = useState(false);
+  /** Zaškrtnuté zápočty: id příjmu → kolik použít. */
+  const [zapocty, setZapocty] = useState<Record<string, number>>({});
   const router = useRouter();
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await aggregateExpensesQr(projectId || null, ids);
+        const res = await aggregateExpensesQr(
+          projectId || null,
+          ids,
+          Object.entries(zapocty).map(([incomeId, amount]) => ({ incomeId, amount })),
+        );
         if (!alive) return;
         if ("error" in res) {
           setError(res.error);
@@ -51,7 +57,8 @@ export function QrAggregateModal({
     return () => {
       alive = false;
     };
-  }, [projectId, ids]);
+    // QR nese částku, takže se po změně zápočtu musí vyrobit znovu.
+  }, [projectId, ids, zapocty]);
 
   return (
     <Dialog title="QR platba" size="lg" onClose={onClose}>
@@ -72,12 +79,14 @@ export function QrAggregateModal({
               )}
               {groups.map((g, i) => (
                 <div key={i} className="flex flex-col items-center text-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={g.qr}
-                    alt={`QR platba ${g.vendorName}`}
-                    className="size-56"
-                  />
+                  {g.qr ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={g.qr} alt={`QR platba ${g.vendorName}`} className="size-56" />
+                  ) : (
+                    <p className="flex size-56 items-center justify-center border border-dashed border-stone-300 px-4 text-sm text-stone-500">
+                      Zápočtem vyrovnáno, není co platit.
+                    </p>
+                  )}
                   <p className="mt-2 font-mono text-lg text-stone-950">
                     {formatCurrency(g.amount, g.currency)}
                   </p>
@@ -93,6 +102,60 @@ export function QrAggregateModal({
                     <p className="mt-1 max-w-xs text-[11px] leading-snug text-stone-400">
                       {g.titles.join(", ")}
                     </p>
+                  )}
+                  {/* Dodavatel má nezapočtené příjmy (půjčka, vratka) – jde je
+                      odečíst od toho, co se mu teď platí. */}
+                  {(g.candidates.length > 0 || g.offsets.length > 0) && (
+                    <div className="mt-3 w-full max-w-sm border border-stone-200 p-3 text-left">
+                      <p className="kicker mb-1.5">Zápočet</p>
+                      {g.offsets.length > 0 && (
+                        <ul className="mb-1.5 space-y-1">
+                          {g.offsets.map((o) => (
+                            <li key={o.id} className="flex items-start gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked
+                                onChange={() =>
+                                  setZapocty((z) =>
+                                    Object.fromEntries(Object.entries(z).filter(([k]) => k !== o.id)),
+                                  )
+                                }
+                                className="mt-0.5 size-4 cursor-pointer accent-stone-900"
+                              />
+                              <span className="min-w-0 flex-1">
+                                {o.title}
+                                <span className="block text-[11px] text-stone-400">
+                                  započteno {formatCurrency(o.amount, g.currency)}
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {g.candidates.map((c) => (
+                        <label key={c.id} className="flex cursor-pointer items-start gap-2 py-0.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={false}
+                            onChange={() => setZapocty((z) => ({ ...z, [c.id]: c.available }))}
+                            className="mt-0.5 size-4 accent-stone-900"
+                          />
+                          <span className="min-w-0 flex-1">
+                            {c.title}
+                            <span className="block text-[11px] text-stone-400">
+                              {c.project} · {c.date} · k zápočtu {formatCurrency(c.available, c.currency)}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                      {g.offsets.length > 0 && (
+                        <p className="mt-2 border-t border-stone-200 pt-2 text-xs text-stone-600">
+                          Výdaje {formatCurrency(g.gross, g.currency)} − zápočet{" "}
+                          {formatCurrency(g.gross - g.amount, g.currency)} ={" "}
+                          <b className="text-stone-950">{formatCurrency(g.amount, g.currency)}</b>
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
@@ -132,21 +195,29 @@ export function QrAggregateModal({
                 // Pojistka: zelené tlačítko je hned vedle „Zavřít“ a označí
                 // všechny výdaje v okně – ať to nejde odkliknout omylem.
                 const sum = groups.reduce((a, g) => a + g.amount, 0);
-                if (
-                  !window.confirm(
-                    `Označit ${ids.length} ${ids.length === 1 ? "výdaj" : ids.length < 5 ? "výdaje" : "výdajů"} za ${Math.round(sum).toLocaleString("cs-CZ")} Kč jako uhrazené?
-
-QR kód si můžeš zobrazit i bez toho – stačí okno zavřít.`,
-                  )
-                )
-                  return;
+                const zap = groups.reduce((a, g) => a + g.offsets.reduce((b, o) => b + o.amount, 0), 0);
+                const kc = (v: number) => `${Math.round(v).toLocaleString("cs-CZ")} Kč`;
+                const otazka = [
+                  `Označit ${ids.length} ${ids.length === 1 ? "výdaj" : ids.length < 5 ? "výdaje" : "výdajů"} jako uhrazené?`,
+                  "",
+                  zap > 0 ? `Zaplaceno ${kc(sum)}, zápočtem vyrovnáno ${kc(zap)}.` : `Zaplaceno ${kc(sum)}.`,
+                  "",
+                  "QR kód si můžeš zobrazit i bez toho – stačí okno zavřít.",
+                ].join(String.fromCharCode(10));
+                if (!window.confirm(otazka)) return;
                 setPaying(true);
                 try {
-                  const fd = new FormData();
-                  fd.set("projectId", projectId);
-                  fd.set("op", "paid");
-                  fd.set("ids", ids.join(","));
-                  await bulkUpdateExpenses(fd);
+                  // Výdaje i zápočty jednou akcí – označit uhrazené bez
+                  // spotřebování zápočtu by znamenalo přeplatek příště.
+                  const pouzite = groups.flatMap((g) =>
+                    g.offsets.map((o) => ({ incomeId: o.id, amount: o.amount, vendorId: g.vendorId })),
+                  );
+                  const res = await settlePaymentWithOffsets(ids, pouzite);
+                  if ("error" in res) {
+                    setError(res.error);
+                    setPaying(false);
+                    return;
+                  }
                   router.refresh();
                   onClose();
                 } catch (e) {

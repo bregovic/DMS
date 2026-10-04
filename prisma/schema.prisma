@@ -154,6 +154,7 @@ model Vendor {
 
   owner    User      @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   expenses Expense[]
+  incomes  Income[]
   projects Project[] @relation("ProjectVendors")
   requests Request[]
   offers   Offer[]
@@ -604,6 +605,19 @@ model Income {
   customerIco  String?
   customerDic  String?
   taxable      Boolean   @default(true) // brát do podkladu pro DPH
+  /**
+   * Od kterého dodavatele příjem je (půjčka, vratka). Podle toho se nabídne
+   * k zápočtu proti tomu, co se mu platí. Vyplní se i tím, že ho uživatel
+   * v QR platbě vybere.
+   */
+  vendorId     String?
+  /**
+   * Kolik z příjmu už bylo započteno proti platbám dodavateli. Zbývá
+   * `amount − settledAmount`, takže zápočet jde použít i částečně a větší
+   * půjčka se přenese na příště. Bez tohohle by se tentýž zápočet odečítal
+   * od každé další platby.
+   */
+  settledAmount Decimal? @db.Decimal(12, 2)
   documentId   String? // příloha, ze které doklad vznikl
   createdById  String
   createdAt    DateTime @default(now())
@@ -611,10 +625,12 @@ model Income {
 
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   createdBy  User        @relation("IncomeCreatedBy", fields: [createdById], references: [id])
 
   @@index([projectId])
   @@index([subProjectId])
+  @@index([vendorId])
   @@index([date])
 }
 
