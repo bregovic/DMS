@@ -110,6 +110,11 @@ export function DocScanReview({
       // Nabídka datum často nemá – bere se dnešní, ať se nemusí dopisovat.
       const dnes = new Date().toISOString().slice(0, 10);
       const nabidka = r.docKind === "nabidka";
+      /* Když doklad datum vystavení neuvádí (účtenka z termopapíru, fotka
+         bez hlavičky), nabídne se datum nahrání – to je nejblíž skutečnosti
+         a nenechá pole prázdné. */
+      const nahranoRaw = s.document?.createdAt ?? s.inboundAttachment?.mail.receivedAt ?? s.createdAt;
+      const nahrano = nahranoRaw ? new Date(nahranoRaw).toISOString().slice(0, 10) : "";
       setForm({
         title: r.title ?? r.supplier.name ?? "Doklad",
         description: r.summary ?? "",
@@ -124,7 +129,7 @@ export function DocScanReview({
         vendorId: match?.id ?? "",
         createVendor: match ? "0" : "1",
         docNumber: r.number ?? "",
-        date: r.issueDate ?? (nabidka ? dnes : ""),
+        date: r.issueDate ?? (nabidka ? dnes : nahrano),
         taxDate: r.taxDate ?? r.issueDate ?? "",
         dueDate: r.dueDate ?? "",
         variableSymbol: r.variableSymbol ?? "",

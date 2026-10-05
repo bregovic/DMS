@@ -203,9 +203,15 @@ export async function getDocScan(id: string) {
       error: true,
       result: true,
       expenseId: true,
-      document: { select: { id: true, originalName: true, type: true } },
+      createdAt: true,
+      // Datum nahrání – když doklad datum vystavení neuvádí, nabídne se tohle.
+      document: { select: { id: true, originalName: true, type: true, createdAt: true } },
       inboundAttachment: {
-        select: { id: true, originalName: true, mail: { select: { subject: true, fromName: true, fromAddress: true, ownerId: true } } },
+        select: {
+          id: true,
+          originalName: true,
+          mail: { select: { subject: true, fromName: true, fromAddress: true, ownerId: true, receivedAt: true } },
+        },
       },
     },
   });
@@ -410,7 +416,8 @@ export async function applyDocScan(formData: FormData) {
   const claimRows = items.some((i) => i.deductible === false) ? claim.rows : vatRows;
   const total = num(formData.get("total")) ?? 0;
   const paid = formData.get("paid") === "1";
-  const subProjectId = String(formData.get("subProjectId") || "") || null;
+  // Složku z dialogu ověřit proti cílovému projektu – zapisuje se do výdaje.
+  const subProjectId = await overSlozku(cilovy, formData.get("subProjectId"));
   const issued = formData.get("direction") === "issued";
   const force = formData.get("force") === "1";
 

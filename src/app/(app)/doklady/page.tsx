@@ -266,6 +266,21 @@ export default async function DocsPage({
     select: { id: true, name: true, parentId: true, projectId: true },
   });
   const subById = new Map(subs.map((x) => [x.id, x]));
+  /** Složky jednoho projektu pro dialog kontroly – s celou cestou v názvu. */
+  const slozkyProjektu = (projectId: string) =>
+    subs
+      .filter((x) => x.projectId === projectId)
+      .map((x) => {
+        const cesta: string[] = [];
+        let cur: (typeof subs)[number] | undefined = x;
+        while (cur) {
+          cesta.unshift(cur.name);
+          cur = cur.parentId ? subById.get(cur.parentId) : undefined;
+        }
+        return { id: x.id, name: cesta.join(" › ") };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+
   const misto = (projectId: string, subProjectId: string | null | undefined) => {
     const projekt = projName.get(projectId) ?? "";
     if (!subProjectId) return projekt;
@@ -602,19 +617,19 @@ export default async function DocsPage({
                       <Link
                         href={r.href}
                         title={r.docNumber ?? undefined}
-                        className="block truncate text-stone-900 underline-offset-2 hover:underline"
+                        className="block truncate text-stone-900 underline-offset-2 hover:underline sm:overflow-visible sm:whitespace-normal"
                       >
                         {r.docNumber ?? "—"}
                       </Link>
                     </td>
                     <td className="py-1.5 align-top text-stone-600">
-                      <span className="block truncate" title={r.party ?? undefined}>
+                      <span className="block truncate sm:overflow-visible sm:whitespace-normal" title={r.party ?? undefined}>
                         {r.party ?? "—"}
                       </span>
                       <span className="block truncate text-[11px] text-stone-400 sm:hidden">{r.projectName}</span>
                     </td>
                     <td className="hidden py-1.5 align-top text-stone-600 sm:table-cell">
-                      <span className="block truncate" title={r.projectName}>
+                      <span className="block truncate sm:overflow-visible sm:whitespace-normal" title={r.projectName}>
                         {r.projectName}
                       </span>
                     </td>
@@ -639,6 +654,7 @@ export default async function DocsPage({
                             scanId={null}
                             documentId={r.unread.documentId}
                             projectId={r.projectId}
+                            subProjects={slozkyProjektu(r.projectId)}
                             categories={categories.map((c) => ({ key: c.key, label: c.label }))}
                             label="Přečíst"
                           />
@@ -668,6 +684,7 @@ export default async function DocsPage({
                             scanId={r.scan.id}
                             documentId={r.doc?.id ?? null}
                             projectId={r.projectId || null}
+                            subProjects={slozkyProjektu(r.projectId)}
                             categories={categories.map((c) => ({ key: c.key, label: c.label }))}
                             label={r.status === "nepřečteno" ? "Zkusit znovu" : "Otevřít"}
                           />
