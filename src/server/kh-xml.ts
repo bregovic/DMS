@@ -193,8 +193,10 @@ export async function buildKhXml(userId: string, period: KhPeriod) {
   const isPO = me.taxSubjectType === "PO";
   const veta: string[] = [];
   veta.push(
+    /* Pozor: věta D hlášení není totéž co věta D přiznání. `k_uladb` je
+       atribut přiznání (DPHDP3); v DPHKH1 definovaný není a portál podání
+       odmítne. */
     `<VetaD ${attr({
-      k_uladb: "B",
       khdph_forma: "B", // B = řádné hlášení
       dokument: "KH1",
       mesic: period.month,
@@ -240,7 +242,8 @@ export async function buildKhXml(userId: string, period: KhPeriod) {
         dan3: r.slots[3].vat ? amount(r.slots[3].vat) : null,
         kod_rezim_pl: 0,
         zdph_44: "N",
-        pomer: "N",
+        // `pomer` je krácení nároku na odpočet, takže patří jen k přijatým
+        // plněním (B2). U vystavených dokladů nárok nevzniká a A4 ho nezná.
       })}/>`,
     );
   });

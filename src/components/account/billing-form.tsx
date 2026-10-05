@@ -52,6 +52,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
     billingDic: b.billingDic ?? "",
     billingAddress: b.billingAddress ?? "",
     billingAccount: b.billingAccount ?? "",
+    businessActivities: b.businessActivities ?? "",
     firstName: b.firstName ?? "",
     lastName: b.lastName ?? "",
     street: b.street ?? "",
