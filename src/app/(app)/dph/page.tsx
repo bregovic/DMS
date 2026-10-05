@@ -9,7 +9,7 @@ import { FilingDialog } from "@/components/invoices/filing-dialog";
 import { ClaimToggle } from "@/components/invoices/claim-toggle";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { buildDp3 } from "@/server/dp3-xml";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateShort } from "@/lib/utils";
 import { amountCzk, rateMissing, vatRowsCzk, vatTotalsCzk } from "@/lib/vat";
 
 /**
@@ -39,7 +39,7 @@ function periodRange(period: string, year: number): [Date, Date, string] {
 export default async function VatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; year?: string; period?: string; polozky?: string }>;
+  searchParams: Promise<{ project?: string; year?: string; period?: string; narok?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
@@ -76,6 +76,9 @@ export default async function VatPage({
       vatBase: true,
       vatAmount: true,
       vatBreakdown: true,
+      // Co je na dokladu – podle rozdílu se pozná krácený nárok.
+      vatBaseDoc: true,
+      vatAmountDoc: true,
       exchangeRate: true,
       supplierIco: true,
       supplierDic: true,
@@ -158,29 +161,10 @@ export default async function VatPage({
           )
         ).summary;
 
-  /* Položky dokladů v období: nárok je po řádcích, takže tady se dá projít,
-     co se uplatňuje a co ne, bez otevírání dokladu po dokladu. */
-  const jenNeuplatnene = sp?.polozky === "ne";
-  const polozky = expenses
-    .flatMap((e) =>
-      e.items.map((i) => ({
-        id: i.id,
-        description: i.description,
-        amount: Number(i.amount),
-        vatRate: i.vatRate != null ? Number(i.vatRate) : null,
-        category: i.category,
-        deductible: i.deductible,
-        note: i.deductibleNote,
-        docNumber: e.docNumber,
-        party: e.vendor?.name ?? e.title,
-        project: e.subProject ? `${e.project.name} › ${e.subProject.name}` : e.project.name,
-        date: e.taxDate ?? e.date,
-        /** Odškrtnutý celý doklad – jednotlivá položka s tím nic nespraví. */
-        docOff: !e.deductible,
-      })),
-    )
-    .filter((i) => !jenNeuplatnene || !i.deductible || i.docOff)
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  /* Doklady v období, kterých se DPH týká. Řádek = doklad, ne jeho položka:
+     nárok se rozhoduje po položkách, ale kontroluje se po dokladech. Částky
+     jsou ty NÁROKOVANÉ (vatBase/vatAmount), ne co je na dokladu. */
+  const narokFiltr = sp?.narok === "mimo" ? "mimo" : sp?.narok === "vse" ? "vse" : "narok";
 
   const catLabel = new Map((await getExpenseCategories()).map((c) => [c.key, c.label]));
   const qs = (over: Record<string, string>) => {
@@ -188,7 +172,7 @@ export default async function VatPage({
       ...(projectId ? { project: projectId } : {}),
       period,
       year: String(year),
-      ...(jenNeuplatnene ? { polozky: "ne" } : {}),
+      ...(narokFiltr !== "narok" ? { narok: narokFiltr } : {}),
       ...over,
     });
     for (const [k, v] of [...u.entries()]) if (!v) u.delete(k);
@@ -201,6 +185,31 @@ export default async function VatPage({
 
   const taxed = expenses.filter((e) => e.deductible && (e.vatAmount != null || e.vatBase != null));
   const skipped = expenses.filter((e) => !e.deductible && (e.vatAmount != null || e.vatBase != null));
+
+  const dokladyVNaroku = (narokFiltr === "mimo" ? skipped : narokFiltr === "vse" ? [...taxed, ...skipped] : taxed)
+    .map((e) => {
+      const najem = vatTotalsCzk(e);
+      const naDokladu = {
+        base: e.vatBaseDoc != null ? Number(e.vatBaseDoc) : null,
+        vat: e.vatAmountDoc != null ? Number(e.vatAmountDoc) : null,
+      };
+      return {
+        id: e.id,
+        date: e.taxDate ?? e.date,
+        party: e.vendor?.name ?? e.title,
+        docNumber: e.docNumber,
+        project: e.subProject ? `${e.project.name} › ${e.subProject.name}` : e.project.name,
+        base: najem.base,
+        vat: najem.vat,
+        /** Nárok je krácený – část položek je odškrtnutá. */
+        kraceno: !!e.deductible && naDokladu.vat != null && Math.abs(naDokladu.vat - Number(e.vatAmount ?? 0)) > 0.01,
+        vatDoc: naDokladu.vat,
+        mimo: !e.deductible,
+        items: e.items,
+      };
+    })
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const narokCelkem = dokladyVNaroku.reduce((a, d) => a + (d.mimo ? 0 : d.vat), 0);
 
   // souhrn po sazbách
   const byRate = new Map<number, { base: number; vat: number; count: number }>();
@@ -339,16 +348,24 @@ export default async function VatPage({
             </section>
           )}
 
-          {polozky.length > 0 && (
+          {dokladyVNaroku.length > 0 && (
             <section className="mb-8">
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="kicker">Položky v nároku · {polozky.length}</h2>
+                <h2 className="kicker">
+                  Doklady v nároku · {dokladyVNaroku.length}
+                  {narokFiltr === "narok" && (
+                    <span className="ml-2 font-mono text-stone-500">{formatCurrency(narokCelkem)}</span>
+                  )}
+                </h2>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                  <Link href={qs({ polozky: "" })} className={chip(!jenNeuplatnene)}>
-                    Vše
+                  <Link href={qs({ narok: "" })} className={chip(narokFiltr === "narok")}>
+                    V nároku
                   </Link>
-                  <Link href={qs({ polozky: "ne" })} className={chip(jenNeuplatnene)}>
-                    Jen neuplatněné
+                  <Link href={qs({ narok: "mimo" })} className={chip(narokFiltr === "mimo")}>
+                    Mimo nárok
+                  </Link>
+                  <Link href={qs({ narok: "vse" })} className={chip(narokFiltr === "vse")}>
+                    Vše
                   </Link>
                 </div>
               </div>
@@ -356,52 +373,60 @@ export default async function VatPage({
                 <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b border-stone-300 text-left text-stone-500">
-                      <th className="w-10 py-2 pl-2 text-center font-medium">V&nbsp;nároku</th>
-                      <th className="py-2 font-medium">Položka</th>
+                      <th className="py-2 pl-2 font-medium">DUZP</th>
+                      <th className="py-2 font-medium">Dodavatel</th>
                       <th className="hidden py-2 font-medium sm:table-cell">Doklad</th>
-                      <th className="py-2 text-right font-medium">Částka</th>
-                      <th className="hidden py-2 text-right font-medium sm:table-cell">Sazba</th>
+                      <th className="py-2 text-right font-medium">Základ</th>
+                      <th className="py-2 text-right font-medium">DPH v nároku</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {polozky.map((i) => (
-                      <tr key={i.id} className={`border-b border-stone-100 ${i.deductible && !i.docOff ? "" : "text-stone-400"}`}>
-                        <td className="py-1.5 pl-2 text-center align-top">
-                          <ClaimToggle
-                            itemId={i.id}
-                            deductible={i.deductible && !i.docOff}
-                            label={i.description}
-                            disabled={i.docOff}
-                          />
-                        </td>
-                        <td className="max-w-[16rem] py-1.5 align-top">
-                          <span className="block truncate text-stone-900" title={i.description}>
-                            {i.description}
-                          </span>
-                          <span className="block truncate text-[11px] text-stone-400">
-                            {i.project}
-                            {i.category ? ` · ${catLabel.get(i.category) ?? i.category}` : ""}
-                            <span className="sm:hidden">
-                              {i.party ? ` · ${i.party}` : ""}
-                            </span>
-                          </span>
-                          {i.docOff ? (
-                            <span className="block text-[11px] text-amber-700">Odškrtnutý je celý doklad.</span>
-                          ) : (
-                            !i.deductible && i.note && <span className="block text-[11px] text-stone-500">{i.note}</span>
-                          )}
-                        </td>
-                        <td className="hidden max-w-[12rem] py-1.5 align-top text-stone-600 sm:table-cell">
-                          <span className="block truncate" title={i.party ?? undefined}>
-                            {i.party}
+                    {dokladyVNaroku.map((d) => (
+                      <tr key={d.id} className={`border-b border-stone-100 ${d.mimo ? "text-stone-400" : ""}`}>
+                        <td className="py-1.5 pl-2 align-top whitespace-nowrap">{formatDateShort(d.date)}</td>
+                        <td className="py-1.5 align-top">
+                          <span className="block text-stone-900" title={d.party ?? undefined}>
+                            {d.party}
                           </span>
                           <span className="block text-[11px] text-stone-400">
-                            {i.docNumber ?? "—"} · {formatDate(i.date)}
+                            {d.project}
+                            <span className="sm:hidden">{d.docNumber ? ` · ${d.docNumber}` : ""}</span>
                           </span>
+                          {/* Položky až na rozbalení – rozhodnutí o nároku je po
+                              nich, ale kontroluje se po dokladu. */}
+                          {d.items.length > 0 && !d.mimo && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-[11px] text-stone-500 hover:text-stone-950">
+                                {d.items.length} {d.items.length === 1 ? "položka" : d.items.length < 5 ? "položky" : "položek"}
+                                {d.kraceno ? " · nárok krácený" : ""}
+                              </summary>
+                              <ul className="mt-1 space-y-1">
+                                {d.items.map((i) => (
+                                  <li key={i.id} className="flex items-start gap-2 text-xs">
+                                    <ClaimToggle itemId={i.id} deductible={i.deductible} label={i.description} />
+                                    <span className={`min-w-0 flex-1 ${i.deductible ? "text-stone-700" : "text-stone-400"}`}>
+                                      {i.description}
+                                      {i.category ? ` · ${catLabel.get(i.category) ?? i.category}` : ""}
+                                      {!i.deductible && i.deductibleNote && (
+                                        <span className="block text-stone-500">{i.deductibleNote}</span>
+                                      )}
+                                    </span>
+                                    <span className="font-mono text-stone-500">{formatCurrency(Number(i.amount))}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
                         </td>
-                        <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">{formatCurrency(i.amount)}</td>
-                        <td className="hidden py-1.5 text-right align-top text-stone-500 sm:table-cell">
-                          {i.vatRate != null ? `${i.vatRate} %` : "—"}
+                        <td className="hidden py-1.5 align-top text-stone-600 sm:table-cell">{d.docNumber ?? "—"}</td>
+                        <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">{formatCurrency(d.base)}</td>
+                        <td className="py-1.5 text-right align-top font-mono whitespace-nowrap">
+                          {d.mimo ? "—" : formatCurrency(d.vat)}
+                          {d.kraceno && d.vatDoc != null && (
+                            <span className="block text-[11px] font-normal text-stone-400">
+                              z {formatCurrency(d.vatDoc)}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -409,7 +434,7 @@ export default async function VatPage({
                 </table>
               </div>
               <p className="mt-2 text-[11px] text-stone-400">
-                Odškrtnutím se krátí nárok z dokladu podílem, který na položku připadá.
+                Částky jsou nárokované, ne co je na dokladu. Odškrtnutím položky se nárok krátí podílem, který na ni připadá.
               </p>
             </section>
           )}
