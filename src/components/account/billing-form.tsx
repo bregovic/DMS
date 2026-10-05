@@ -43,6 +43,8 @@ const lab = "kicker block !text-stone-500";
  */
 export function BillingForm({ b }: { b: BillingValues }) {
   const [saved, setSaved] = useState(false);
+  /** Chyba z ukládání – bez ní formulář tiše zahodil, co uživatel vyplnil. */
+  const [err, setErr] = useState<string | null>(null);
   const [po, setPo] = useState(b.taxSubjectType === "PO");
   const [v, setV] = useState<Record<string, string>>({
     billingName: b.billingName ?? "",
@@ -129,10 +131,18 @@ export function BillingForm({ b }: { b: BillingValues }) {
   return (
     <form
       action={async (fd) => {
-        await updateBilling(fd);
-        setSaved(true);
+        setErr(null);
+        try {
+          await updateBilling(fd);
+          setSaved(true);
+        } catch (e) {
+          setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+        }
       }}
-      onChange={() => setSaved(false)}
+      onChange={() => {
+        setSaved(false);
+        setErr(null);
+      }}
       className="max-w-3xl space-y-5"
     >
       <FormSection title="Fakturace" hint="použije se na faktuře a v žádosti o úhradu">
@@ -362,6 +372,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
           Uložit údaje
         </button>
         {saved && <span className="text-xs text-emerald-700">Uloženo</span>}
+        {err && <span className="text-sm text-red-700">{err}</span>}
       </div>
     </form>
   );
