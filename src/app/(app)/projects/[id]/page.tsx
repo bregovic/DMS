@@ -1267,6 +1267,7 @@ export default async function ProjectDetailPage({
               </p>
             ) : (
             <ExpenseList
+              openId={typeof sp?.edit === "string" ? sp.edit : null}
               projectId={project.id}
               isOwner={isManager}
               canAdd={canAdd}

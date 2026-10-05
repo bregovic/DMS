@@ -48,6 +48,7 @@ export function EditExpenseForm({
   subProjects,
   statuses,
   projectName,
+  autoOpen = false,
 }: {
   expense: ExpenseEdit;
   vendors: Vendor[];
@@ -55,8 +56,10 @@ export function EditExpenseForm({
   subProjects: { id: string; name: string; parentId?: string | null }[];
   statuses: { key: string; label: string }[];
   projectName?: string;
+  /** Otevřít hned – přehled dokladů na výdaj odkazuje přes ?edit=. */
+  autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [kind, setKind] = useState(expense.kind);
   const [category, setCategory] = useState(expense.category);
   const [currency, setCurrency] = useState(expense.currency);

@@ -239,14 +239,19 @@ export default async function VatPage({
   const seen = new Map<string, string>();
   for (const e of taxed) {
     const miss: string[] = [];
-    if (!dicOf(e)) miss.push("DIČ dodavatele");
-    if (!e.docNumber) miss.push("číslo dokladu");
+    /* DIČ a číslo dokladu potřebuje jen doklad, který jde do B.2 jednotlivě,
+       tedy od 10 000 Kč včetně daně. Pod limitem se uvádí souhrnně v B.3,
+       kde se neuvádí ani jedno – u účtenky z hobbymarketu je proto nemá
+       smysl vyžadovat a jen to zaplevelilo seznam věcí k doplnění. */
+    const doB2 = amountCzk(e) >= KH_LIMIT;
+    if (doB2 && !dicOf(e)) miss.push("DIČ dodavatele");
+    if (doB2 && !e.docNumber) miss.push("číslo dokladu");
     if (!e.taxDate) miss.push("DUZP");
     if (e.vatBase == null || e.vatAmount == null) miss.push("základ nebo daň");
     if (rateMissing(e)) miss.push(`měna ${e.currency} bez kurzu – doplň kurz u výdaje`);
     else if (e.currency !== "CZK") miss.push(`měna ${e.currency}, přepočteno kurzem ${e.exchangeRate}`);
     const key = `${e.supplierIco ?? e.vendor?.ico ?? "?"}|${e.docNumber ?? ""}`;
-    if (e.docNumber && seen.has(key)) miss.push("stejné číslo dokladu už v období je");
+    if (doB2 && e.docNumber && seen.has(key)) miss.push("stejné číslo dokladu už v období je");
     if (e.docNumber) seen.set(key, e.id);
     if (miss.length) problems.push({ id: e.id, title: e.title, what: miss.join(", ") });
   }

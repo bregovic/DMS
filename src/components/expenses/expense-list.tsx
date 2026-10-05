@@ -39,6 +39,7 @@ export type ExpenseItem = {
 };
 
 export function ExpenseList({
+  openId,
   projectId,
   isOwner,
   canAdd,
@@ -51,6 +52,8 @@ export function ExpenseList({
   docTypes,
 }: {
   projectId: string;
+  /** Výdaj, jehož editace se má otevřít hned (odkaz z přehledu dokladů). */
+  openId?: string | null;
   isOwner: boolean;
   canAdd: boolean;
   expenses: ExpenseItem[];
@@ -270,6 +273,7 @@ export function ExpenseList({
                 <span className="flex items-center gap-1">
                   <EditExpenseForm
                     expense={e.edit}
+                    autoOpen={e.id === openId}
                     vendors={vendors}
                     categories={categories}
                     subProjects={subProjects}

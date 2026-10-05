@@ -309,7 +309,8 @@ export default async function DocsPage({
       currency: e.currency,
       vat: e.vatAmount != null ? Number(e.vatAmount) : null,
       status: isExpensePaid(e.stage) ? "uhrazeno" : "k úhradě",
-      href: `/projects/${e.projectId}?tab=vydaje`,
+      // Otevře rovnou editaci toho výdaje, ne jen záložku Výdaje.
+      href: `/projects/${e.projectId}?tab=vydaje&edit=${e.id}`,
       doc: e.documents[0]
         ? { id: e.documents[0].id, name: e.documents[0].originalName, mimeType: e.documents[0].mimeType }
         : null,
@@ -453,7 +454,7 @@ export default async function DocsPage({
     return `/doklady?${u.toString()}`;
   };
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <header className="mb-4">
         <h1 className="display text-4xl text-stone-950">Doklady a fakturace</h1>
       </header>
