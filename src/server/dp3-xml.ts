@@ -116,7 +116,14 @@ export async function buildDp3(userId: string, period: Dp3Period) {
   const deduction = round(inp[21].vat + inp[12].vat);
   const missing: string[] = [];
   if (!me.billingDic) missing.push("DIČ v Nastavení → Fakturace a daně");
-  if (!me.taxOfficeCode) missing.push("kód finančního úřadu");
+  /* Kód úřadu i pracoviště jsou v číselníku EPO čísla (např. 451 a 2009).
+     Dřív se kontrolovalo jen prázdno, takže sem prošel i identifikátor
+     datové schránky a hlášení odešlo s neplatným úřadem. */
+  if (!me.taxOfficeCode) missing.push("kód finančního úřadu (Nastavení → Fakturace a daně)");
+  else if (!/^\d{1,4}$/.test(me.taxOfficeCode.trim()))
+    missing.push(`kód finančního úřadu „${me.taxOfficeCode}" není číslo z číselníku (např. 451)`);
+  if (me.taxOfficeBranch && !/^\d{1,5}$/.test(me.taxOfficeBranch.trim()))
+    missing.push(`územní pracoviště „${me.taxOfficeBranch}" není číslo z číselníku (např. 2009)`);
   if (out[0].base > 0) missing.push("v evidenci jsou vystavené doklady bez DPH – zkontroluj, zda patří do přiznání");
 
   const summary: Dp3Summary = {

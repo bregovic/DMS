@@ -290,7 +290,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
         <FormGrid cols={3}>
           <label className={lab}>
             Kód finančního úřadu
-            <input name="taxOfficeCode" value={v.taxOfficeCode ?? ""} onChange={(e) => set("taxOfficeCode", e.target.value)} placeholder="např. 001" inputMode="numeric" className={`${field} mt-1`} />
+            <input name="taxOfficeCode" value={v.taxOfficeCode ?? ""} onChange={(e) => set("taxOfficeCode", e.target.value)} placeholder="např. 451" inputMode="numeric" className={`${field} mt-1`} />
           </label>
           <label className={lab}>
             Územní pracoviště

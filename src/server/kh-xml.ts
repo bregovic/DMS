@@ -124,7 +124,14 @@ export async function buildKhXml(userId: string, period: KhPeriod) {
   const taxed = expenses.filter((e) => e.vatAmount != null || e.vatBase != null);
   const missing: string[] = [];
   if (!me.billingDic) missing.push("DIČ v Nastavení → Fakturace a daně");
-  if (!me.taxOfficeCode) missing.push("kód finančního úřadu");
+  /* Kód úřadu i pracoviště jsou v číselníku EPO čísla (např. 451 a 2009).
+     Dřív se kontrolovalo jen prázdno, takže sem prošel i identifikátor
+     datové schránky a hlášení odešlo s neplatným úřadem. */
+  if (!me.taxOfficeCode) missing.push("kód finančního úřadu (Nastavení → Fakturace a daně)");
+  else if (!/^\d{1,4}$/.test(me.taxOfficeCode.trim()))
+    missing.push(`kód finančního úřadu „${me.taxOfficeCode}" není číslo z číselníku (např. 451)`);
+  if (me.taxOfficeBranch && !/^\d{1,5}$/.test(me.taxOfficeBranch.trim()))
+    missing.push(`územní pracoviště „${me.taxOfficeBranch}" není číslo z číselníku (např. 2009)`);
 
   type Row = { dic: string; num: string; dppd: Date; slots: Record<1 | 2 | 3, { base: number; vat: number }> };
   const empty = () => ({ 1: { base: 0, vat: 0 }, 2: { base: 0, vat: 0 }, 3: { base: 0, vat: 0 } }) as Row["slots"];

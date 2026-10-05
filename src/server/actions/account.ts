@@ -49,6 +49,16 @@ export async function changePassword(
 export async function updateBilling(formData: FormData) {
   const user = await requireUser();
   const t = (k: string) => String(formData.get(k) || "").trim().slice(0, 300) || null;
+
+  /* Kód úřadu a pracoviště jsou v číselníku EPO čísla. Bez téhle kontroly
+     se do nich dal uložit třeba identifikátor datové schránky a podání pak
+     odešlo s neplatným úřadem. */
+  const ufo = t("taxOfficeCode");
+  if (ufo && !/^\d{1,4}$/.test(ufo))
+    throw new Error("Kód finančního úřadu je číslo z číselníku (např. 451 pro Prahu).");
+  const ufoBranch = t("taxOfficeBranch");
+  if (ufoBranch && !/^\d{1,5}$/.test(ufoBranch))
+    throw new Error("Územní pracoviště je číslo z číselníku (např. 2009).");
   await prisma.user.update({
     where: { id: user.id },
     data: {
