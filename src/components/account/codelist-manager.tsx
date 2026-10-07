@@ -9,6 +9,7 @@ import {
 } from "@/server/actions/codelists";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/app/collapsible";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Item = { id: string; label: string };
 type Group = { kind: string; title: string; items: Item[] };
@@ -59,7 +60,7 @@ function Row({ kind, item }: { kind: string; item: Item }) {
             try {
               await deleteCodelistItem(fd);
             } catch (e) {
-              setErr(e instanceof Error ? e.message : "Smazání selhalo.");
+              setErr(chybaAkce(e, "Smazání selhalo."));
             }
           });
         }}

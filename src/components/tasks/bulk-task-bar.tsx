@@ -7,6 +7,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { BulkLogDialog, type BulkLogTask } from "@/components/tasks/bulk-log-dialog";
 
 import { BULK_FORM_ID } from "@/lib/bulk-ids";
+import { chybaAkce } from "@/lib/chyba-akce";
 const LIST_ID = "task-list";
 
 /**
@@ -108,7 +109,7 @@ export function BulkTaskBar({
                 (r.skipped ? ` · ${r.skipped} bez oprávnění přeskočeno` : ""),
             );
           } catch (err) {
-            setMsg(err instanceof Error ? err.message : "Úprava selhala.");
+            setMsg(chybaAkce(err, "Úprava selhala."));
           }
           setBusy(false);
         }}

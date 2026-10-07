@@ -17,6 +17,7 @@ import {
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Draft = { id: string; status: string; error: string | null } | null;
 type Full = Awaited<ReturnType<typeof getPlanDraft>>;
@@ -133,7 +134,7 @@ export function PlanAi({
       setGeneralNote("");
       setMsg("Plán se připravuje znovu podle doplnění – po dokončení se sám otevře.");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+      setErr(chybaAkce(e, "Nepodařilo se spustit."));
     }
     setBusy(false);
   }
@@ -184,7 +185,7 @@ export function PlanAi({
                 const r = await createRequestsFromPlan(fd);
                 setMsg(`Vytvořeno ${r.created} žádanek – najdeš je v záložce Žádanky.`);
               } catch (e) {
-                setMsg(e instanceof Error ? e.message : "Nepodařilo se.");
+                setMsg(chybaAkce(e, "Nepodařilo se."));
               }
               setBusy(false);
             }}
@@ -206,7 +207,7 @@ export function PlanAi({
                 const r = await addVendorSelectionTodos(fd);
                 setMsg(`Přidáno ${r.created} úkolů „Vybrat dodavatele“ do todo listu (3 týdny před začátkem fáze).`);
               } catch (e) {
-                setMsg(e instanceof Error ? e.message : "Nepodařilo se.");
+                setMsg(chybaAkce(e, "Nepodařilo se."));
               }
               setBusy(false);
             }}
@@ -274,7 +275,7 @@ export function PlanAi({
                 await startCostDraft(fd);
                 setCostAsk(false);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+                setErr(chybaAkce(e, "Nepodařilo se spustit."));
               }
               setBusy(false);
             }}
@@ -320,7 +321,7 @@ export function PlanAi({
                 setCosts(null);
                 setMsg(`Uloženo ${r.updated} odhadů – forecast je aktualizovaný.`);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se.");
+                setErr(chybaAkce(e, "Nepodařilo se."));
               }
               setBusy(false);
             }}
@@ -407,7 +408,7 @@ export function PlanAi({
                 await startPlanDraft(fd);
                 setAsk(false);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+                setErr(chybaAkce(e, "Nepodařilo se spustit."));
               }
               setBusy(false);
             }}
@@ -483,7 +484,7 @@ export function PlanAi({
                 setReview(null);
                 setMsg("Plán založen, termíny spočítané.");
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se.");
+                setErr(chybaAkce(e, "Nepodařilo se."));
               }
               setBusy(false);
             }}

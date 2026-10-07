@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { DateInput } from "@/components/ui/date-input";
 import { ProjectAccess } from "@/components/projects/project-access";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -68,7 +69,7 @@ export function ProjectSettings({
             try {
               await updateProject(fd);
             } catch (e) {
-              window.alert(e instanceof Error ? e.message : "Uložení selhalo.");
+              window.alert(chybaAkce(e, "Uložení selhalo."));
               setSaving(false);
               return;
             }

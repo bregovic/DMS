@@ -5,6 +5,7 @@ import { Plus, Sparkles, X } from "lucide-react";
 import { setMemberRole, setMemberScan, setSubMemberRole } from "@/server/actions/memberships";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Member = { email: string; role: string; canScan?: boolean };
 type Role = "member" | "active" | "reader" | "none";
@@ -166,7 +167,7 @@ export function ProjectAccess({
         await call(projectId, subProjectId, e, asRole ?? role);
         if (!value) setEmail("");
       } catch (ex) {
-        setErr(ex instanceof Error ? ex.message : "Přidání selhalo.");
+        setErr(chybaAkce(ex, "Přidání selhalo."));
       }
     });
   }

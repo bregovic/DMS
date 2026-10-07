@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/utils";
 import { prepareUpload } from "@/lib/client-upload";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { FormSection } from "@/components/ui/form-section";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -115,7 +116,7 @@ export function NewExpenseForm({
               await createExpense(fd);
             } catch (err) {
               window.alert(
-                err instanceof Error ? err.message : "Uložení selhalo.",
+                chybaAkce(err, "Uložení selhalo."),
               );
               setSaving(false);
               return;

@@ -5,6 +5,7 @@ import { Paperclip, X } from "lucide-react";
 import { attachExpenseScan, deleteDocument } from "@/server/actions/documents";
 import { DocPreview } from "@/components/documents/doc-preview";
 import { prepareUpload } from "@/lib/client-upload";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Doc = { id: string; originalName: string; mimeType?: string | null };
 
@@ -46,7 +47,7 @@ export function ExpenseScan({
         await attachExpenseScan(fd);
         if (inputRef.current) inputRef.current.value = "";
       } catch (e2) {
-        setErr(e2 instanceof Error ? e2.message : "Nahrání selhalo.");
+        setErr(chybaAkce(e2, "Nahrání selhalo."));
       }
     });
   }

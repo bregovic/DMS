@@ -28,6 +28,7 @@ import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
 import { CatalogAiProposal } from "@/components/catalog/catalog-ai-proposal";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Line = {
   lineId: number;
@@ -187,7 +188,7 @@ export function CatalogGenerateDialog({
         router.refresh();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Generování selhalo.");
+      setError(chybaAkce(e, "Generování selhalo."));
     }
     setPending(false);
   }

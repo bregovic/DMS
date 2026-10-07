@@ -6,6 +6,7 @@ import { appendSpecsToRequest, applyExtraction, dismissExtraction, getExtraction
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Data = Awaited<ReturnType<typeof getExtraction>>;
 
@@ -30,7 +31,7 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
         setD(x);
         setVendorMode(x.matchedVendorId ? "existing" : "new");
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "Načtení selhalo."));
+      .catch((e) => setErr(chybaAkce(e, "Načtení selhalo.")));
   }, [id]);
 
   const r = d?.result;
@@ -54,7 +55,7 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
               await applyExtraction(fd);
               onClose();
             } catch (e) {
-              setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+              setErr(chybaAkce(e, "Uložení selhalo."));
             }
             setBusy(false);
           }}
@@ -115,7 +116,7 @@ export function ExtractionDialog({ id, onClose }: { id: string; onClose: () => v
                       await appendSpecsToRequest(fd);
                       setSpecMsg("Doplněno do specifikace žádanky.");
                     } catch (e) {
-                      setSpecMsg(e instanceof Error ? e.message : "Nepodařilo se.");
+                      setSpecMsg(chybaAkce(e, "Nepodařilo se."));
                     }
                   }}
                 >

@@ -7,6 +7,7 @@ import { ChevronDown, Loader2, Scale } from "lucide-react";
 import { startBundleComparison, startComparison } from "@/server/actions/extraction";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import type { ComparisonResult } from "@/server/extraction";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /** Dílčí známka 0–5 jako hvězdičky. */
 const znamka = (n: number) => {
@@ -197,7 +198,7 @@ export function OfferComparison({
                 setAsk(false);
                 setOpen(true);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+                setErr(chybaAkce(e, "Nepodařilo se spustit."));
               }
               setBusy(false);
             }}

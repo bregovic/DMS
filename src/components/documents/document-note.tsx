@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAutoFocus } from "@/components/ui/use-auto-focus";
 import { MessageSquare } from "lucide-react";
 import { updateDocumentNote } from "@/server/actions/documents";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Poznámka k dokumentu – typicky „co se oproti dokumentaci změnilo“
@@ -43,7 +44,7 @@ export function DocumentNote({ id, note, canEdit }: { id: string; note: string |
           await updateDocumentNote(fd);
           setOpen(false);
         } catch (e) {
-          window.alert(e instanceof Error ? e.message : "Uložení se nepodařilo.");
+          window.alert(chybaAkce(e, "Uložení se nepodařilo."));
         }
         setBusy(false);
       }}

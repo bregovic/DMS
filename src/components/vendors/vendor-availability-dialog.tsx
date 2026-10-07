@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const WD = [
   { v: 1, l: "Po" },
@@ -74,7 +75,7 @@ export function VendorAvailabilityDialog({
       await action(fd);
       await load();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Akce selhala.");
+      window.alert(chybaAkce(e, "Akce selhala."));
     }
     setBusy(false);
   }

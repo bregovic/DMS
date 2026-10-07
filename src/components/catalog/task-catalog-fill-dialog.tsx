@@ -16,6 +16,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ParamField } from "@/components/catalog/param-field";
 import { OperationPicker } from "@/components/catalog/operation-picker";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export function TaskCatalogFillDialog({
   taskId,
@@ -88,7 +89,7 @@ export function TaskCatalogFillDialog({
         onDone?.();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Naplnění selhalo.");
+      setError(chybaAkce(e, "Naplnění selhalo."));
     }
     setPending(false);
   }

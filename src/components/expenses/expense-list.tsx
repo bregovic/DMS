@@ -12,6 +12,7 @@ import { EditExpenseForm, type ExpenseEdit } from "@/components/expenses/edit-ex
 import { DeleteButton } from "@/components/ui/delete-button";
 import { kindLabel, expenseStage } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type StatusOpt = { key: string; label: string };
 
@@ -96,7 +97,7 @@ export function ExpenseList({
       setSel(new Set());
       router.refresh(); // promítnout hromadnou změnu (stav/uhrazeno…) do seznamu
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Hromadná změna selhala.");
+      window.alert(chybaAkce(e, "Hromadná změna selhala."));
     } finally {
       setPending(false);
     }

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { uploadDocument } from "@/server/actions/documents";
 import { prepareUpload } from "@/lib/client-upload";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type DocType = { value: string; label: string };
 
@@ -66,7 +67,7 @@ export function UploadForm({
         fd.set("file", prepared);
         await uploadDocument(fd);
       } catch (err) {
-        failed.push(`${files[i].name}: ${err instanceof Error ? err.message : "nahrání selhalo"}`);
+        failed.push(`${files[i].name}: ${chybaAkce(err, "nahrání selhalo")}`);
       }
     }
     setProgress(null);

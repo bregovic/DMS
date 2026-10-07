@@ -5,6 +5,7 @@ import { QrCode, X } from "lucide-react";
 import { bulkUpdateExpenses } from "@/server/actions/expenses";
 import { QrAggregateModal } from "@/components/expenses/qr-aggregate-modal";
 import { PAY_FORM_ID } from "@/lib/bulk-ids";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const LIST_ID = "payment-list";
 
@@ -65,7 +66,7 @@ export function PaymentsBulkBar({ statuses }: { statuses: { key: string; label: 
       setMsg(`Upraveno ${picked.length} ${picked.length === 1 ? "výdaj" : picked.length < 5 ? "výdaje" : "výdajů"}.`);
       clear();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Úprava selhala.");
+      setMsg(chybaAkce(e, "Úprava selhala."));
     }
     setBusy(false);
   }

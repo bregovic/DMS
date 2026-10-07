@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 import { exportProjectExpenses } from "@/server/actions/export-expenses";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export function ExportExpensesButton({
   projectId,
@@ -38,7 +39,7 @@ export function ExportExpensesButton({
       URL.revokeObjectURL(url);
       router.refresh(); // ukáže odznaky „exportováno"
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Export selhal.");
+      window.alert(chybaAkce(e, "Export selhal."));
     } finally {
       setBusy(false);
     }

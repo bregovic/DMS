@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProjectAccess } from "@/components/projects/project-access";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -62,7 +63,7 @@ export function EditSubProjectForm({
             try {
               await updateSubProject(fd);
             } catch (err) {
-              window.alert(err instanceof Error ? err.message : "Uložení selhalo.");
+              window.alert(chybaAkce(err, "Uložení selhalo."));
               return;
             }
             setOpen(false);

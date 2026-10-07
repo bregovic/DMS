@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileText } from "lucide-react";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type BrowserItem = {
   docId: string;
@@ -71,7 +72,7 @@ export function AttachmentsBrowser({
       setSel(new Set());
       router.refresh(); // zobrazí odznaky „staženo"
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Stažení selhalo.");
+      window.alert(chybaAkce(e, "Stažení selhalo."));
     } finally {
       setBusy(false);
     }

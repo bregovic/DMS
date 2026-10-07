@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { setMyTaskProgress } from "@/server/actions/my-tasks";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const STEPS = [0, 25, 50, 75, 100];
 
@@ -48,7 +49,7 @@ export function TaskProgressInput({
         await setMyTaskProgress(fd);
         setOpen(false);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Uložení se nepodařilo.");
+        setErr(chybaAkce(e, "Uložení se nepodařilo."));
       }
     });
   };

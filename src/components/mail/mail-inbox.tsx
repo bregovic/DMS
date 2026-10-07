@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { formatDate } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type ProjectOptions = {
   folders: { id: string; name: string }[];
@@ -130,7 +131,7 @@ function FileDialog({
             onClose();
             router.refresh();
           } catch (e) {
-            setErr(e instanceof Error ? e.message : "Zařazení selhalo.");
+            setErr(chybaAkce(e, "Zařazení selhalo."));
           }
           setBusy(false);
         }}
@@ -329,7 +330,7 @@ export function MailInbox({
       );
       router.refresh();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Přepočet návrhu selhal.");
+      setMsg(chybaAkce(e, "Přepočet návrhu selhal."));
     } finally {
       setBusyId(null);
     }
@@ -347,7 +348,7 @@ export function MailInbox({
         );
         router.refresh();
       } catch (e) {
-        setMsg(e instanceof Error ? e.message : "Vybrání schránky selhalo.");
+        setMsg(chybaAkce(e, "Vybrání schránky selhalo."));
       }
     });
 

@@ -7,6 +7,7 @@ import { logTaskExpense } from "@/server/actions/my-tasks";
 import { prepareUpload } from "@/lib/client-upload";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const fieldClass =
   "flex h-11 w-full rounded-none border border-stone-300 bg-white px-3 text-base text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none sm:h-10 sm:text-sm";
@@ -75,7 +76,7 @@ export function LogTaskExpense({
             if (total > 14 * 1024 * 1024) throw new Error("Přílohy mají dohromady víc než 14 MB – přidej je po částech.");
             await logTaskExpense(fd);
           } catch (err) {
-            setError(err instanceof Error ? err.message : "Uložení selhalo.");
+            setError(chybaAkce(err, "Uložení selhalo."));
             setBusy(false);
             return;
           }

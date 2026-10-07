@@ -8,6 +8,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type BundleOfferView = {
   id: string;
@@ -73,7 +74,7 @@ export function BundleOfferForm({
             else await updateBundleOffer(fd);
             setOpen(false);
           } catch (e) {
-            setErr(e instanceof Error ? e.message : "Nepodařilo se uložit.");
+            setErr(chybaAkce(e, "Nepodařilo se uložit."));
           }
           setBusy(false);
         }}

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 
 import { INV_ATTR } from "@/lib/bulk-ids";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Vyúčtování vybraných výkazů v Moje úkoly: faktura (podnikatel), nebo
@@ -86,7 +87,7 @@ export function InvoiceCreateBar({ amounts }: { amounts: Record<string, number> 
                 setOpen(false);
                 if (r.ids[0]) router.push(`/faktury/${r.ids[0]}`);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Fakturu se nepodařilo vystavit.");
+                setErr(chybaAkce(e, "Fakturu se nepodařilo vystavit."));
               }
               setBusy(false);
             }}

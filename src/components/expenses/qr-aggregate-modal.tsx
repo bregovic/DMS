@@ -11,6 +11,7 @@ import {
 } from "@/server/actions/qr-aggregate";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Uložení QR z dialogu. Na telefonu nejde oskenovat vlastní displej, takže
@@ -80,7 +81,7 @@ export function QrAggregateModal({
           setSkippedNoBank(res.skippedNoBank);
         }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : "QR se nepodařilo vytvořit.");
+        if (alive) setError(chybaAkce(e, "QR se nepodařilo vytvořit."));
       } finally {
         if (alive) setLoading(false);
       }
@@ -266,7 +267,7 @@ export function QrAggregateModal({
                   router.refresh();
                   onClose();
                 } catch (e) {
-                  setError(e instanceof Error ? e.message : "Nepodařilo se označit jako uhrazené.");
+                  setError(chybaAkce(e, "Nepodařilo se označit jako uhrazené."));
                   setPaying(false);
                 }
               }}

@@ -8,6 +8,7 @@ import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Sdružení žádanek do poptávkového balíčku (#40): okna, dveře a portál se
@@ -55,7 +56,7 @@ export function BundleManager({
                 setOpen(false);
                 router.refresh();
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Nepodařilo se uložit.");
+                setErr(chybaAkce(e, "Nepodařilo se uložit."));
               }
               setBusy(false);
             }}

@@ -3,10 +3,9 @@
 import { useActionState } from "react";
 import { unstable_isUnrecognizedActionError } from "next/navigation";
 
-/** Hláška u stránky z minulého nasazení – serverová akce, kterou tlačítko
- *  volá, už na serveru není. */
-export const STARA_STRANKA =
-  "Aplikace se mezitím aktualizovala. Načti stránku znovu.";
+import { STARA_STRANKA } from "@/lib/chyba-akce";
+
+export { STARA_STRANKA };
 
 export function jeStaraStranka(error?: string | null): boolean {
   return error === STARA_STRANKA;

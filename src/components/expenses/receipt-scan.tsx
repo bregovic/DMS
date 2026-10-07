@@ -6,6 +6,7 @@ import { myReceipts, uploadReceipt } from "@/server/actions/doc-scan";
 import { processDocumentPhoto, type PhotoQuality } from "@/lib/image-clean";
 import { prepareUpload } from "@/lib/client-upload";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Project = {
   id: string;
@@ -111,7 +112,7 @@ export function ReceiptScan({
       setPending(null);
       setMine(await myReceipts());
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Nepodařilo se odeslat.");
+      setErr(chybaAkce(e, "Nepodařilo se odeslat."));
     }
     setBusy(false);
   }

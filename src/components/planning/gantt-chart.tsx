@@ -7,6 +7,7 @@ import { moveTaskDates, setTaskStatus } from "@/server/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { TaskDetailDialog } from "@/components/planning/task-detail-dialog";
 import { RequestDetailDialog } from "@/components/planning/request-detail-dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /** Co brání fázi začít (stav připravenosti). Pořadí = závažnost. */
 export type ReadinessKind = "blocked" | "waiting" | "vendor" | "material" | "ready";
@@ -188,7 +189,7 @@ export function GanttChart({
       await moveTaskDates(fd);
       router.refresh();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Přeplánování se nepodařilo.");
+      window.alert(chybaAkce(e, "Přeplánování se nepodařilo."));
     }
     setDrag(null);
     setDragBusy(false);

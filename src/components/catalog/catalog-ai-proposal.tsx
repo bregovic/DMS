@@ -7,6 +7,7 @@ import type { CatalogProposal } from "@/server/catalog-ai";
 import { calcOperation } from "@/lib/process-calc";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Návrh chybějícího úkonu přes AI (#35) – z názvu činnosti AI navrhne úkon
@@ -25,7 +26,7 @@ export function CatalogAiProposal({ title, onSaved }: { title: string; onSaved: 
     try {
       setP(await proposeCatalogOperation(title, note));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Návrh se nepodařil.");
+      setErr(chybaAkce(e, "Návrh se nepodařil."));
     }
     setBusy(false);
   }
@@ -106,7 +107,7 @@ export function CatalogAiProposal({ title, onSaved }: { title: string; onSaved: 
               onSaved(await saveCatalogProposal(p));
               setP(null);
             } catch (e) {
-              setErr(e instanceof Error ? e.message : "Uložení se nepodařilo.");
+              setErr(chybaAkce(e, "Uložení se nepodařilo."));
             }
             setBusy(false);
           }}

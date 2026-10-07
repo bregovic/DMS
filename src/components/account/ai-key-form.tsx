@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateAiKey } from "@/server/actions/account";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Klíč k automatickému zpracování. Uloží se šifrovaně, zpátky se nečte –
@@ -22,7 +23,7 @@ export function AiKeyForm({ keySet }: { keySet: boolean }) {
         setKey("");
         router.refresh();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+        setErr(chybaAkce(e, "Uložení selhalo."));
       }
     });
   };

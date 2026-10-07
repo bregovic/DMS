@@ -10,6 +10,7 @@ import { startExtraction, startRequestExtractions } from "@/server/actions/extra
 import { DeleteButton } from "@/components/ui/delete-button";
 import { ExtractionDialog } from "@/components/requests/extraction-dialog";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type RequestDoc = {
   id: string;
@@ -45,7 +46,7 @@ function AiChip({ d, onOpen }: { d: RequestDoc; onOpen: (id: string) => void }) 
       await startExtraction(fd);
       setAsk(false);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Nepodařilo se spustit.");
+      setErr(chybaAkce(e, "Nepodařilo se spustit."));
     }
     setBusy(false);
   };
@@ -188,7 +189,7 @@ export function RequestAttachments({
       try {
         await attachRequestFiles(fd);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Nahrání selhalo.");
+        setError(chybaAkce(err, "Nahrání selhalo."));
         break;
       }
     }
@@ -295,7 +296,7 @@ export function RequestAttachments({
                   fd.set("requestId", requestId);
                   await startRequestExtractions(fd);
                 } catch (e) {
-                  setError(e instanceof Error ? e.message : "Zpracování se nepodařilo spustit.");
+                  setError(chybaAkce(e, "Zpracování se nepodařilo spustit."));
                 }
                 setBatchBusy(false);
               }}

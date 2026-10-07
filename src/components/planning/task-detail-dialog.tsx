@@ -28,6 +28,7 @@ import { CatalogGenerateDialog } from "@/components/catalog/catalog-generate-dia
 import { TaskCatalogFillDialog } from "@/components/catalog/task-catalog-fill-dialog";
 import { taskStatusLabel, TASK_STATUSES, REQUEST_STATUSES, requestStatusLabel } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Detail = Awaited<ReturnType<typeof getTaskDetail>>;
 
@@ -64,7 +65,7 @@ export function TaskDetailDialog({
       setExpPickerOpen(false);
       await reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Spárování selhalo.");
+      window.alert(chybaAkce(e, "Spárování selhalo."));
     }
     setSaving(false);
   }
@@ -91,7 +92,7 @@ export function TaskDetailDialog({
       await fn(fd);
       await reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Akce selhala.");
+      window.alert(chybaAkce(e, "Akce selhala."));
     }
     setSaving(false);
   }
@@ -105,7 +106,7 @@ export function TaskDetailDialog({
         setLocked(!!x.dateLocked);
         setBlocked(!x.ready);
       })
-      .catch((e) => live && setErr(e instanceof Error ? e.message : "Načtení selhalo."));
+      .catch((e) => live && setErr(chybaAkce(e, "Načtení selhalo.")));
     return () => {
       live = false;
     };
@@ -128,7 +129,7 @@ export function TaskDetailDialog({
           `Dodavatel má od plánovaného začátku jen ${r.got} z ${r.need} potřebných dní. Termín jsem dal na poslední dostupný den (${r.due}). Doplň mu dostupnost a spusť znovu.`,
         );
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Naplánování selhalo.");
+      window.alert(chybaAkce(e, "Naplánování selhalo."));
     }
     setSaving(false);
   }
@@ -148,7 +149,7 @@ export function TaskDetailDialog({
       onSaved?.();
       onClose();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Smazání selhalo.");
+      window.alert(chybaAkce(e, "Smazání selhalo."));
       setSaving(false);
     }
   }
@@ -188,7 +189,7 @@ export function TaskDetailDialog({
               try {
                 await updateTaskPlan(fd);
               } catch (e) {
-                window.alert(e instanceof Error ? e.message : "Uložení selhalo.");
+                window.alert(chybaAkce(e, "Uložení selhalo."));
                 setSaving(false);
                 return;
               }

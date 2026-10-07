@@ -6,6 +6,7 @@ import { StickyNote } from "lucide-react";
 import { createTextNote } from "@/server/actions/documents";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /** Nová textová poznámka k dokumentaci projektu (používá ji i plánování). */
 export function TextNoteForm({ projectId }: { projectId: string }) {
@@ -33,7 +34,7 @@ export function TextNoteForm({ projectId }: { projectId: string }) {
                 await createTextNote(fd);
                 setOpen(false);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Uložení se nepodařilo.");
+                setErr(chybaAkce(e, "Uložení se nepodařilo."));
               }
               setBusy(false);
             }}

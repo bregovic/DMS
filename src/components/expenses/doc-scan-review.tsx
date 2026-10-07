@@ -22,6 +22,7 @@ import { DocPreview } from "@/components/documents/doc-preview";
 import { formatCurrency } from "@/lib/utils";
 import { claimedTotals } from "@/lib/vat";
 import type { ScanResult } from "@/server/doc-scan";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const input =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:border-stone-950 focus-visible:outline-none";
@@ -165,7 +166,7 @@ export function DocScanReview({
         }
         await load(id);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Doklad se nepodařilo načíst.");
+        setErr(chybaAkce(e, "Doklad se nepodařilo načíst."));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,7 +210,7 @@ export function DocScanReview({
       router.refresh();
       onDone?.("done");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Výdaj se nepodařilo založit.");
+      setErr(chybaAkce(e, "Výdaj se nepodařilo založit."));
     }
     setBusy(false);
   }
@@ -231,7 +232,7 @@ export function DocScanReview({
       router.refresh();
       onDone?.("done");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Nabídku se nepodařilo založit.");
+      setErr(chybaAkce(e, "Nabídku se nepodařilo založit."));
     }
     setBusy(false);
   }
@@ -282,7 +283,7 @@ export function DocScanReview({
                 await restartScan(fd);
                 await load(scan.id);
               } catch (e) {
-                setErr(e instanceof Error ? e.message : "Čtení se nepodařilo spustit.");
+                setErr(chybaAkce(e, "Čtení se nepodařilo spustit."));
               }
             }}
           >

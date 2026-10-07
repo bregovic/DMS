@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { INCOME_CATEGORIES, incomeCategoryLabel } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 const fieldClass =
   "flex h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm text-stone-950 focus-visible:outline-none focus-visible:border-stone-950";
@@ -82,7 +83,7 @@ function IncomeDoc({
               await attachIncomeDocument(fd);
               if (inputRef.current) inputRef.current.value = "";
             } catch (err) {
-              window.alert(err instanceof Error ? err.message : "Nahrání selhalo.");
+              window.alert(chybaAkce(err, "Nahrání selhalo."));
             }
           });
         }}
@@ -121,7 +122,7 @@ export function IncomeSection({
     try {
       await deleteIncome(fd);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Smazání selhalo.");
+      window.alert(chybaAkce(e, "Smazání selhalo."));
     }
   }
 
@@ -204,7 +205,7 @@ export function IncomeSection({
                   if (isNew) await createIncome(fd);
                   else await updateIncome(fd);
                 } catch (err) {
-                  window.alert(err instanceof Error ? err.message : "Uložení selhalo.");
+                  window.alert(chybaAkce(err, "Uložení selhalo."));
                   setSaving(false);
                   return;
                 }

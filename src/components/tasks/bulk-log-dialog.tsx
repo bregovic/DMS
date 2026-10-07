@@ -6,6 +6,7 @@ import { logTasksExpenseBulk } from "@/server/actions/my-tasks";
 import { prepareUpload } from "@/lib/client-upload";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type BulkLogTask = { id: string; title: string; percent: number; due: string | null };
 
@@ -53,7 +54,7 @@ export function BulkLogDialog({
             const r = await logTasksExpenseBulk(fd);
             onDone(`Vykázáno na ${r.logged} ${r.logged === 1 ? "úkol" : r.logged < 5 ? "úkoly" : "úkolů"}.`);
           } catch (e) {
-            setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+            setErr(chybaAkce(e, "Uložení selhalo."));
           }
           setBusy(false);
         }}

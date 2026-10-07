@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search, Landmark, Loader2 } from "lucide-react";
 import { lookupVatAccounts, updateBilling } from "@/server/actions/account";
 import { FormGrid, FormSection } from "@/components/ui/form-section";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type BillingValues = {
   billingName: string | null;
@@ -102,7 +103,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
       if (d.subjectType) setPo(d.subjectType === "PO");
       setMsg(`Načteno z ARESu: ${d.name ?? ico}`);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "ARES nedostupný.");
+      setMsg(chybaAkce(e, "ARES nedostupný."));
     }
     setBusy(null);
   }
@@ -124,7 +125,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
         );
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Registr nedostupný.");
+      setMsg(chybaAkce(e, "Registr nedostupný."));
     }
     setBusy(null);
   }
@@ -137,7 +138,7 @@ export function BillingForm({ b }: { b: BillingValues }) {
           await updateBilling(fd);
           setSaved(true);
         } catch (e) {
-          setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+          setErr(chybaAkce(e, "Uložení selhalo."));
         }
       }}
       onChange={() => {

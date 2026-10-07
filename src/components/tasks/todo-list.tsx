@@ -8,6 +8,7 @@ import { BULK_FORM_ID } from "@/lib/bulk-ids";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { PRIORITIES, priorityColor, priorityLabel } from "@/lib/constants";
 import { colorClasses } from "@/lib/status-colors";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 export type TodoItem = {
   id: string;
@@ -78,7 +79,7 @@ export function TodoList({
       try {
         await updateTodo(fd);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Změna se nezdařila.");
+        setError(chybaAkce(err, "Změna se nezdařila."));
       }
     });
   }
@@ -101,7 +102,7 @@ export function TodoList({
             try {
               await createTask(fd);
             } catch (err) {
-              setError(err instanceof Error ? err.message : "Uložení selhalo.");
+              setError(chybaAkce(err, "Uložení selhalo."));
               return;
             }
             // Formulář zůstává otevřený a kurzor v názvu - zapisuje se

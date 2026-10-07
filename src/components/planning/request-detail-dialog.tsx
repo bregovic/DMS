@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog } from "@/components/ui/dialog";
 import { REQUEST_STATUSES } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Detail = Awaited<ReturnType<typeof getRequestDetail>>;
 
@@ -35,7 +36,7 @@ export function RequestDetailDialog({
     let live = true;
     getRequestDetail(id)
       .then((x) => live && setD(x))
-      .catch((e) => live && setErr(e instanceof Error ? e.message : "Načtení selhalo."));
+      .catch((e) => live && setErr(chybaAkce(e, "Načtení selhalo.")));
     return () => { live = false; };
   }, [id]);
 
@@ -48,7 +49,7 @@ export function RequestDetailDialog({
       setD(await getRequestDetail(id));
       onSaved?.();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Výběr selhal.");
+      window.alert(chybaAkce(e, "Výběr selhal."));
     }
     setSaving(false);
   }
@@ -70,7 +71,7 @@ export function RequestDetailDialog({
             <form
               action={async (fd) => {
                 setSaving(true);
-                try { await updateRequestDates(fd); } catch (e) { window.alert(e instanceof Error ? e.message : "Uložení selhalo."); setSaving(false); return; }
+                try { await updateRequestDates(fd); } catch (e) { window.alert(chybaAkce(e, "Uložení selhalo.")); setSaving(false); return; }
                 onSaved?.();
                 onClose();
               }}

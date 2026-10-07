@@ -6,6 +6,7 @@ import { Loader2, Send } from "lucide-react";
 import { previewFiling, sendFiling } from "@/server/actions/tax-filing";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 type Preview = Awaited<ReturnType<typeof previewFiling>>;
 
@@ -43,7 +44,7 @@ export function FilingDialog({
     setDone(null);
     previewFiling(kind, period, year)
       .then(setData)
-      .catch((e) => setErr(e instanceof Error ? e.message : "Náhled se nepodařilo načíst."));
+      .catch((e) => setErr(chybaAkce(e, "Náhled se nepodařilo načíst.")));
   }, [open, kind, period, year]);
 
   const info = data && !("error" in data) ? data : null;

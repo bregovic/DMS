@@ -5,6 +5,7 @@ import { saveNotifySettings } from "@/server/actions/inbound";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { chybaAkce } from "@/lib/chyba-akce";
 
 /**
  * Oznámení e-mailem (#41). Co chodí do zvonečku (přidělený úkol, výdaj od
@@ -34,7 +35,7 @@ export function NotifySettings({
           setSaved(true);
           setTimeout(() => setSaved(false), 2500);
         } catch (e) {
-          setErr(e instanceof Error ? e.message : "Uložení selhalo.");
+          setErr(chybaAkce(e, "Uložení selhalo."));
         }
       }}
       className="max-w-sm space-y-3"
