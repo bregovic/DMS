@@ -43,6 +43,7 @@ export default async function DashboardPage({
   const writableProjects = writable.map((a) => ({
     id: a.project.id,
     name: a.project.name,
+    ownerId: a.project.ownerId,
   }));
   const writableIds = writable.map((a) => a.project.id);
   const projectsList = accessible.slice(0, 5).map((a) => a.project);
@@ -72,10 +73,13 @@ export default async function DashboardPage({
       include: { project: true },
     }),
     getExpenseCategoryMap(),
+    // Dodavatelé z evidence vlastníků projektů, kam smím přidávat – u výdaje do
+    // cizího projektu se vybírá z jeho karet (jinak by pozvaný dodavatel nenašel
+    // sám sebe a výkaz by zůstal bez dodavatele a bez účtu pro platbu).
     prisma.vendor.findMany({
-      where: { ownerId: user.id },
+      where: { ownerId: { in: [...new Set([user.id, ...writable.map((a) => a.project.ownerId)])] } },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true, hourlyRate: true },
+      select: { id: true, name: true, email: true, hourlyRate: true, ownerId: true },
     }),
     getExpenseCategories(),
     getDocumentTypes(),
@@ -86,13 +90,18 @@ export default async function DashboardPage({
     id: v.id,
     name: v.name,
     hourlyRate: v.hourlyRate != null ? Number(v.hourlyRate) : null,
+    ownerId: v.ownerId,
   }));
 
-  // Dodavatel se stejným e-mailem jako přihlášený → předvyplní se u výdaje.
+  // Dodavatel se stejným e-mailem jako přihlášený → předvyplní se u výdaje
+  // (po vlastnících, protože každý vlastník má svou kartu).
   const myEmail = user.email?.toLowerCase();
-  const myVendorId = myEmail
-    ? vendorRows.find((v) => v.email?.toLowerCase() === myEmail)?.id
-    : undefined;
+  const myVendorByOwner: Record<string, string> = {};
+  if (myEmail) {
+    for (const v of vendorRows) {
+      if (v.email?.toLowerCase() === myEmail) myVendorByOwner[v.ownerId] ??= v.id;
+    }
+  }
 
   // Subprojekty (pro výběr složky) + našeptávání názvů výdajů – nezávislé, paralelně.
   const [subRows, titleRows] = await Promise.all([
@@ -158,7 +167,7 @@ export default async function DashboardPage({
         subsByProject={subsByProject}
         titlesByProject={titlesByProject}
         vendors={quickVendors}
-        myVendorId={myVendorId}
+        myVendorByOwner={myVendorByOwner}
         categories={categories}
         docTypes={docTypes}
         expenseStatuses={expenseStatuses}

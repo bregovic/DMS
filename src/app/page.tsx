@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getProjectAccess, getTaskOnlyAccess } from "@/server/access";
+import { getProjectAccess, getTaskOnlyAccess, listProjectsForUser } from "@/server/access";
 import {
   LAST_PROJECT_COOKIE,
   parseProjectTab,
@@ -29,6 +29,13 @@ export default async function Home() {
         redirect(projectHref(projectId, safeSub, parseProjectTab(tab)));
       }
     }
+  }
+
+  // Spolupracovník bez vlastních projektů (dodavatel) přehled nepotřebuje –
+  // jde rovnou do projektu; se složkovým přístupem ho projekt pošle do složky.
+  const accessible = await listProjectsForUser(session.user);
+  if (accessible.length && !accessible.some((a) => a.role === "owner")) {
+    redirect(projectHref(accessible[0].project.id, null, parseProjectTab(undefined)));
   }
 
   redirect("/dashboard");

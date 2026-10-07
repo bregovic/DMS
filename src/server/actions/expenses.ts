@@ -44,6 +44,15 @@ export async function createExpense(formData: FormData) {
     });
     if (!v) vendorId = null;
   }
+  // Spolupracovník (ne vlastník/spolusprávce), který dodavatele nevybral, zadává
+  // svoji práci/útratu → doplní se jeho karta podle e-mailu (kvůli účtu k platbě).
+  if (!vendorId && !isManager(access.role) && user.email) {
+    const mine = await prisma.vendor.findFirst({
+      where: { ownerId: project.ownerId, email: { equals: user.email, mode: "insensitive" } },
+      select: { id: true },
+    });
+    vendorId = mine?.id ?? null;
+  }
 
   let subProjectId = String(formData.get("subProjectId") || "") || null;
   if (subProjectId) {

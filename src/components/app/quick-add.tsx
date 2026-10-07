@@ -8,25 +8,25 @@ import { NewRequestForm } from "@/components/requests/new-request-form";
 const LAST_KEY = "dms-last-project";
 const LAST_SUB_KEY = "dms-last-subproject";
 
-type Vendor = { id: string; name: string; hourlyRate: number | null };
+type Vendor = { id: string; name: string; hourlyRate: number | null; ownerId: string };
 type Sub = { id: string; name: string };
 
 export function QuickAdd({
   projects,
   subsByProject,
   titlesByProject = {},
-  vendors,
-  myVendorId,
+  vendors: allVendors,
+  myVendorByOwner,
   categories,
   docTypes,
   expenseStatuses,
   taskStatuses,
 }: {
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; ownerId: string }[];
   subsByProject: Record<string, Sub[]>;
   titlesByProject?: Record<string, string[]>;
   vendors: Vendor[];
-  myVendorId?: string;
+  myVendorByOwner: Record<string, string>;
   categories: { key: string; label: string }[];
   docTypes: { value: string; label: string }[];
   expenseStatuses: { key: string; label: string }[];
@@ -65,6 +65,10 @@ export function QuickAdd({
 
   if (!projects.length) return null;
   const subs = subsByProject[pid] ?? [];
+  // Dodavatelé a „já" z evidence vlastníka zvoleného projektu.
+  const ownerId = projects.find((p) => p.id === pid)?.ownerId ?? "";
+  const vendors = allVendors.filter((v) => v.ownerId === ownerId);
+  const myVendorId = myVendorByOwner[ownerId];
   const subId = sub || undefined;
   const selectClass =
     "h-10 w-full rounded-none border border-stone-300 bg-white px-3 text-sm font-medium text-stone-950 focus-visible:outline-none focus-visible:border-stone-950 sm:w-56";
