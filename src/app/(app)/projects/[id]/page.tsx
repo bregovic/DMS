@@ -1588,6 +1588,11 @@ export default async function ProjectDetailPage({
                       id: d.id,
                       originalName: d.originalName,
                     })),
+                    items: o.bundleOfferId
+                      ? (bundles.find((b) => b.id === r.bundleId)?.items.byRequest[r.id] ?? [])
+                          .filter((i) => i.bundleOfferId === o.bundleOfferId)
+                          .sort((a, b) => Number(!!a.alternative) - Number(!!b.alternative) || Number(a.kind !== "product") - Number(b.kind !== "product"))
+                      : undefined,
                   }))}
                 />
 

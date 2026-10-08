@@ -44,6 +44,19 @@ export type OfferView = {
   planTaskCount?: number;
   tasksCreated?: boolean;
   docs: { id: string; originalName: string }[];
+  /** Položky společné nabídky k téhle žádance (#47). */
+  items?: {
+    id: string;
+    title: string;
+    product: string | null;
+    kind: string;
+    alternative: string | null;
+    widthMm: number | null;
+    heightMm: number | null;
+    quantity: number | null;
+    unit: string | null;
+    priceWithVat: number | null;
+  }[];
 };
 
 type Vendor = { id: string; label: string };
@@ -244,6 +257,24 @@ export function OffersPanel({
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
                 </p>
                 {o.note && <p className="mt-0.5 text-xs text-stone-500">{o.note}</p>}
+                {o.items && o.items.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs">
+                    {o.items.map((i) => (
+                      <li key={i.id} className={`flex gap-3 ${i.alternative ? "text-stone-400" : "text-stone-700"}`}>
+                        <span className="min-w-0 flex-1">
+                          {i.title}
+                          {i.widthMm && i.heightMm ? ` · ${i.widthMm} × ${i.heightMm}` : ""}
+                          {i.quantity != null && i.quantity !== 1 ? ` · ${i.quantity} ${i.unit ?? "ks"}` : ""}
+                          {i.product && <span className="text-stone-400"> · {i.product}</span>}
+                          {i.alternative && <span> · alternativa</span>}
+                        </span>
+                        <span className="shrink-0 font-mono">
+                          {i.priceWithVat != null ? formatCurrency(i.priceWithVat) : "—"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {o.sourceDocId && (
                   <a
                     href={`/api/documents/${o.sourceDocId}`}
