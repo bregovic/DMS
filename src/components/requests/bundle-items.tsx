@@ -9,6 +9,7 @@ import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { chybaAkce } from "@/lib/chyba-akce";
 import { formatCurrency } from "@/lib/utils";
+import { SCORE_LABELS, SCORE_WEIGHTS, totalScore, type ScoreKey } from "@/lib/offer-scores";
 
 export type BundleItemsData = {
   byRequest: Record<string, ItemView[]>;
@@ -97,6 +98,19 @@ export function OfferItemsStatus({ offer, canRun }: { offer: OfferItemsState; ca
       {open && info && (
         <span className="block basis-full text-stone-600">
           {info.summary}
+          {info.terms && (
+            <span className="mt-0.5 block">
+              {[
+                info.terms.leadTime && `Dodání: ${info.terms.leadTime}`,
+                info.terms.warranty && `Záruka: ${info.terms.warranty}`,
+                info.terms.paymentTerms && `Platba: ${info.terms.paymentTerms}`,
+                info.terms.included.length > 0 && `V ceně: ${info.terms.included.join(", ")}`,
+                info.terms.excluded.length > 0 && `Není v ceně: ${info.terms.excluded.join(", ")}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
           {info.warnings.map((w, i) => (
             <span key={i} className="block text-orange-700">
               {w}
@@ -125,13 +139,18 @@ function ItemRow({
   item,
   review,
   cheapest,
+  withScore,
+  best,
 }: {
+  withScore: boolean;
+  best: boolean;
   item: ItemView;
   review?: ItemReviewResult["items"][number];
   cheapest: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const muted = item.kind !== "product";
+  const total = review ? (review.total ?? totalScore(review.scores ?? {})) : null;
   return (
     <Fragment>
       <tr
@@ -163,10 +182,19 @@ function ItemRow({
         <td className="py-1.5 pr-1 text-right font-mono whitespace-nowrap text-stone-500">
           {item.perM2 != null ? formatCurrency(item.perM2) : ""}
         </td>
+        {withScore && (
+          <td className="py-1.5 pl-2 pr-1 text-right whitespace-nowrap">
+            {total != null ? (
+              <span className={`font-mono font-medium ${best ? "text-emerald-700" : "text-stone-950"}`}>{total}</span>
+            ) : (
+              <span className="text-stone-300">—</span>
+            )}
+          </td>
+        )}
       </tr>
       {open && (
         <tr className="border-b border-stone-100 bg-stone-50/60">
-          <td colSpan={6} className="px-2 py-2 text-[11px] text-stone-700">
+          <td colSpan={withScore ? 7 : 6} className="px-2 py-2 text-[11px] text-stone-700">
             {item.specs.length > 0 && (
               <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3">
                 {item.specs.map((s, i) => (
@@ -188,6 +216,28 @@ function ItemRow({
             {review && (
               <div className="mt-2 border-t border-stone-200 pt-2">
                 <p className="text-stone-900">{review.verdict}</p>
+                {review.scores && (
+                  <table className="mt-1.5 border-collapse">
+                    <tbody>
+                      {(Object.keys(SCORE_LABELS) as ScoreKey[]).map((k) => {
+                        const v = review.scores[k];
+                        return (
+                          <tr key={k} className="align-top">
+                            <td className="py-0.5 pr-3 whitespace-nowrap text-stone-500">
+                              {SCORE_LABELS[k]} <span className="text-stone-300">{SCORE_WEIGHTS[k]} %</span>
+                            </td>
+                            <td className="py-0.5 pr-3 whitespace-nowrap font-mono text-stone-900">
+                              {v != null ? `${Math.round(v * 10) / 10}/5` : "—"}
+                            </td>
+                            <td className="py-0.5 text-stone-600">
+                              {k === "price" ? (item.perM2 != null ? "podle Kč/m²" : "podle ceny") : review.scoreNotes?.[k]}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
                 {(review.pros.length > 0 || review.cons.length > 0) && (
                   <div className="mt-1 grid gap-2 sm:grid-cols-2">
                     <ul className="space-y-0.5">
@@ -229,7 +279,26 @@ function ItemTable({
   items: ItemView[];
   review?: ItemReviewResult | null;
 }) {
+  const [sort, setSort] = useState<"price" | "score">("score");
   const minPrice = Math.min(...items.filter((i) => !i.alternative && i.kind === "product" && i.priceWithVat != null).map((i) => i.priceWithVat!));
+  const reviewOf = (id: string) => review?.items.find((x) => x.ref === id);
+  const scoreOf = (id: string) => {
+    const r = reviewOf(id);
+    return r ? (r.total ?? totalScore(r.scores ?? {})) : null;
+  };
+  const withScore = !!review && items.some((i) => scoreOf(i.id) != null);
+  const bestScore = withScore ? Math.max(...items.map((i) => scoreOf(i.id) ?? -1)) : null;
+  const rows =
+    withScore && sort === "score" ? [...items].sort((a, b) => (scoreOf(b.id) ?? -1) - (scoreOf(a.id) ?? -1)) : items;
+  const sortBtn = (k: "price" | "score", label: string) => (
+    <button
+      type="button"
+      onClick={() => setSort(k)}
+      className={`cursor-pointer ${sort === k ? "font-medium text-stone-950" : "text-stone-400 hover:text-stone-950"}`}
+    >
+      {label}
+    </button>
+  );
   return (
     <div className="hscroll -mx-4 overflow-x-auto px-4">
       <table className="w-full min-w-[620px] border-collapse text-xs">
@@ -240,16 +309,19 @@ function ItemTable({
             <th className="py-1.5 pr-3 font-medium">Rozměr (mm)</th>
             <th className="hidden py-1.5 pr-3 font-medium md:table-cell">Parametry</th>
             <th className="py-1.5 pr-3 text-right font-medium">S DPH</th>
-            <th className="py-1.5 pr-1 text-right font-medium">Kč/m²</th>
+            <th className="py-1.5 pr-1 text-right font-medium">{withScore ? sortBtn("price", "Kč/m²") : "Kč/m²"}</th>
+            {withScore && <th className="py-1.5 pl-2 pr-1 text-right font-medium">{sortBtn("score", "Skóre")}</th>}
           </tr>
         </thead>
         <tbody>
-          {items.map((i) => (
+          {rows.map((i) => (
             <ItemRow
               key={i.id}
               item={i}
               cheapest={i.kind === "product" && i.priceWithVat === minPrice}
-              review={review?.items.find((x) => x.ref === i.id)}
+              review={reviewOf(i.id)}
+              withScore={withScore}
+              best={bestScore != null && scoreOf(i.id) === bestScore}
             />
           ))}
         </tbody>

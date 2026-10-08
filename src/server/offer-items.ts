@@ -3,6 +3,7 @@ import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
 import { AI_MODEL, aiAccountForProject, assertBudget, callModel, extractable, filePart } from "@/server/extraction";
 import { dropComparisons } from "@/server/comparisons";
+import { priceScores, totalScore, type ScoreKey } from "@/lib/offer-scores";
 
 /**
  * Nabídky po položkách (#47).
@@ -46,8 +47,18 @@ type ExtractedItem = {
   description: string | null;
   mismatch: string | null;
 };
+/** Podmínky nabídky – podklad pro známku za dodání a podmínky. */
+export type OfferTerms = {
+  leadTime: string | null;
+  warranty: string | null;
+  paymentTerms: string | null;
+  validUntil: string | null;
+  included: string[];
+  excluded: string[];
+};
 type ItemsResult = {
   items: ExtractedItem[];
+  terms: OfferTerms;
   totalWithoutVat: number | null;
   totalWithVat: number | null;
   vatRate: number | null;
@@ -67,6 +78,8 @@ export type ItemsInfo = {
   diff: number | null;
   /** Doplnily se ceny po žádankách do matice? */
   partsFilled: boolean;
+  /** Chybí u rozpisů z doby před známkováním. */
+  terms?: OfferTerms;
 };
 
 const n = { type: ["number", "null"] };
@@ -101,6 +114,7 @@ const ITEMS_SCHEMA = obj({
       mismatch: str,
     }),
   },
+  terms: obj({ leadTime: str, warranty: str, paymentTerms: str, validUntil: str, included: strArr, excluded: strArr }),
   totalWithoutVat: n,
   totalWithVat: n,
   vatRate: n,
@@ -122,6 +136,7 @@ Jedna položka = jeden řádek nabídky / jedna pozice (okno, dveře, HS portál
 - description: 1 věta, co dalšího je důležité (dělení, kliky, barva z obou stran) nebo null.
 - mismatch: porovnej se specifikací poptávky (rozměr, počet, provedení). Rozpor jednou větou, např. "poptávka 2570 × 2050 mm, nabídka 2500 × 2050 mm", jinak null.
 totalWithoutVat, totalWithVat: celková cena nabídky (základní varianta) tak, jak ji dokument uvádí. vatRate: sazba DPH v % (12 nebo 21), jinak null.
+terms: podmínky nabídky – leadTime (dodací lhůta textem, např. "8–10 týdnů od zaměření"), warranty (záruka na okna/kování/montáž), paymentTerms (záloha, splatnost), validUntil (platnost nabídky YYYY-MM-DD), included (co je v ceně: montáž, doprava, demontáž, likvidace, parapety, zednické zapravení…), excluded (co výslovně v ceně není). Neuvedené = null / prázdné pole.
 summary: 1–2 věty – co nabídka obsahuje, co je v ceně (montáž, doprava) a co ne.
 warnings: nejasnosti – nečitelná cena, součet položek nesedí s celkem, chybí montáž, položka bez ceny.
 Čísla bez mezer, desetinná tečka.`;
@@ -138,6 +153,20 @@ const REVIEW_SCHEMA = obj({
       reviews: { type: "string" },
       sources: strArr,
       priceNote: { type: "string" },
+      scores: obj({
+        technical: n,
+        reviews: n,
+        vendor: n,
+        terms: n,
+        match: n,
+      }),
+      scoreNotes: obj({
+        technical: { type: "string" },
+        reviews: { type: "string" },
+        vendor: { type: "string" },
+        terms: { type: "string" },
+        match: { type: "string" },
+      }),
     }),
   },
   recommendation: { type: "string" },
@@ -156,6 +185,11 @@ export type ItemReviewResult = {
     reviews: string;
     sources: string[];
     priceNote: string;
+    /** Dílčí známky 0–5 od rozboru; null = nedá se posoudit. */
+    scores: Partial<Record<ScoreKey, number | null>>;
+    scoreNotes: Partial<Record<ScoreKey, string>>;
+    /** Celkové skóre 0–100 (dopočítá aplikace). Chybí u starších rozborů. */
+    total?: number | null;
   }[];
   recommendation: string;
   questions: string[];
@@ -167,6 +201,14 @@ Ke každému prvku (ref = jeho id, beze změny) vrať:
 - pros, cons: 1–3 body, konkrétně z parametrů (Uw, profil, práh, kování, zasklení) a z toho, co jsi našel,
 - reviews: co se o výrobku nebo systému dá **doložit** z webu (zkušenosti, testy, typické problémy, servis). Ke každému tvrzení zdroj (doména) do sources. Když nic použitelného nenajdeš, napiš přesně „nenalezeno“ a sources nech prázdné. **Nikdy si nevymýšlej** hodnocení, počty recenzí ani výsledky testů,
 - priceNote: cena proti ostatním prvkům v tomhle srovnání – hlavně Kč/m² – a co je/není v ceně.
+- scores: známky 0–5 (5 = nejlepší, celá čísla), vždy relativně k ostatním prvkům v tomhle srovnání. Cenu neznámkuj, tu spočítá aplikace.
+  technical = technické parametry (Uw/Ug, profil, stavební hloubka, kování, práh, bezpečnost),
+  reviews = zkušenosti a recenze výrobku/systému z webu; když nic nenajdeš, null (ne nula),
+  vendor = firma: doložitelná pověst z webu, délka působení, servis; když nic nenajdeš, null,
+  terms = dodání a podmínky: dodací lhůta, záruka, co je v ceně (montáž, doprava, demontáž), zálohy, platnost,
+  match = soulad se zadáním poptávky (rozměr, provedení); rozpor snižuje.
+  Co nejde posoudit, je null. Známky nevymýšlej, raději null.
+- scoreNotes: ke každé známce půl věty proč (u null proč se nedá posoudit).
 recommendation: 3–5 vět – který prvek vybrat a proč, včetně kompromisu cena × parametry. Upozorni, když se prvky nedají férově srovnat (jiný rozměr, jiný typ otevírání, chybí montáž).
 questions: co si ověřit u dodavatelů před objednáním (max 5).
 headline: jedna věta shrnutí.
@@ -374,7 +416,7 @@ export async function runOfferItems(bundleOfferId: string) {
       warnings.unshift(
         `Součet položek (${Math.round(sumWithVat)} Kč) nesedí s cenou nabídky (${Math.round(offerTotal!)} Kč) – ceny po žádankách se nedoplnily.`,
       );
-    const info: ItemsInfo = { summary: data.summary, warnings, sumWithVat, offerTotal, diff, partsFilled };
+    const info: ItemsInfo = { summary: data.summary, warnings, sumWithVat, offerTotal, diff, partsFilled, terms: data.terms };
     await prisma.bundleOffer.update({
       where: { id: o.id },
       data: {
@@ -447,9 +489,15 @@ export async function runItemReview(reviewId: string) {
         specs: true,
         description: true,
         mismatch: true,
-        bundleOffer: { select: { vendorName: true, vendor: { select: { name: true } } } },
+        bundleOffer: {
+          select: { vendorName: true, deliveryDate: true, itemsInfo: true, vendor: { select: { name: true } } },
+        },
       },
     });
+    // Známkují se hlavní prvky; příslušenství jde k firmě jako kontext.
+    const accessories = items.filter((i) => i.kind !== "product");
+    items.splice(0, items.length, ...items.filter((i) => i.kind === "product"));
+    if (!items.length) throw new Error("K žádance nejsou rozepsané žádné hlavní prvky.");
     // Co je u firmy v ceně navíc (montáž, doprava) – kvůli férovému srovnání.
     const offerIds = [...new Set(items.map((i) => i.bundleOfferId))];
     const shared = await prisma.offerItem.findMany({
@@ -458,8 +506,14 @@ export async function runItemReview(reviewId: string) {
     });
     const firmy = offerIds.map((id) => {
       const it = items.find((i) => i.bundleOfferId === id)!;
+      const info = it.bundleOffer.itemsInfo as unknown as ItemsInfo | null;
       return {
         firma: it.bundleOffer.vendor?.name ?? it.bundleOffer.vendorName ?? "?",
+        podminky: info?.terms ?? null,
+        terminDodani: it.bundleOffer.deliveryDate?.toISOString().slice(0, 10) ?? null,
+        prislusenstviKTetoPoptavce: accessories
+          .filter((a) => a.bundleOfferId === id)
+          .map((a) => `${a.title}${a.alternative ? ` (${a.alternative})` : ""}: ${a.priceWithVat != null ? Math.round(Number(a.priceWithVat)) + " Kč" : "bez ceny"}`),
         spolecnePolozky: shared
           .filter((s) => s.bundleOfferId === id)
           .map((s) => `${s.title}: ${s.priceWithVat != null ? Math.round(Number(s.priceWithVat)) + " Kč" : "bez ceny"}`),
@@ -496,7 +550,7 @@ export async function runItemReview(reviewId: string) {
             (rq.description ? `\nSpecifikace: ${rq.description}` : "") +
             (rq.quantity != null ? `\nMnožství: ${Number(rq.quantity)} ${rq.unit}` : "") +
             `\n\nNabídnuté prvky:\n${JSON.stringify(list, null, 1)}` +
-            `\n\nSpolečné položky firem (montáž, doprava…):\n${JSON.stringify(firmy, null, 1)}` +
+            `\n\nFirmy – podmínky, příslušenství a společné položky (montáž, doprava…):\n${JSON.stringify(firmy, null, 1)}` +
             (rv.prompt ? `\n\nPokyn uživatele: ${rv.prompt}` : ""),
         },
       ],
@@ -506,6 +560,12 @@ export async function runItemReview(reviewId: string) {
     );
     const ids = new Set(items.map((i) => i.id));
     data.items = data.items.filter((x) => ids.has(x.ref));
+    // Cena se známkuje z čísel, celkové skóre z vah – ne odhadem modelu.
+    const ceny = priceScores(list.map((l) => ({ id: l.ref, price: l.cenaSDph, perM2: l.kcZaM2 })));
+    for (const x of data.items) {
+      x.scores = { ...x.scores, price: ceny[x.ref] ?? null };
+      x.total = totalScore(x.scores);
+    }
     await prisma.itemReview.update({
       where: { id: rv.id },
       data: { status: "ready", result: data as unknown as Prisma.InputJsonValue, costUsd },
