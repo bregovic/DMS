@@ -56,6 +56,7 @@ export type OfferView = {
     quantity: number | null;
     unit: string | null;
     priceWithVat: number | null;
+    priceAfterDiscount: number | null;
   }[];
 };
 
@@ -269,7 +270,10 @@ export function OffersPanel({
                           {i.alternative && <span> · alternativa</span>}
                         </span>
                         <span className="shrink-0 font-mono">
-                          {i.priceWithVat != null ? formatCurrency(i.priceWithVat) : "—"}
+                          {i.priceAfterDiscount != null && i.priceWithVat != null && (
+                            <s className="mr-2 text-stone-400">{formatCurrency(i.priceWithVat)}</s>
+                          )}
+                          {(i.priceAfterDiscount ?? i.priceWithVat) != null ? formatCurrency((i.priceAfterDiscount ?? i.priceWithVat)!) : "—"}
                         </span>
                       </li>
                     ))}

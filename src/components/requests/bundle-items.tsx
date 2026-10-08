@@ -124,7 +124,8 @@ export function OfferItemsStatus({ offer, canRun }: { offer: OfferItemsState; ca
 
 const fmtDim = (i: ItemView) => (i.widthMm && i.heightMm ? `${i.widthMm} × ${i.heightMm}` : "—");
 const fmtQty = (i: ItemView) => (i.quantity != null && i.quantity !== 1 ? `${i.quantity} ${i.unit ?? "ks"}` : null);
-const byPrice = (a: ItemView, b: ItemView) => (a.priceWithVat ?? Infinity) - (b.priceWithVat ?? Infinity);
+const price = (i: ItemView) => i.priceAfterDiscount ?? i.priceWithVat;
+const byPrice = (a: ItemView, b: ItemView) => (price(a) ?? Infinity) - (price(b) ?? Infinity);
 
 /** Klíčové parametry do řádku – zbytek je v rozbalení. */
 const KEY_SPECS = ["uw", "profil", "zasklení", "ug", "práh", "kování"];
@@ -177,7 +178,12 @@ function ItemRow({
         </td>
         <td className="hidden py-1.5 pr-3 text-[11px] text-stone-600 md:table-cell">{keySpecs(item)}</td>
         <td className={`py-1.5 pr-3 text-right font-mono whitespace-nowrap ${cheapest ? "text-emerald-700" : "text-stone-950"}`}>
-          {item.priceWithVat != null ? formatCurrency(item.priceWithVat) : <span className="text-stone-400">?</span>}
+          {price(item) != null ? formatCurrency(price(item)!) : <span className="text-stone-400">?</span>}
+          {item.priceAfterDiscount != null && item.priceWithVat != null && (
+            <span className="block text-[11px] text-stone-400" title="Ceníková cena; sleva na celou nabídku je rozpočítaná do položek.">
+              <s>{formatCurrency(item.priceWithVat)}</s> před slevou
+            </span>
+          )}
         </td>
         <td className="py-1.5 pr-1 text-right font-mono whitespace-nowrap text-stone-500">
           {item.perM2 != null ? formatCurrency(item.perM2) : ""}
@@ -280,7 +286,7 @@ function ItemTable({
   review?: ItemReviewResult | null;
 }) {
   const [sort, setSort] = useState<"price" | "score">("score");
-  const minPrice = Math.min(...items.filter((i) => !i.alternative && i.kind === "product" && i.priceWithVat != null).map((i) => i.priceWithVat!));
+  const minPrice = Math.min(...items.filter((i) => !i.alternative && i.kind === "product" && price(i) != null).map((i) => price(i)!));
   const reviewOf = (id: string) => review?.items.find((x) => x.ref === id);
   const scoreOf = (id: string) => {
     const r = reviewOf(id);
@@ -318,7 +324,7 @@ function ItemTable({
             <ItemRow
               key={i.id}
               item={i}
-              cheapest={i.kind === "product" && i.priceWithVat === minPrice}
+              cheapest={i.kind === "product" && price(i) === minPrice}
               review={reviewOf(i.id)}
               withScore={withScore}
               best={bestScore != null && scoreOf(i.id) === bestScore}

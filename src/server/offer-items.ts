@@ -207,7 +207,7 @@ Ke každému prvku (ref = jeho id, beze změny) vrať:
 - verdict: jedna věta – pro koho/kdy je to dobrá volba,
 - pros, cons: 1–3 body, konkrétně z parametrů (Uw, profil, práh, kování, zasklení) a z toho, co jsi našel,
 - reviews: co se o výrobku nebo systému dá **doložit** z webu (zkušenosti, testy, typické problémy, servis). Ke každému tvrzení zdroj (doména) do sources. Když nic použitelného nenajdeš, napiš přesně „nenalezeno“ a sources nech prázdné. **Nikdy si nevymýšlej** hodnocení, počty recenzí ani výsledky testů,
-- priceNote: cena proti ostatním prvkům v tomhle srovnání – hlavně Kč/m² – a co je/není v ceně.
+- priceNote: cena proti ostatním prvkům v tomhle srovnání – hlavně Kč/m² – a co je/není v ceně. cenaSDph je už po slevách na celou nabídku (cenaPredSlevou je ceníková), srovnávej podle ní.
 - scores: známky 0–5 (5 = nejlepší, celá čísla), vždy relativně k ostatním prvkům v tomhle srovnání. Cenu neznámkuj, tu spočítá aplikace.
   technical = technické parametry (Uw/Ug, profil, stavební hloubka, kování, práh, bezpečnost),
   reviews = zkušenosti a recenze výrobku/systému z webu; když nic nenajdeš, null (ne nula),
@@ -228,6 +228,37 @@ const round2 = (x: number) => Math.round(x * 100) / 100;
 export function itemArea(i: { widthMm: number | null; heightMm: number | null; quantity: number | null }) {
   if (!i.widthMm || !i.heightMm) return null;
   return ((i.widthMm * i.heightMm) / 1_000_000) * (i.quantity && i.quantity > 0 ? i.quantity : 1);
+}
+
+/**
+ * Slevy na celou nabídku (např. -47 %) jsou samostatné řádky – pro férové
+ * srovnání se rozpočítají na ostatní položky. Sleva u žádanky jen na její položky.
+ */
+type PriceRow = { bundleOfferId: string; requestId: string | null; kind: string; alternative: string | null; priceWithVat: unknown };
+export function discountFactors(rows: PriceRow[]) {
+  const sums = new Map<string, { plus: number; minus: number }>();
+  const add = (key: string, plus: number, minus: number) => {
+    const s = sums.get(key) ?? { plus: 0, minus: 0 };
+    s.plus += plus;
+    s.minus += minus;
+    sums.set(key, s);
+  };
+  for (const r of rows) {
+    const p = num(r.priceWithVat);
+    if (r.alternative || p == null) continue;
+    const scope = r.requestId ?? "";
+    if (r.kind === "discount") add(`${r.bundleOfferId}|${scope}`, 0, -Math.abs(p));
+    else if (p > 0) {
+      add(`${r.bundleOfferId}|`, p, 0);
+      if (r.requestId) add(`${r.bundleOfferId}|${r.requestId}`, p, 0);
+    }
+  }
+  const ratio = (key: string) => {
+    const s = sums.get(key);
+    return s && s.plus > 0 && s.minus < 0 ? Math.max(0, 1 + s.minus / s.plus) : 1;
+  };
+  return (bundleOfferId: string, requestId: string | null) =>
+    ratio(`${bundleOfferId}|`) * (requestId ? ratio(`${bundleOfferId}|${requestId}`) : 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +582,12 @@ export async function runItemReview(reviewId: string) {
       where: { bundleOfferId: { in: offerIds }, requestId: null, alternative: null },
       select: { bundleOfferId: true, title: true, priceWithVat: true },
     });
+    const factor = discountFactors(
+      await prisma.offerItem.findMany({
+        where: { bundleOfferId: { in: offerIds } },
+        select: { bundleOfferId: true, requestId: true, kind: true, alternative: true, priceWithVat: true },
+      }),
+    );
     const firmy = offerIds.map((id) => {
       const it = items.find((i) => i.bundleOfferId === id)!;
       const info = it.bundleOffer.itemsInfo as unknown as ItemsInfo | null;
@@ -568,7 +605,8 @@ export async function runItemReview(reviewId: string) {
     });
     const list = items.map((i) => {
       const plocha = itemArea({ widthMm: i.widthMm, heightMm: i.heightMm, quantity: num(i.quantity) });
-      const cena = num(i.priceWithVat);
+      const cenik = num(i.priceWithVat);
+      const cena = cenik != null ? cenik * factor(i.bundleOfferId, rv.requestId) : null;
       return {
         ref: i.id,
         firma: i.bundleOffer.vendor?.name ?? i.bundleOffer.vendorName ?? "?",
@@ -579,6 +617,7 @@ export async function runItemReview(reviewId: string) {
         rozmer: i.widthMm && i.heightMm ? `${i.widthMm} × ${i.heightMm} mm` : null,
         pocet: i.quantity != null ? `${Number(i.quantity)} ${i.unit ?? ""}`.trim() : null,
         cenaSDph: cena != null ? Math.round(cena) : null,
+        cenaPredSlevou: cenik != null && cena != null && Math.round(cenik) !== Math.round(cena) ? Math.round(cenik) : null,
         kcZaM2: cena != null && plocha ? Math.round(cena / plocha) : null,
         parametry: i.specs,
         popis: i.description,
@@ -646,6 +685,8 @@ export type ItemView = {
   unit: string | null;
   priceWithVat: number | null;
   priceWithoutVat: number | null;
+  /** Cena po rozpočtení slev na celou nabídku; null = bez slevy. */
+  priceAfterDiscount: number | null;
   perM2: number | null;
   specs: ItemSpec[];
   description: string | null;
@@ -698,9 +739,13 @@ export async function bundleItemsView(bundleId: string, requestIds: string[]) {
       : Promise.resolve([]),
   ]);
 
+  const factor = discountFactors(items);
   const view = (i: (typeof items)[number]): ItemView => {
     const quantity = num(i.quantity);
     const priceWithVat = num(i.priceWithVat);
+    const f = i.kind === "discount" ? 1 : factor(i.bundleOfferId, i.requestId);
+    const priceAfterDiscount = priceWithVat != null && f !== 1 ? Math.round(priceWithVat * f * 100) / 100 : null;
+    const effective = priceAfterDiscount ?? priceWithVat;
     const area = itemArea({ widthMm: i.widthMm, heightMm: i.heightMm, quantity });
     return {
       id: i.id,
@@ -717,7 +762,8 @@ export async function bundleItemsView(bundleId: string, requestIds: string[]) {
       unit: i.unit,
       priceWithVat,
       priceWithoutVat: num(i.priceWithoutVat),
-      perM2: priceWithVat != null && area && i.kind === "product" ? Math.round(priceWithVat / area) : null,
+      priceAfterDiscount,
+      perM2: effective != null && area && i.kind === "product" ? Math.round(effective / area) : null,
       specs: Array.isArray(i.specs) ? (i.specs as unknown as ItemSpec[]) : [],
       description: i.description,
       mismatch: i.mismatch,
@@ -732,13 +778,29 @@ export async function bundleItemsView(bundleId: string, requestIds: string[]) {
     else shared.push(view(i));
   }
   const reviewByRequest: Record<string, ItemReviewView> = {};
-  for (const r of reviews)
+  for (const r of reviews) {
+    const result = r.result as unknown as ItemReviewResult | null;
+    // Cenová známka vždy z aktuálních cen (po slevách) – i u starších rozborů.
+    if (result?.items?.length) {
+      const pool = byRequest[r.requestId] ?? [];
+      const ceny = priceScores(
+        result.items.map((x) => {
+          const it = pool.find((i) => i.id === x.ref);
+          return { id: x.ref, price: it ? (it.priceAfterDiscount ?? it.priceWithVat) : null, perM2: it?.perM2 ?? null };
+        }),
+      );
+      for (const x of result.items) {
+        x.scores = { ...x.scores, price: ceny[x.ref] ?? null };
+        x.total = totalScore(x.scores);
+      }
+    }
     reviewByRequest[r.requestId] = {
       id: r.id,
       status: r.status,
       error: r.error,
       createdAt: r.createdAt.toISOString(),
-      result: r.result as unknown as ItemReviewResult | null,
+      result,
     };
+  }
   return { byRequest, shared, reviewByRequest };
 }
