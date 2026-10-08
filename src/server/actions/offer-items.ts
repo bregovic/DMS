@@ -31,16 +31,19 @@ export async function startOfferItems(formData: FormData) {
 }
 
 /**
- * Rozepsat všechny nabídky balíčku, které ještě rozepsané nejsou.
+ * Rozepsat nabídky balíčku, které rozepsané nejsou nebo jim nesedí součet.
  * Běží jedna po druhé, ať nenarazí na strop souběžných běhů.
  */
 export async function startBundleItems(formData: FormData) {
   const { bundle } = await managerOfBundle(String(formData.get("bundleId")));
-  const offers = await prisma.bundleOffer.findMany({
-    where: { bundleId: bundle.id, OR: [{ itemsStatus: null }, { itemsStatus: "error" }] },
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
-  });
+  // Nerozepsané, s chybou, a ty, u kterých součet nesedí s cenou nabídky.
+  const offers = (
+    await prisma.bundleOffer.findMany({
+      where: { bundleId: bundle.id, OR: [{ itemsStatus: null }, { itemsStatus: { not: "running" } }] },
+      select: { id: true, itemsStatus: true, itemsInfo: true },
+      orderBy: { createdAt: "asc" },
+    })
+  ).filter((o) => o.itemsStatus !== "ready" || !(o.itemsInfo as { partsFilled?: boolean } | null)?.partsFilled);
   const ids: string[] = [];
   let firstError: string | null = null;
   for (const o of offers) {
@@ -51,7 +54,7 @@ export async function startBundleItems(formData: FormData) {
       firstError ??= e instanceof Error ? e.message : "Rozpis nejde spustit.";
     }
   }
-  if (!ids.length) throw new Error(firstError ?? "Všechny nabídky už jsou rozepsané.");
+  if (!ids.length) throw new Error(firstError ?? "Všechny nabídky jsou rozepsané a součty sedí.");
   after(async () => {
     for (const id of ids) await runOfferItems(id);
   });

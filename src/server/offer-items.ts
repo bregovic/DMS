@@ -23,6 +23,8 @@ import { priceScores, totalScore, type ScoreKey } from "@/lib/offer-scores";
  */
 
 const ITEMS_MODEL = process.env.AI_ITEMS_MODEL || AI_MODEL;
+// Oprava rozpisu, který nesedí se součtem – stejný model, ale důkladnější čtení.
+const ITEMS_RETRY_MODEL = process.env.AI_ITEMS_RETRY_MODEL || ITEMS_MODEL;
 // Běh, který nedoběhl (restart serveru uprostřed volání), se po 25 min uzavře.
 const STALE_MS = 25 * 60 * 1000;
 
@@ -124,6 +126,11 @@ const ITEMS_SCHEMA = obj({
 
 const ITEMS_INSTRUCTIONS = `Jsi asistent stavebníka. Dostaneš všechny dokumenty jedné cenové nabídky (může jich být víc – nabídka, technické listy, e-mail) a seznam poptávek. Vypiš nabídku po položkách, česky.
 Jedna položka = jeden řádek nabídky / jedna pozice (okno, dveře, HS portál, parapet, montáž, doprava, sleva…). Nic nesčítej dohromady a nic nevynechávej.
+Součet základních položek (bez alternativ, se slevami) musí dát celkovou cenu nabídky. Proto:
+- rekapitulaci, mezisoučty a „celkem" nevypisuj jako položky,
+- slevu vypiš jako samostatnou položku jen tehdy, když ještě není promítnutá v cenách položek; je-li cena položky uvedená po slevě, ber ji a slevu nepřidávej,
+- alternativa je jen to, co dokument výslovně uvádí jako volitelné nebo nezapočtené do celkové ceny; montáž či doprava započtená v celkové ceně alternativou není,
+- u položek účtovaných za metr nebo m² je cena řádku = jednotková cena × množství.
 - requestId: poptávka ze seznamu, ke které prvek patří (okno ložnice → "Okna patro"). Parapety, žaluzie a příslušenství konkrétního prvku patří k jeho poptávce. Montáž, doprava, zaměření, demontáž a likvidace pro celou nabídku → null. Nikdy si id nevymýšlej.
 - kind: "product" = hlavní prvek (okno, dveře, portál), "accessory" = příslušenství a příplatky (parapet, sítě, žaluzie, kování navíc), "service" = práce a doprava, "discount" = sleva (ceny záporně).
 - alternative: když nabídka u téhož prvku dává víc provedení (jiný profil, jiné zasklení, varianta A/B, „alternativně"), základní provedení má null a každá další varianta krátký název, např. "Varianta B – Aluplast Ideal 8000". Když je celá nabídka ve dvou variantách se dvěma součty, první je základní (null) a druhá alternativa. Alternativy se nesčítají do celkové ceny.
@@ -296,78 +303,118 @@ export async function runOfferItems(bundleOfferId: string) {
       specification: r.description,
       quantity: r.quantity != null ? `${Number(r.quantity)} ${r.unit}` : null,
     }));
-    const { data, costUsd } = await callModel<ItemsResult>(
-      ITEMS_MODEL,
-      ITEMS_INSTRUCTIONS,
-      [
-        {
-          type: "input_text",
-          text:
-            `Firma: ${o.vendor?.name ?? o.vendorName ?? "neuvedeno"}\n` +
-            `Poptávky (balíček „${o.bundle.name}“):\n${JSON.stringify(reqList, null, 1)}` +
-            (notes.length ? `\n\nPoznámky uživatele k dokumentům:\n${notes.join("\n")}` : "") +
-            (o.note ? `\n\nPoznámka k nabídce: ${o.note}` : ""),
-        },
-        ...parts,
-      ],
-      "offer_items",
-      ITEMS_SCHEMA,
-      { effort: "low", maxOutput: 24_000, account: await aiAccountForProject(o.bundle.projectId) },
-    );
-
-    // DPH: poměr z nabídky, jinak z dokumentu, jinak sazba, jinak 21 %.
+    const account = await aiAccountForProject(o.bundle.projectId);
+    const intro: { type: "input_text"; text: string } = {
+      type: "input_text",
+      text:
+        `Firma: ${o.vendor?.name ?? o.vendorName ?? "neuvedeno"}\n` +
+        `Poptávky (balíček „${o.bundle.name}“):\n${JSON.stringify(reqList, null, 1)}` +
+        (notes.length ? `\n\nPoznámky uživatele k dokumentům:\n${notes.join("\n")}` : "") +
+        (o.note ? `\n\nPoznámka k nabídce: ${o.note}` : ""),
+    };
     const offerPrice = num(o.price);
     const offerNoVat = num(o.priceWithoutVat);
-    const ratio =
-      offerPrice && offerNoVat
-        ? offerPrice / offerNoVat
-        : data.totalWithVat && data.totalWithoutVat
-          ? data.totalWithVat / data.totalWithoutVat
-          : data.vatRate
-            ? 1 + data.vatRate / 100
-            : 1.21;
-
     const known = new Set(requests.map((r) => r.id));
-    const rows = data.items
-      .filter((i) => i.title?.trim())
-      .map((i, idx) => {
-        let noVat = i.priceWithoutVat;
-        if (noVat == null && i.unitPriceWithoutVat != null) noVat = i.unitPriceWithoutVat * (i.quantity ?? 1);
-        let withVat = i.priceWithVat;
-        if (withVat == null && noVat != null) withVat = noVat * ratio;
-        if (noVat == null && withVat != null) noVat = withVat / ratio;
-        if (i.kind === "discount") {
-          if (noVat != null) noVat = -Math.abs(noVat);
-          if (withVat != null) withVat = -Math.abs(withVat);
-        }
-        return {
-          bundleOfferId: o.id,
-          requestId: i.requestId && known.has(i.requestId) ? i.requestId : null,
-          kind: i.kind,
-          alternative: i.alternative?.trim() || null,
-          position: i.position?.trim() || null,
-          title: i.title.trim().slice(0, 200),
-          product: i.product?.trim() || null,
-          widthMm: i.widthMm ? Math.round(i.widthMm) : null,
-          heightMm: i.heightMm ? Math.round(i.heightMm) : null,
-          quantity: i.quantity,
-          unit: i.unit?.trim() || null,
-          unitPrice: i.unitPriceWithoutVat != null ? round2(i.unitPriceWithoutVat) : null,
-          priceWithoutVat: noVat != null ? round2(noVat) : null,
-          priceWithVat: withVat != null ? round2(withVat) : null,
-          specs: (i.specs ?? []).filter((s) => s.label && s.value) as unknown as Prisma.InputJsonValue,
-          description: i.description?.trim() || null,
-          mismatch: i.mismatch?.trim() || null,
-          sortOrder: idx,
-        };
-      });
 
-    // Kontrola součtu (jen základní provedení, bez alternativ).
-    const base = rows.filter((r) => !r.alternative);
-    const sumWithVat = round2(base.reduce((a, r) => a + (r.priceWithVat ?? 0), 0));
-    const offerTotal = offerPrice ?? data.totalWithVat ?? (data.totalWithoutVat ? data.totalWithoutVat * ratio : null);
-    const diff = offerTotal != null ? round2(sumWithVat - offerTotal) : null;
-    const sedi = diff != null && Math.abs(diff) <= Math.max(50, Math.abs(offerTotal ?? 0) * 0.01);
+    /** Výsledek modelu → řádky k uložení + kontrola součtu. */
+    const zpracuj = (data: ItemsResult) => {
+      // DPH: poměr z nabídky, jinak z dokumentu, jinak sazba, jinak 21 %.
+      const ratio =
+        offerPrice && offerNoVat
+          ? offerPrice / offerNoVat
+          : data.totalWithVat && data.totalWithoutVat
+            ? data.totalWithVat / data.totalWithoutVat
+            : data.vatRate
+              ? 1 + data.vatRate / 100
+              : 1.21;
+      const rows = data.items
+        .filter((i) => i.title?.trim())
+        .map((i, idx) => {
+          let noVat = i.priceWithoutVat;
+          if (noVat == null && i.unitPriceWithoutVat != null) noVat = i.unitPriceWithoutVat * (i.quantity ?? 1);
+          let withVat = i.priceWithVat;
+          if (withVat == null && noVat != null) withVat = noVat * ratio;
+          if (noVat == null && withVat != null) noVat = withVat / ratio;
+          if (i.kind === "discount") {
+            if (noVat != null) noVat = -Math.abs(noVat);
+            if (withVat != null) withVat = -Math.abs(withVat);
+          }
+          return {
+            bundleOfferId: o.id,
+            requestId: i.requestId && known.has(i.requestId) ? i.requestId : null,
+            kind: i.kind,
+            alternative: i.alternative?.trim() || null,
+            position: i.position?.trim() || null,
+            title: i.title.trim().slice(0, 200),
+            product: i.product?.trim() || null,
+            widthMm: i.widthMm ? Math.round(i.widthMm) : null,
+            heightMm: i.heightMm ? Math.round(i.heightMm) : null,
+            quantity: i.quantity,
+            unit: i.unit?.trim() || null,
+            unitPrice: i.unitPriceWithoutVat != null ? round2(i.unitPriceWithoutVat) : null,
+            priceWithoutVat: noVat != null ? round2(noVat) : null,
+            priceWithVat: withVat != null ? round2(withVat) : null,
+            specs: (i.specs ?? []).filter((x) => x.label && x.value) as unknown as Prisma.InputJsonValue,
+            description: i.description?.trim() || null,
+            mismatch: i.mismatch?.trim() || null,
+            sortOrder: idx,
+          };
+        });
+      // Kontrola součtu (jen základní provedení, bez alternativ).
+      const base = rows.filter((r) => !r.alternative);
+      const sumWithVat = round2(base.reduce((a, r) => a + (r.priceWithVat ?? 0), 0));
+      const sumNoVat = round2(base.reduce((a, r) => a + (r.priceWithoutVat ?? 0), 0));
+      const offerTotal = offerPrice ?? data.totalWithVat ?? (data.totalWithoutVat ? data.totalWithoutVat * ratio : null);
+      const diff = offerTotal != null ? round2(sumWithVat - offerTotal) : null;
+      const sedi = diff != null && Math.abs(diff) <= Math.max(50, Math.abs(offerTotal ?? 0) * 0.01);
+      return { data, rows, base, sumWithVat, sumNoVat, offerTotal, diff, sedi };
+    };
+
+    const prvni = await callModel<ItemsResult>(ITEMS_MODEL, ITEMS_INSTRUCTIONS, [intro, ...parts], "offer_items", ITEMS_SCHEMA, {
+      effort: "low",
+      maxOutput: 24_000,
+      account,
+    });
+    let costUsd = prvni.costUsd;
+    let vysledek = zpracuj(prvni.data);
+
+    // Součet nesedí → jedna oprava se zpětnou vazbou a důkladnějším čtením.
+    // Typické chyby: souhrnná sleva odečtená podruhé, započtená položka označená
+    // jako alternativa, cena za m/m² brána jako celková, ceny s a bez DPH.
+    if (!vysledek.sedi && vysledek.offerTotal != null) {
+      try {
+        const oprava = await callModel<ItemsResult>(
+          ITEMS_RETRY_MODEL,
+          ITEMS_INSTRUCTIONS,
+          [
+            intro,
+            ...parts,
+            {
+              type: "input_text",
+              text:
+                `KONTROLA: tvůj předchozí rozpis nesedí s cenou nabídky. Součet základních položek (bez alternativ) vyšel ` +
+                `${Math.round(vysledek.sumNoVat)} Kč bez DPH / ${Math.round(vysledek.sumWithVat)} Kč s DPH, ` +
+                `nabídka uvádí celkem ${offerNoVat != null ? `${Math.round(offerNoVat)} Kč bez DPH / ` : ""}${Math.round(vysledek.offerTotal)} Kč s DPH.\n` +
+                `Projdi dokumenty znovu a najdi chybu. Časté příčiny: sleva nebo souhrn z rekapitulace, který už je promítnutý v cenách položek, odečtený/přičtený podruhé; ` +
+                `položka, která v ceně je, chybně označená jako alternativa (nebo naopak); cena za kus, metr či m² vzatá jako celková; ` +
+                `mezisoučet nebo rekapitulace vypsaná jako položka; ceny s DPH a bez DPH zaměněné; chybějící pozice. ` +
+                `Vrať kompletní opravený rozpis tak, aby součet základních položek odpovídal celkové ceně. ` +
+                `Když rozdíl opravdu nejde vysvětlit, vrať nejlepší rozpis a důvod napiš do warnings.\n\n` +
+                `Předchozí rozpis:\n${JSON.stringify(prvni.data.items.map((i) => ({ kind: i.kind, alternative: i.alternative, title: i.title, quantity: i.quantity, unitPriceWithoutVat: i.unitPriceWithoutVat, priceWithoutVat: i.priceWithoutVat, priceWithVat: i.priceWithVat })))}`,
+            },
+          ],
+          "offer_items_fix",
+          ITEMS_SCHEMA,
+          { effort: "medium", maxOutput: 32_000, account },
+        );
+        costUsd += oprava.costUsd;
+        const druhy = zpracuj(oprava.data);
+        if (druhy.diff != null && Math.abs(druhy.diff) < Math.abs(vysledek.diff ?? Infinity)) vysledek = druhy;
+      } catch {
+        // Oprava je bonus – když selže (limit, výpadek), platí první rozpis.
+      }
+    }
+    const { data, rows, base, sumWithVat, offerTotal, diff, sedi } = vysledek;
 
     await prisma.$transaction([
       prisma.offerItem.deleteMany({ where: { bundleOfferId: o.id } }),

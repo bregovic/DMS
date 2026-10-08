@@ -477,7 +477,9 @@ export function BundleItems({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showShared, setShowShared] = useState(false);
-  const pending = offers.filter((o) => o.itemsStatus == null || o.itemsStatus === "error").length;
+  const pending = offers.filter(
+    (o) => o.itemsStatus == null || o.itemsStatus === "error" || (o.itemsStatus === "ready" && !o.itemsInfo?.partsFilled),
+  ).length;
   const running = offers.some((o) => o.itemsStatus === "running");
   const anyItems = Object.keys(data.byRequest).length > 0 || data.shared.length > 0;
   if (!offers.length || (!anyItems && !canRun)) return null;
@@ -509,7 +511,7 @@ export function BundleItems({
               <input type="hidden" name="bundleId" value={bundleId} />
               <button type="submit" disabled={busy} className={smallBtn}>
                 <ListTree className="size-3" />
-                Rozepsat {pending === offers.length ? "všechny nabídky" : `zbývající nabídky (${pending})`}
+                {anyItems ? `Rozepsat znovu, kde nesedí součet (${pending})` : "Rozepsat všechny nabídky"}
               </button>
             </form>
           )}
