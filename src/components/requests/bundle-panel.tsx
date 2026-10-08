@@ -13,6 +13,7 @@ import {
 import { deleteDocument } from "@/server/actions/documents";
 import { BundleOfferForm, type BundleOfferView } from "@/components/requests/bundle-offer-form";
 import { OfferComparison, type ComparisonView } from "@/components/requests/offer-comparison";
+import { BundleItems, OfferItemsStatus, type BundleItemsData, type OfferItemsState } from "@/components/requests/bundle-items";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,8 @@ export type BundleView = {
   bestSingle: { key: string; name: string; total: number } | null;
   bestCombo: { total: number; picks: { requestId: string; vendorName: string; price: number }[] } | null;
   comboSaving: number | null;
-  offers: BundleOfferView[];
+  offers: (BundleOfferView & OfferItemsState)[];
+  items: BundleItemsData;
   comparison: ComparisonView;
 };
 
@@ -329,6 +331,11 @@ Zatím žádná nabídka.
                     <DeleteButton action={deleteBundleOffer} fields={{ id: o.id }} confirm="Smazat tuto společnou nabídku?" />
                   </>
                 )}
+                {(o.docs.length > 0 || o.itemsStatus) && (
+                  <span className="basis-full pl-1">
+                    <OfferItemsStatus offer={o} canRun={isManager && o.docs.length > 0} />
+                  </span>
+                )}
                 {(o.docs.length > 0 || o.canEdit) && (
                   <span className="flex basis-full flex-wrap items-center gap-x-3 gap-y-1 pl-1 text-[11px]">
                     {o.docs.map((d) => (
@@ -367,6 +374,14 @@ Zatím žádná nabídka.
             ))}
           </ul>
         )}
+
+        <BundleItems
+          bundleId={bundle.id}
+          requests={reqs}
+          data={bundle.items}
+          offers={bundle.offers}
+          canRun={isManager}
+        />
 
         <OfferComparison
           bundleId={bundle.id}

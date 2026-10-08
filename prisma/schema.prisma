@@ -15,78 +15,87 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  passwordHash  String? // pro přihlášení e-mailem/heslem (Credentials)
-  createdAt     DateTime  @default(now())
+  id                 String         @id @default(cuid())
+  name               String?
+  email              String?        @unique
+  emailVerified      DateTime?
+  image              String?
+  passwordHash       String? // pro přihlášení e-mailem/heslem (Credentials)
+  createdAt          DateTime       @default(now())
   // Fakturační údaje (faktura za vykázanou práci)
-  billingName    String?
-  billingIco     String?
-  billingDic     String?
-  billingAddress String?
-  billingAccount String? // číslo účtu nebo IBAN
-  vatPayer       Boolean   @default(false)
+  billingName        String?
+  billingIco         String?
+  billingDic         String?
+  billingAddress     String?
+  billingAccount     String? // číslo účtu nebo IBAN
+  vatPayer           Boolean        @default(false)
   // Údaje pro daňová podání (kontrolní hlášení, přiznání)
   /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
    */
   businessActivities String?
-  taxSubjectType  String? // FO | PO
-  firstName       String?
-  lastName        String?
-  street          String?
-  houseNo         String?
-  orientNo        String?
-  city            String?
-  zip             String?
-  country         String?   @default("ČESKÁ REPUBLIKA")
-  phone           String?
-  dataBoxId       String? // ID datové schránky
-  /** ID datové schránky finančního úřadu (7 znaků) – kam se posílají podání. */
-  taxOfficeDataBox String?
-  /** Přihlášení do vlastní datové schránky pro odesílání podání (heslo šifrovaně). */
-  isdsLogin        String?
-  isdsPassword     String?
+  taxSubjectType     String? // FO | PO
+  firstName          String?
+  lastName           String?
+  street             String?
+  houseNo            String?
+  orientNo           String?
+  city               String?
+  zip                String?
+  country            String?        @default("ČESKÁ REPUBLIKA")
+  phone              String?
+  dataBoxId          String? // ID datové schránky
+  /**
+   * ID datové schránky finančního úřadu (7 znaků) – kam se posílají podání.
+   */
+  taxOfficeDataBox   String?
+  /**
+   * Přihlášení do vlastní datové schránky pro odesílání podání (heslo šifrovaně).
+   */
+  isdsLogin          String?
+  isdsPassword       String?
   /**
    * Vlastní klíč k OpenAI (šifrovaně). Kdo ho má zadaný, smí automatické
    * zpracování používat – a platí ho. Dodavatelé jedou na klíč vlastníka
    * projektu, protože zpracování jde z jeho rozpočtu.
    */
-  openaiApiKey     String?
-  /** Posílat přes veřejný test datových schránek (czebox) místo ostrého provozu. */
-  isdsTest         Boolean @default(false)
-  taxOfficeCode   String? // kód finančního úřadu (c_ufo)
-  taxOfficeBranch String? // územní pracoviště (c_pracufo)
-  remindersAt    DateTime? // kdy se naposledy generovaly připomínky
-  /** Posílat oznámení i e-mailem (#41). Prázdná adresa = přihlašovací e-mail. */
-  notifyByEmail  Boolean   @default(false)
-  notifyEmail    String?
-  notifications  Notification[]
+  openaiApiKey       String?
+  /**
+   * Posílat přes veřejný test datových schránek (czebox) místo ostrého provozu.
+   */
+  isdsTest           Boolean        @default(false)
+  taxOfficeCode      String? // kód finančního úřadu (c_ufo)
+  taxOfficeBranch    String? // územní pracoviště (c_pracufo)
+  remindersAt        DateTime? // kdy se naposledy generovaly připomínky
+  /**
+   * Posílat oznámení i e-mailem (#41). Prázdná adresa = přihlašovací e-mail.
+   */
+  notifyByEmail      Boolean        @default(false)
+  notifyEmail        String?
+  notifications      Notification[]
 
-  accounts          Account[]
-  sessions          Session[]
-  projects          Project[]  @relation("ProjectOwner")
-  expensesCreated   Expense[]  @relation("ExpenseCreatedBy")
-  incomesCreated    Income[]   @relation("IncomeCreatedBy")
-  documentsUploaded Document[] @relation("DocumentUploadedBy")
-  vendors           Vendor[]     @relation("VendorOwner")
-  requestsCreated   Request[]    @relation("RequestCreatedBy")
-  offersCreated     Offer[]      @relation("OfferCreatedBy")
-  bundlesCreated    RequestBundle[] @relation("RequestBundleCreatedBy")
-  bundleOffersCreated BundleOffer[] @relation("BundleOfferCreatedBy")
-  subProjectsCreated SubProject[] @relation("SubProjectCreatedBy")
-  tasksCreated      Task[]       @relation("TaskCreatedBy")
-  materials         Material[]   @relation("MaterialOwner")
-  operations        Operation[]  @relation("OperationOwner")
-  catalogWishes     CatalogWish[] @relation("CatalogWishOwner")
-  packages          Package[]    @relation("PackageOwner")
-  taxFilings        TaxFiling[]  @relation("TaxFilingUser")
-  inboundMails      InboundMail[] @relation("InboundMailOwner")
+  accounts            Account[]
+  sessions            Session[]
+  projects            Project[]       @relation("ProjectOwner")
+  expensesCreated     Expense[]       @relation("ExpenseCreatedBy")
+  incomesCreated      Income[]        @relation("IncomeCreatedBy")
+  documentsUploaded   Document[]      @relation("DocumentUploadedBy")
+  vendors             Vendor[]        @relation("VendorOwner")
+  requestsCreated     Request[]       @relation("RequestCreatedBy")
+  offersCreated       Offer[]         @relation("OfferCreatedBy")
+  bundlesCreated      RequestBundle[] @relation("RequestBundleCreatedBy")
+  bundleOffersCreated BundleOffer[]   @relation("BundleOfferCreatedBy")
+  subProjectsCreated  SubProject[]    @relation("SubProjectCreatedBy")
+  tasksCreated        Task[]          @relation("TaskCreatedBy")
+  materials           Material[]      @relation("MaterialOwner")
+  operations          Operation[]     @relation("OperationOwner")
+  catalogWishes       CatalogWish[]   @relation("CatalogWishOwner")
+  packages            Package[]       @relation("PackageOwner")
+  taxFilings          TaxFiling[]     @relation("TaxFilingUser")
+  inboundMails        InboundMail[]   @relation("InboundMailOwner")
 }
 
 model Account {
@@ -152,14 +161,14 @@ model Vendor {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner    User      @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  expenses Expense[]
-  incomes  Income[]
-  projects Project[] @relation("ProjectVendors")
-  requests Request[]
-  offers   Offer[]
+  owner        User                 @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses     Expense[]
+  incomes      Income[]
+  projects     Project[]            @relation("ProjectVendors")
+  requests     Request[]
+  offers       Offer[]
   bundleOffers BundleOffer[]
-  tasks    Task[]
+  tasks        Task[]
   availability VendorAvailability[]
 
   @@unique([ownerId, email])
@@ -226,9 +235,82 @@ model BundleOffer {
   createdBy User          @relation("BundleOfferCreatedBy", fields: [createdById], references: [id])
   offers    Offer[] // části po žádankách
   documents Document[]
+  items     OfferItem[]
+
+  // Rozpis položek z příloh (#47): running | ready | error; null = ještě neběželo.
+  itemsStatus  String?
+  itemsError   String?
+  /**
+   * Shrnutí rozpisu: kontrola součtu a upozornění (JSON).
+   */
+  itemsInfo    Json?
+  itemsCostUsd Float?
+  itemsAt      DateTime?
 
   @@index([bundleId])
   @@index([vendorId])
+}
+
+// Položka nabídky (#47): jeden konkrétní prvek – okno, portál, montáž, doprava.
+// Alternativa = jiné provedení téhož prvku v jedné nabídce (do součtu nepatří).
+model OfferItem {
+  id              String   @id @default(cuid())
+  bundleOfferId   String
+  /**
+   * Žádanka, ke které prvek patří; null = společná položka (montáž, doprava…).
+   */
+  requestId       String?
+  kind            String   @default("product") // product | accessory | service | discount
+  /**
+   * Název varianty, když je prvek alternativou (např. „Varianta B – Aluplast“).
+   */
+  alternative     String?
+  position        String? // číslo pozice v nabídce
+  title           String
+  product         String? // výrobce, systém, typ
+  widthMm         Int?
+  heightMm        Int?
+  quantity        Decimal? @db.Decimal(12, 2)
+  unit            String?
+  unitPrice       Decimal? @db.Decimal(12, 2) // za kus bez DPH
+  priceWithoutVat Decimal? @db.Decimal(12, 2) // celkem bez DPH
+  priceWithVat    Decimal? @db.Decimal(12, 2) // celkem s DPH
+  /**
+   * Technické parametry [{label, value}].
+   */
+  specs           Json?
+  description     String?
+  /**
+   * Rozpor proti zadání žádanky (rozměr, provedení), jednou větou.
+   */
+  mismatch        String?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  bundleOffer BundleOffer @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
+  request     Request?    @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([bundleOfferId])
+  @@index([requestId])
+}
+
+// Rozbor nabídnutých výrobků k jedné žádance (#47) – recenze, cena, slabá místa.
+model ItemReview {
+  id          String   @id @default(cuid())
+  requestId   String
+  prompt      String?
+  status      String   @default("running") // running | ready | error
+  result      Json?
+  error       String?
+  model       String
+  costUsd     Float?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
 }
 
 // Poptávka (procurement). Dodavatel může být prázdný – doplní se po výběru.
@@ -253,17 +335,20 @@ model Request {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
-  task       Task?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  createdBy  User        @relation("RequestCreatedBy", fields: [createdById], references: [id])
-  bundle     RequestBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  offers     Offer[]
-  documents  Document[] // e-maily a přílohy hlavičky žádanky (#32)
-  expenses   Expense[] // realizované výdaje k této žádance
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor      Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  subProject  SubProject?    @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  task        Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdBy   User           @relation("RequestCreatedBy", fields: [createdById], references: [id])
+  bundle      RequestBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  offers      Offer[]
+  documents   Document[] // e-maily a přílohy hlavičky žádanky (#32)
+  expenses    Expense[] // realizované výdaje k této žádance
+  offerItems  OfferItem[]
+  itemReviews ItemReview[]
 
   comparisons OfferComparison[]
+
   @@index([projectId])
   @@index([bundleId])
   @@index([vendorId])
@@ -274,30 +359,32 @@ model Request {
 // Nabídka k žádance (výběrové řízení). Dodavatel z evidence nebo volný název;
 // cenu, termín a poznámku lze doplnit dodatečně. Vybraná předvyplní žádanku.
 model Offer {
-  id           String    @id @default(cuid())
-  requestId    String
+  id             String    @id @default(cuid())
+  requestId      String
   // Část společné nabídky na balíček (#40). Cena části může chybět – pak platí
   // jen celková cena na BundleOffer a část znamená „tuhle žádanku kryje“.
-  bundleOfferId String?
-  vendorId     String?
-  vendorName   String?
-  price        Decimal?  @db.Decimal(12, 2)
-  deliveryDate DateTime?
-  note         String? // komentář / hodnocení nabídky
-  /** Rozpory proti specifikaci žádanky (rozměr, počet, provedení), po řádcích. */
-  mismatch     String?
-  rating       String? // hodnocení dodavatele (text)
-  score        Int? // bodové hodnocení nabídky (pro řazení)
-  status       String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
-  selected     Boolean   @default(false)
+  bundleOfferId  String?
+  vendorId       String?
+  vendorName     String?
+  price          Decimal?  @db.Decimal(12, 2)
+  deliveryDate   DateTime?
+  note           String? // komentář / hodnocení nabídky
+  /**
+   * Rozpory proti specifikaci žádanky (rozměr, počet, provedení), po řádcích.
+   */
+  mismatch       String?
+  rating         String? // hodnocení dodavatele (text)
+  score          Int? // bodové hodnocení nabídky (pro řazení)
+  status         String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
+  selected       Boolean   @default(false)
   // Z vytěžení AI (#33): odkud nabídka je a jaké úkoly navrhnout do plánu po výběru.
   extractionId   String?
   extractionPart Int?
   planTasks      Json? // [{ title, days, kind: "order"|"wait"|"work" }]
   tasksCreatedAt DateTime? // úkoly už založené (po výběru nabídky)
-  createdById  String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   request     Request      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   bundleOffer BundleOffer? @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
@@ -350,59 +437,60 @@ model DocumentType {
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  type        String   @default("other") // house, garage, car, other...
-  description String?
-  color       String   @default("#6366f1")
+  id              String    @id @default(cuid())
+  name            String
+  type            String    @default("other") // house, garage, car, other...
+  description     String?
+  color           String    @default("#6366f1")
   defaultKind     String? // výchozí druh nového výdaje (expense | work)
   defaultCategory String? // výchozí kategorie
   defaultCurrency String? // výchozí měna
   // Termíny projektu: začátek, očekávané dokončení (plán) a skutečné dokončení.
-  startDate   DateTime?
-  plannedEnd  DateTime?
-  actualEnd   DateTime?
-  ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  startDate       DateTime?
+  plannedEnd      DateTime?
+  actualEnd       DateTime?
+  ownerId         String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  owner       User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  expenses    Expense[]
-  incomes     Income[]
-  documents   Document[]
-  vendors     Vendor[]            @relation("ProjectVendors")
-  memberships ProjectMembership[]
-  requests    Request[]
+  owner          User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses       Expense[]
+  incomes        Income[]
+  documents      Document[]
+  vendors        Vendor[]            @relation("ProjectVendors")
+  memberships    ProjectMembership[]
+  requests       Request[]
   requestBundles RequestBundle[]
-  subProjects SubProject[]
-  tasks       Task[]
+  subProjects    SubProject[]
+  tasks          Task[]
 
-  planDrafts  PlanDraft[]
-  invoices    Invoice[]
+  planDrafts PlanDraft[]
+  invoices   Invoice[]
+
   @@index([ownerId])
 }
 
 // Sub-projekt (etapa/složka) – hierarchické seskupení uvnitř projektu.
 model SubProject {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   projectId   String
   parentId    String?
   name        String
   description String?
-  budget      Decimal?  @db.Decimal(12, 2)
+  budget      Decimal? @db.Decimal(12, 2)
   createdById String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent     SubProject?  @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children   SubProject[] @relation("SubTree")
-  createdBy  User         @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
-  expenses   Expense[]
-  incomes    Income[]
-  requests   Request[]
-  tasks      Task[]
-  documents  Document[]
+  project     Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent      SubProject?            @relation("SubTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    SubProject[]           @relation("SubTree")
+  createdBy   User                   @relation("SubProjectCreatedBy", fields: [createdById], references: [id])
+  expenses    Expense[]
+  incomes     Income[]
+  requests    Request[]
+  tasks       Task[]
+  documents   Document[]
   memberships SubProjectMembership[]
 
   @@index([projectId])
@@ -411,35 +499,35 @@ model SubProject {
 
 // Úkol (plánování). Termíny a stav jsou na úkolu (ne na subprojektu).
 model Task {
-  id            String    @id @default(cuid())
-  projectId     String
-  subProjectId  String?
-  parentId      String? // dílčí úkol patří pod fázi (Task kind=phase)
-  kind          String    @default("task") // task | phase | todo (todo = mimo plánování, bez Ganttu a přepočtu termínů)
-  title         String
-  description   String?
-  assigneeEmail String?
-  startDate     DateTime?
-  dueDate       DateTime?
-  status        String    @default("todo") // editovatelný číselník scope "task"
-  percentDone   Int       @default(0) // 0–100 % dokončení
-  ready         Boolean   @default(true) // připraveno k práci (false = čeká na materiál, jiný úkol…)
-  blockNote     String? // proč je blokováno (ruční blokace v plánování: povolení, počasí…)
-  selfPerformed Boolean   @default(false) // svépomocí – dodavatel se nehledá
-  priority      String? // high | medium | low (volitelné)
-  profession    String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
-  estimateDays  Int? // odhad doby trvání ve dnech
-  costEstimate  Decimal?  @db.Decimal(12, 2) // odhad nákladů (AI plán / ručně) – do forecastu, dokud ho nepokryje žádanka
-  procurement   String? // co poptat u dodavatele (AI plán) – tlačítkem z toho vznikne žádanka
-  actualStart   DateTime? // skutečný začátek (první rozdělání) – realita vs. odhad
-  actualEnd     DateTime? // skutečný konec (dokončení)
-  dateLocked    Boolean   @default(false) // termín zadán ručně → automatický přepočet ho nepřepíše
+  id              String    @id @default(cuid())
+  projectId       String
+  subProjectId    String?
+  parentId        String? // dílčí úkol patří pod fázi (Task kind=phase)
+  kind            String    @default("task") // task | phase | todo (todo = mimo plánování, bez Ganttu a přepočtu termínů)
+  title           String
+  description     String?
+  assigneeEmail   String?
+  startDate       DateTime?
+  dueDate         DateTime?
+  status          String    @default("todo") // editovatelný číselník scope "task"
+  percentDone     Int       @default(0) // 0–100 % dokončení
+  ready           Boolean   @default(true) // připraveno k práci (false = čeká na materiál, jiný úkol…)
+  blockNote       String? // proč je blokováno (ruční blokace v plánování: povolení, počasí…)
+  selfPerformed   Boolean   @default(false) // svépomocí – dodavatel se nehledá
+  priority        String? // high | medium | low (volitelné)
+  profession      String? // řemeslo/profese (Projektant, Statik, Elektrikář…)
+  estimateDays    Int? // odhad doby trvání ve dnech
+  costEstimate    Decimal?  @db.Decimal(12, 2) // odhad nákladů (AI plán / ručně) – do forecastu, dokud ho nepokryje žádanka
+  procurement     String? // co poptat u dodavatele (AI plán) – tlačítkem z toho vznikne žádanka
+  actualStart     DateTime? // skutečný začátek (první rozdělání) – realita vs. odhad
+  actualEnd       DateTime? // skutečný konec (dokončení)
+  dateLocked      Boolean   @default(false) // termín zadán ručně → automatický přepočet ho nepřepíše
   operationId     String? // úkon katalogu, ze kterého úkol vznikl (proklik na recept)
   operationParams String? // JSON { values: {...}, multiplier } – zadané parametry (m²/m³, délka…)
-  vendorId      String? // přiřazený dodavatel (lookup)
-  createdById   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  vendorId        String? // přiřazený dodavatel (lookup)
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
@@ -449,10 +537,10 @@ model Task {
   vendor     Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
   // Závislosti mezi fázemi (kind=phase): "tato fáze navazuje na…".
-  dependsOn   TaskDependency[] @relation("TaskDepFrom")
+  dependsOn    TaskDependency[] @relation("TaskDepFrom")
   dependedOnBy TaskDependency[] @relation("TaskDepTo")
-  requests   Request[] // žádanky navázané na úkol/fázi (procurement)
-  expenses   Expense[] // výdaje navázané na úkol/fázi
+  requests     Request[] // žádanky navázané na úkol/fázi (procurement)
+  expenses     Expense[] // výdaje navázané na úkol/fázi
 
   @@index([projectId])
   @@index([subProjectId])
@@ -501,7 +589,9 @@ model ProjectMembership {
   email     String // identifikátor člena (lowercase)
   role      String   @default("active")
   vendorId  String?
-  /** Smí spouštět vytěžení dokladů (jede to z rozpočtu vlastníka projektu). */
+  /**
+   * Smí spouštět vytěžení dokladů (jede to z rozpočtu vlastníka projektu).
+   */
   canScan   Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -512,49 +602,53 @@ model ProjectMembership {
 }
 
 model Expense {
-  id          String   @id @default(cuid())
-  projectId   String
-  title       String
-  description String?
-  amount      Decimal  @db.Decimal(12, 2)
-  currency    String   @default("CZK")
-  /** Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH). */
-  exchangeRate Float?
-  category    String   @default("other")
-  kind        String   @default("expense") // expense | work | purchase
-  status      String   @default("approved") // approved | for_approval (schvalování)
-  stage       String? // uživatelský stav (životní cyklus) – číselník scope "expense"
-  hours       Decimal? @db.Decimal(10, 2)
-  rate        Decimal? @db.Decimal(12, 2)
-  date        DateTime @default(now())
+  id             String    @id @default(cuid())
+  projectId      String
+  title          String
+  description    String?
+  amount         Decimal   @db.Decimal(12, 2)
+  currency       String    @default("CZK")
+  /**
+   * Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH).
+   */
+  exchangeRate   Float?
+  category       String    @default("other")
+  kind           String    @default("expense") // expense | work | purchase
+  status         String    @default("approved") // approved | for_approval (schvalování)
+  stage          String? // uživatelský stav (životní cyklus) – číselník scope "expense"
+  hours          Decimal?  @db.Decimal(10, 2)
+  rate           Decimal?  @db.Decimal(12, 2)
+  date           DateTime  @default(now())
   dueDate        DateTime?
   variableSymbol String?
-  exportedAt  DateTime? // označeno jako vyexportováno do CSV (účetnictví)
-  vendorId    String?
-  subProjectId String?
-  taskId      String? // navázáno na úkol/fázi
-  requestId   String? // realizace žádanky (výběrového řízení)
-  offerId     String? // realizace konkrétní (vybrané) nabídky
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  exportedAt     DateTime? // označeno jako vyexportováno do CSV (účetnictví)
+  vendorId       String?
+  subProjectId   String?
+  taskId         String? // navázáno na úkol/fázi
+  requestId      String? // realizace žádanky (výběrového řízení)
+  offerId        String? // realizace konkrétní (vybrané) nabídky
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // Daňový doklad: číslo, DUZP, rozpis DPH a dodavatel z ARESu (vytěžení dokladu)
-  docNumber   String? // číslo dokladu / faktury
-  taxDate     DateTime? // DUZP (datum uskutečnění zdanitelného plnění)
-  vatBase     Decimal?  @db.Decimal(12, 2) // základ celkem
-  vatAmount   Decimal?  @db.Decimal(12, 2) // daň celkem
-  vatRate     Decimal?  @db.Decimal(5, 2) // hlavní sazba (0 / 12 / 21)
-  vatBreakdown Json? // [{ rate, base, vat }] po sazbách – co jde do přiznání
-  /** Co je na dokladu, než se zúží na položky v nároku. Bez toho by po
-      odškrtnutí položky nešel nárok vrátit zpátky. */
-  vatBaseDoc      Decimal? @db.Decimal(12, 2)
-  vatAmountDoc    Decimal? @db.Decimal(12, 2)
+  docNumber       String? // číslo dokladu / faktury
+  taxDate         DateTime? // DUZP (datum uskutečnění zdanitelného plnění)
+  vatBase         Decimal?      @db.Decimal(12, 2) // základ celkem
+  vatAmount       Decimal?      @db.Decimal(12, 2) // daň celkem
+  vatRate         Decimal?      @db.Decimal(5, 2) // hlavní sazba (0 / 12 / 21)
+  vatBreakdown    Json? // [{ rate, base, vat }] po sazbách – co jde do přiznání
+  /**
+   * Co je na dokladu, než se zúží na položky v nároku. Bez toho by po
+   * odškrtnutí položky nešel nárok vrátit zpátky.
+   */
+  vatBaseDoc      Decimal?      @db.Decimal(12, 2)
+  vatAmountDoc    Decimal?      @db.Decimal(12, 2)
   vatBreakdownDoc Json?
-  supplierIco String?
-  supplierDic String?
-  deductible  Boolean @default(true) // brát do podkladu pro DPH
-  items       ExpenseItem[]
+  supplierIco     String?
+  supplierDic     String?
+  deductible      Boolean       @default(true) // brát do podkladu pro DPH
+  items           ExpenseItem[]
 
   invoiceId  String? // faktura (žádost o úhradu), na které je výkaz
   invoice    Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -583,45 +677,47 @@ model Expense {
 // prodej, refundace…). Saldo projektu = příjmy − výdaje. Záměrně jednodušší
 // než Expense: bez dodavatele/žádanky/QR plateb/životního cyklu.
 model Income {
-  id           String   @id @default(cuid())
-  projectId    String
-  subProjectId String?
-  title        String
-  description  String?
-  amount       Decimal  @db.Decimal(12, 2)
-  currency     String   @default("CZK")
-  /** Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH). */
-  exchangeRate Float?
-  category     String   @default("other") // dotace | vklad | prodej | refundace | other
-  date         DateTime @default(now())
+  id            String    @id @default(cuid())
+  projectId     String
+  subProjectId  String?
+  title         String
+  description   String?
+  amount        Decimal   @db.Decimal(12, 2)
+  currency      String    @default("CZK")
+  /**
+   * Kurz CZK za 1 jednotku měny u dokladu v cizí měně (pro DPH).
+   */
+  exchangeRate  Float?
+  category      String    @default("other") // dotace | vklad | prodej | refundace | other
+  date          DateTime  @default(now())
   // Daňový doklad (vystavená faktura z vytěžení): číslo, DUZP, rozpis DPH, odběratel
-  docNumber    String?
-  taxDate      DateTime?
-  dueDate      DateTime?
-  vatBase      Decimal?  @db.Decimal(12, 2)
-  vatAmount    Decimal?  @db.Decimal(12, 2)
-  vatBreakdown Json?
-  customerName String?
-  customerIco  String?
-  customerDic  String?
-  taxable      Boolean   @default(true) // brát do podkladu pro DPH
+  docNumber     String?
+  taxDate       DateTime?
+  dueDate       DateTime?
+  vatBase       Decimal?  @db.Decimal(12, 2)
+  vatAmount     Decimal?  @db.Decimal(12, 2)
+  vatBreakdown  Json?
+  customerName  String?
+  customerIco   String?
+  customerDic   String?
+  taxable       Boolean   @default(true) // brát do podkladu pro DPH
   /**
    * Od kterého dodavatele příjem je (půjčka, vratka). Podle toho se nabídne
    * k zápočtu proti tomu, co se mu platí. Vyplní se i tím, že ho uživatel
    * v QR platbě vybere.
    */
-  vendorId     String?
+  vendorId      String?
   /**
    * Kolik z příjmu už bylo započteno proti platbám dodavateli. Zbývá
    * `amount − settledAmount`, takže zápočet jde použít i částečně a větší
    * půjčka se přenese na příště. Bez tohohle by se tentýž zápočet odečítal
    * od každé další platby.
    */
-  settledAmount Decimal? @db.Decimal(12, 2)
-  documentId   String? // příloha, ze které doklad vznikl
-  createdById  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  settledAmount Decimal?  @db.Decimal(12, 2)
+  documentId    String? // příloha, ze které doklad vznikl
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
@@ -636,26 +732,32 @@ model Income {
 
 // Položka dokladu z vytěžení – podklad pro porovnání s ceníkem katalogu.
 model ExpenseItem {
-  id          String   @id @default(cuid())
-  expenseId   String
-  line        Int      @default(0)
-  description String
-  quantity    Decimal? @db.Decimal(12, 3)
-  unit        String?
-  unitPrice   Decimal? @db.Decimal(12, 2)
-  amount      Decimal  @db.Decimal(12, 2)
-  vatRate     Decimal? @db.Decimal(5, 2)
-  /** Jde tahle položka do přiznání? Osobní spotřeba na dokladu se odškrtne. */
-  deductible  Boolean  @default(true)
-  /** Proč položka v nároku není – aby šel návrh ověřit, ne jen odkliknout. */
+  id             String   @id @default(cuid())
+  expenseId      String
+  line           Int      @default(0)
+  description    String
+  quantity       Decimal? @db.Decimal(12, 3)
+  unit           String?
+  unitPrice      Decimal? @db.Decimal(12, 2)
+  amount         Decimal  @db.Decimal(12, 2)
+  vatRate        Decimal? @db.Decimal(5, 2)
+  /**
+   * Jde tahle položka do přiznání? Osobní spotřeba na dokladu se odškrtne.
+   */
+  deductible     Boolean  @default(true)
+  /**
+   * Proč položka v nároku není – aby šel návrh ověřit, ne jen odkliknout.
+   */
   deductibleNote String?
-  /** Kategorie položky – doklad může mít víc druhů nákupu naráz. */
-  category    String?
+  /**
+   * Kategorie položky – doklad může mít víc druhů nákupu naráz.
+   */
+  category       String?
   // porovnání s katalogem (materiál nebo úkon)
-  materialCode String?
-  catalogPrice Decimal? @db.Decimal(12, 2)
-  diffPct      Decimal? @db.Decimal(7, 2) // +% nad ceníkem, −% pod ním
-  createdAt   DateTime @default(now())
+  materialCode   String?
+  catalogPrice   Decimal? @db.Decimal(12, 2)
+  diffPct        Decimal? @db.Decimal(7, 2) // +% nad ceníkem, −% pod ním
+  createdAt      DateTime @default(now())
 
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
 
@@ -665,23 +767,27 @@ model ExpenseItem {
 
 // Vytěžení účtenky/faktury z přílohy (#doklady): návrh výdaje k potvrzení.
 model DocScan {
-  id          String   @id @default(cuid())
-  /** Až po zařazení – doklad z pošty se čte dřív, než se ví, kam patří. */
-  projectId   String?
-  documentId  String?  @unique
-  /** Čtení přímo nad přílohou z pošty (dokument vznikne až potvrzením). */
-  inboundAttachmentId String? @unique
-  status      String   @default("running") // running | ready | error | applied | dismissed
-  result      Json?
-  error       String?
-  model       String
-  costUsd     Float?
-  expenseId   String? // vzniklý výdaj (po potvrzení)
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  /**
+   * Až po zařazení – doklad z pošty se čte dřív, než se ví, kam patří.
+   */
+  projectId           String?
+  documentId          String?  @unique
+  /**
+   * Čtení přímo nad přílohou z pošty (dokument vznikne až potvrzením).
+   */
+  inboundAttachmentId String?  @unique
+  status              String   @default("running") // running | ready | error | applied | dismissed
+  result              Json?
+  error               String?
+  model               String
+  costUsd             Float?
+  expenseId           String? // vzniklý výdaj (po potvrzení)
+  createdById         String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  document Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document          Document?          @relation(fields: [documentId], references: [id], onDelete: Cascade)
   inboundAttachment InboundAttachment? @relation(fields: [inboundAttachmentId], references: [id], onDelete: Cascade)
 
   @@index([projectId, status])
@@ -689,33 +795,33 @@ model DocScan {
 }
 
 model Document {
-  id           String   @id @default(cuid())
-  projectId    String
-  subProjectId String? // složka, kam doklad patří – určil ten, kdo ho nahrál
-  expenseId    String?
-  offerId      String?
+  id            String    @id @default(cuid())
+  projectId     String
+  subProjectId  String? // složka, kam doklad patří – určil ten, kdo ho nahrál
+  expenseId     String?
+  offerId       String?
   bundleOfferId String? // příloha společné nabídky na balíček – vidět u všech jeho žádanek (#40)
-  requestId    String? // příloha hlavičky žádanky – e-mail, nabídka v PDF (#32)
-  summary      String? // u e-mailu "Od · Předmět", ať je vidět bez otevírání
-  note         String? // poznámka uživatele – např. změny oproti dokumentaci (AI ji bere v potaz)
-  fileName     String // klíč v úložišti (storage key)
-  originalName String
-  mimeType     String
-  size         Int
-  type         String   @default("other") // receipt | invoice | contract | revision | insurance | other
-  uploadedById String
-  createdAt    DateTime @default(now())
-  exportedAt   DateTime? // označeno jako stažené/vyexportováno (hromadné stažení příloh)
+  requestId     String? // příloha hlavičky žádanky – e-mail, nabídka v PDF (#32)
+  summary       String? // u e-mailu "Od · Předmět", ať je vidět bez otevírání
+  note          String? // poznámka uživatele – např. změny oproti dokumentaci (AI ji bere v potaz)
+  fileName      String // klíč v úložišti (storage key)
+  originalName  String
+  mimeType      String
+  size          Int
+  type          String    @default("other") // receipt | invoice | contract | revision | insurance | other
+  uploadedById  String
+  createdAt     DateTime  @default(now())
+  exportedAt    DateTime? // označeno jako stažené/vyexportováno (hromadné stažení příloh)
 
   extractions Extraction[]
-  scan       DocScan?
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  subProject SubProject? @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
-  expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
-  offer      Offer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  scan        DocScan?
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subProject  SubProject?  @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  expense     Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  offer       Offer?       @relation(fields: [offerId], references: [id], onDelete: Cascade)
   bundleOffer BundleOffer? @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
-  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  uploadedBy User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  request     Request?     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy  User         @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([projectId])
   @@index([subProjectId])
@@ -832,10 +938,10 @@ model Package {
 
 // Položka balíčku: úkon a jeho množství na 1 MJ balíčku.
 model PackageItem {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   packageId   String
   operationId String
-  qtyPerUnit  Decimal  @default(1) @db.Decimal(12, 4)
+  qtyPerUnit  Decimal @default(1) @db.Decimal(12, 4)
   note        String?
 
   package   Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
@@ -894,7 +1000,9 @@ model OfferComparison {
   requestId   String?
   bundleId    String?
   prompt      String?
-  /** Ověřit dodavatele i na webu (stojí navíc, proto na povel). */
+  /**
+   * Ověřit dodavatele i na webu (stojí navíc, proto na povel).
+   */
   webSearch   Boolean  @default(false)
   status      String   @default("running") // running | ready | error
   result      Json?
@@ -915,20 +1023,20 @@ model OfferComparison {
 
 // AI plán projektu z dokumentace (#34): návrh fází a úkolů s odhady podle katalogu.
 model PlanDraft {
-  id          String   @id @default(cuid())
-  projectId   String
-  kind        String   @default("plan") // plan = plán z dokumentace | costs = odhad nákladů stávajícího plánu
-  replaceExisting Boolean @default(false) // nahradit dříve navržený (nezačatý) plán
-  status      String   @default("running") // running | ready | error | applied | dismissed
-  prompt      String?
-  documentIds String[]
-  result      Json?
-  error       String?
-  model       String
-  costUsd     Float?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  projectId       String
+  kind            String   @default("plan") // plan = plán z dokumentace | costs = odhad nákladů stávajícího plánu
+  replaceExisting Boolean  @default(false) // nahradit dříve navržený (nezačatý) plán
+  status          String   @default("running") // running | ready | error | applied | dismissed
+  prompt          String?
+  documentIds     String[]
+  result          Json?
+  error           String?
+  model           String
+  costUsd         Float?
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -940,7 +1048,9 @@ model PlanDraft {
 // (limity počítají z něj, jinak by smazání projektu „vynulovalo“ útratu).
 model AiUsageLog {
   id        String   @id @default(cuid())
-  /** Účet, který zpracování platí – vlastník projektu, jinak sám uživatel. */
+  /**
+   * Účet, který zpracování platí – vlastník projektu, jinak sám uživatel.
+   */
   userId    String?
   projectId String?
   kind      String // extraction | comparison | plan
@@ -977,27 +1087,35 @@ model Notification {
 // ---------------------------------------------------------------------------
 
 model InboundMail {
-  id          String   @id @default(cuid())
-  /** Message-ID z hlavičky – tentýž e-mail se nenačte dvakrát. */
-  messageId   String   @unique
-  fromName    String?
-  fromAddress String
-  subject     String
-  receivedAt  DateTime
-  bodyText    String?
-  /** nova | zarazena | odmitnuta | chyba */
-  status      String   @default("nova")
-  /** Návrh zařazení z obsahu (potvrzuje uživatel). */
+  id           String   @id @default(cuid())
+  /**
+   * Message-ID z hlavičky – tentýž e-mail se nenačte dvakrát.
+   */
+  messageId    String   @unique
+  fromName     String?
+  fromAddress  String
+  subject      String
+  receivedAt   DateTime
+  bodyText     String?
+  /**
+   * nova | zarazena | odmitnuta | chyba
+   */
+  status       String   @default("nova")
+  /**
+   * Návrh zařazení z obsahu (potvrzuje uživatel).
+   */
   projectId    String?
   subProjectId String? // složka určená štítkem („Garáž" pod projektem Dům)
   requestId    String?
-  suggestion  Json? // { projectId, subProjectId, requestId, kind, confidence, reason }
-  note        String? // co se stalo – i do zprávy o zpracování
-  /** Původní .eml v úložišti (klíč), ať je vidět celý originál. */
-  rawKey      String?
-  ownerId     String // komu pošta patří (majitel schránky)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  suggestion   Json? // { projectId, subProjectId, requestId, kind, confidence, reason }
+  note         String? // co se stalo – i do zprávy o zpracování
+  /**
+   * Původní .eml v úložišti (klíč), ať je vidět celý originál.
+   */
+  rawKey       String?
+  ownerId      String // komu pošta patří (majitel schránky)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   owner       User                @relation("InboundMailOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   attachments InboundAttachment[]
@@ -1013,9 +1131,13 @@ model InboundAttachment {
   originalName String
   mimeType     String
   size         Int
-  /** Co to je podle rozpoznání: offer | invoice | technical | other */
+  /**
+   * Co to je podle rozpoznání: offer | invoice | technical | other
+   */
   kind         String  @default("other")
-  /** Po zařazení odkaz na založený dokument. */
+  /**
+   * Po zařazení odkaz na založený dokument.
+   */
   documentId   String?
 
   mail InboundMail @relation(fields: [mailId], references: [id], onDelete: Cascade)
@@ -1052,7 +1174,9 @@ model Invoice {
   @@index([recipientId, status])
 }
 
-/** Odeslané podání na finanční správu (datovou schránkou). */
+/**
+ * Odeslané podání na finanční správu (datovou schránkou).
+ */
 model TaxFiling {
   id        String   @id @default(cuid())
   userId    String

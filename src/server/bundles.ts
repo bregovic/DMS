@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { ComparisonResult } from "@/server/extraction";
+import { bundleItemsView, type ItemsInfo } from "@/server/offer-items";
 
 /**
  * Vyhodnocení poptávkového balíčku (#40).
@@ -52,6 +53,10 @@ export async function bundleViews(
           vendor: { select: { name: true } },
           offers: { select: { requestId: true, price: true } },
           documents: { select: { id: true, originalName: true }, orderBy: { createdAt: "asc" } },
+          itemsStatus: true,
+          itemsError: true,
+          itemsInfo: true,
+          _count: { select: { items: true } },
         },
       }),
       prisma.offerComparison.findFirst({
@@ -76,7 +81,12 @@ export async function bundleViews(
         canEdit: viewer.isManager || (viewer.canWrite && o.createdById === viewer.userId),
         parts: o.offers.map((p) => ({ requestId: p.requestId, price: num(p.price) })),
         docs: o.documents,
+        itemsStatus: o.itemsStatus,
+        itemsError: o.itemsError,
+        itemsInfo: o.itemsInfo as unknown as ItemsInfo | null,
+        itemCount: o._count.items,
       })),
+      items: await bundleItemsView(id, ev.requests.map((r) => r.id)),
       comparison: comparison
         ? {
             ...comparison,
