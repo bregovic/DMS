@@ -133,7 +133,7 @@ Součet základních položek (bez alternativ, se slevami) musí dát celkovou c
 - u položek účtovaných za metr nebo m² je cena řádku = jednotková cena × množství.
 - requestId: poptávka ze seznamu, ke které prvek patří (okno ložnice → "Okna patro"). Parapety, žaluzie a příslušenství konkrétního prvku patří k jeho poptávce. Montáž, doprava, zaměření, demontáž a likvidace pro celou nabídku → null. Nikdy si id nevymýšlej.
 - kind: "product" = hlavní prvek (okno, dveře, portál), "accessory" = příslušenství a příplatky (parapet, sítě, žaluzie, kování navíc), "service" = práce a doprava, "discount" = sleva (ceny záporně).
-- alternative: když nabídka u téhož prvku dává víc provedení (jiný profil, jiné zasklení, varianta A/B, „alternativně"), základní provedení má null a každá další varianta krátký název, např. "Varianta B – Aluplast Ideal 8000". Když je celá nabídka ve dvou variantách se dvěma součty, první je základní (null) a druhá alternativa. Alternativy se nesčítají do celkové ceny.
+- alternative: když nabídka u téhož prvku dává víc provedení (jiný profil, jiné zasklení, varianta A/B, „alternativně"), základní provedení má null a každá další varianta krátký název, např. "Varianta B – Aluplast Ideal 8000". Když je celá nabídka ve dvou variantách se dvěma součty, první je základní (null) a druhá alternativa. Alternativy se nesčítají do celkové ceny, ale vždy je vypiš jako samostatné položky s cenou – i když je cena v závorce, s poznámkou „není započtena" nebo s množstvím 0 (pak ber cenu za 1 ks a quantity 1). Alternativa k pozici (např. 5b k pozici 5 – skutečný HS portál místo pevného zasklení, hliníkové dveře místo plastových) má stejné requestId a kind jako základní prvek. Alternativní služby (montáž, systém spáry) taky vypiš.
 - position: číslo pozice v nabídce (např. "P3", "3"), jinak null.
 - title: krátce co to je a kde, např. "HS portál obývák", "Okno koupelna".
 - product: výrobce + systém/typ, např. "Salamander bluEvolution 82, HS", "Schüco LivIngSlide".
@@ -361,6 +361,8 @@ export async function runOfferItems(bundleOfferId: string) {
       const rows = data.items
         .filter((i) => i.title?.trim())
         .map((i, idx) => {
+          // Alternativa s množstvím 0 („nabízíme, ale nepočítáme") = cena za kus.
+          if (i.alternative?.trim() && !i.quantity) i = { ...i, quantity: 1 };
           let noVat = i.priceWithoutVat;
           if (noVat == null && i.unitPriceWithoutVat != null) noVat = i.unitPriceWithoutVat * (i.quantity ?? 1);
           let withVat = i.priceWithVat;
@@ -430,6 +432,7 @@ export async function runOfferItems(bundleOfferId: string) {
                 `položka, která v ceně je, chybně označená jako alternativa (nebo naopak); cena za kus, metr či m² vzatá jako celková; ` +
                 `mezisoučet nebo rekapitulace vypsaná jako položka; ceny s DPH a bez DPH zaměněné; chybějící pozice. ` +
                 `Vrať kompletní opravený rozpis tak, aby součet základních položek odpovídal celkové ceně. ` +
+                `Alternativy (nezapočtené položky) v rozpisu ponech s jejich cenou – do součtu se nepočítají, kvůli součtu je nemaž. ` +
                 `Když rozdíl opravdu nejde vysvětlit, vrať nejlepší rozpis a důvod napiš do warnings.\n\n` +
                 `Předchozí rozpis:\n${JSON.stringify(prvni.data.items.map((i) => ({ kind: i.kind, alternative: i.alternative, title: i.title, quantity: i.quantity, unitPriceWithoutVat: i.unitPriceWithoutVat, priceWithoutVat: i.priceWithoutVat, priceWithVat: i.priceWithVat })))}`,
             },
@@ -440,7 +443,16 @@ export async function runOfferItems(bundleOfferId: string) {
         );
         costUsd += oprava.costUsd;
         const druhy = zpracuj(oprava.data);
-        if (druhy.diff != null && Math.abs(druhy.diff) < Math.abs(vysledek.diff ?? Infinity)) vysledek = druhy;
+        if (druhy.diff != null && Math.abs(druhy.diff) < Math.abs(vysledek.diff ?? Infinity)) {
+          // Oprava se soustředí na součet a alternativy občas zahodí – na součet
+          // nemají vliv, takže chybějící se doplní z prvního čtení.
+          const klic = (r: { position: string | null; product: string | null; title: string }) =>
+            `${r.position ?? ""}|${(r.product ?? r.title).toLowerCase()}`;
+          const mam = new Set(druhy.rows.filter((r) => r.alternative).map(klic));
+          const chybi = vysledek.rows.filter((r) => r.alternative && !mam.has(klic(r)));
+          druhy.rows.push(...chybi.map((r, i) => ({ ...r, sortOrder: druhy.rows.length + i })));
+          vysledek = druhy;
+        }
       } catch {
         // Oprava je bonus – když selže (limit, výpadek), platí první rozpis.
       }
