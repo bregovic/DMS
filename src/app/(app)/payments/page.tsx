@@ -6,7 +6,7 @@ import { PaymentInfo } from "@/components/expenses/payment-info";
 import { ExpenseStageSelect } from "@/components/expenses/expense-stage-select";
 import { setExpensePaid } from "@/server/actions/expenses";
 import { getStatuses } from "@/server/statuses";
-import { EXPENSE_PAID_STAGE, EXPENSE_STATUSES, isExpensePaid } from "@/lib/constants";
+import { EXPENSE_NEW_STAGE, EXPENSE_PAID_STAGE, EXPENSE_STATUSES, isExpensePaid } from "@/lib/constants";
 import { ListFilters } from "@/components/ui/list-filters";
 import { PaymentsBulkBar } from "@/components/expenses/payments-bulk-bar";
 import { PAY_FORM_ID } from "@/lib/bulk-ids";
@@ -46,9 +46,11 @@ export default async function PaymentsPage({
   const stageWhere: Prisma.ExpenseWhereInput =
     status === "__all__"
       ? {}
-      : status
-        ? { stage: status }
-        : { OR: [{ stage: null }, { stage: { not: EXPENSE_PAID_STAGE } }] };
+      : status === EXPENSE_NEW_STAGE
+        ? { OR: [{ stage: null }, { stage: { in: [EXPENSE_NEW_STAGE, "k_uhrade"] } }] }
+        : status
+          ? { stage: status }
+          : { OR: [{ stage: null }, { stage: { not: EXPENSE_PAID_STAGE } }] };
 
   const where: Prisma.ExpenseWhereInput = {
     project: { ownerId: user.id },

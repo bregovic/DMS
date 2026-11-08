@@ -26,7 +26,7 @@ export async function GET(
 
   const iban = resolveIban(await payeeAccount(e.vendor));
   if (!iban) {
-    return new Response("Dodavatel nemá platný bankovní účet.", { status: 400 });
+    return new Response("Účet dodavatele zadej s kódem banky (123456789/0100) nebo jako IBAN.", { status: 400 });
   }
 
   const spd = buildSpd({

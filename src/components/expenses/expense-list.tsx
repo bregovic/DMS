@@ -234,6 +234,7 @@ export function ExpenseList({
                 </p>
                 <PaymentInfo
                   expenseId={e.id}
+                  projectId={projectId}
                   paid={e.paid}
                   dueLabel={e.dueLabel}
                   overdue={e.overdue}

@@ -210,7 +210,7 @@ export function NewExpenseForm({
                   label: v.name,
                   hourlyRate: v.hourlyRate,
                 }))}
-                defaultId={myVendorId || d.vendorId}
+                defaultId={d.vendorId || myVendorId}
                 clearOnFocus
                 placeholder="Hledat dodavatele…"
                 onSelect={(item) => {

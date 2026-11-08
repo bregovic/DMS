@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { resolveIban } from "@/lib/payment";
 
 export type VendorFormState = { error?: string; ok?: boolean } | undefined;
 
@@ -23,7 +24,11 @@ const vendorSchema = z
     ico: z.string().optional(),
     dic: z.string().optional(),
     address: z.string().optional(),
-    bankAccount: z.string().optional(),
+    bankAccount: z
+      .string()
+      .trim()
+      .optional()
+      .refine((v) => !v || !!resolveIban(v), "Účet zadej s kódem banky (123456789/0100) nebo jako IBAN."),
     hourlyRate: z.coerce.number().positive().optional(),
   })
   .refine((v) => !!(v.email || (v.ico ?? "").replace(/\D/g, "") || (v.phone ?? "").replace(/\D/g, "")), {

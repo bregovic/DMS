@@ -612,7 +612,7 @@ export default async function ProjectDetailPage({
   if (estage === "__unpaid__")
     // „Neuhrazené" = vše kromě stavu uhrazeno (i výdaje bez nastaveného stavu).
     shownExpenses = shownExpenses.filter((e) => !isExpensePaid(e.stage));
-  // expenseStage() bere prázdný stav jako „Nový", takže filtr najde i starší
+  // expenseStage() bere prázdný stav jako „K úhradě", takže filtr najde i starší
   // výdaje, které se založily bez stavu.
   else if (estage) shownExpenses = shownExpenses.filter((e) => expenseStage(e.stage) === estage);
   const sign = edir === "asc" ? 1 : -1;

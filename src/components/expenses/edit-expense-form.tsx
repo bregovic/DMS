@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
-import { EXPENSE_KINDS } from "@/lib/constants";
+import { EXPENSE_KINDS, expenseStage } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { chybaAkce } from "@/lib/chyba-akce";
@@ -306,8 +306,7 @@ export function EditExpenseForm({
           <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ee-stage">Stav</Label>
-              <select id="ee-stage" name="stage" defaultValue={expense.stage ?? ""} className={fieldClass}>
-                <option value="">— bez stavu —</option>
+              <select id="ee-stage" name="stage" defaultValue={expenseStage(expense.stage)} className={fieldClass}>
                 {statuses.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.label}

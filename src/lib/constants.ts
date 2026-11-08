@@ -146,13 +146,12 @@ export function offerStatusLabel(value: string) {
 export const EXPENSE_NEW_STAGE = "novy";
 export const EXPENSE_EXPORTED_STAGE = "exportovano";
 
-/* Životní cyklus výdaje: vznikne → odejde do účetnictví → jde k proplacení →
-   je zaplacený. Dřívější „K objednání" a „Objednáno" nepoužíval žádný záznam,
-   objednávky řeší žádanky, tak jsou pryč. */
+/* Životní cyklus výdaje: vznikne neuhrazený („K úhradě") → případně odejde
+   do účetnictví → je zaplacený. Dřívější samostatné „Nový" a „K úhradě"
+   znamenaly totéž, sloučeno; hodnota "novy" zůstává kvůli uloženým datům. */
 export const EXPENSE_STATUSES = [
-  { value: EXPENSE_NEW_STAGE, label: "Nový" },
+  { value: EXPENSE_NEW_STAGE, label: "K úhradě" },
   { value: EXPENSE_EXPORTED_STAGE, label: "Exportováno" },
-  { value: "k_uhrade", label: "K úhradě" },
   { value: "uhrazeno", label: "Uhrazeno" },
 ] as const;
 
@@ -162,10 +161,10 @@ export function expenseStageRank(stage: string | null | undefined): number {
   return i < 0 ? 0 : i;
 }
 
-/** Výdaje založené dřív stav nemají – bereme je jako „Nový", ať nevypadnou
- *  z filtrů a přehledů. Šetří to migraci nad stovkou existujících záznamů. */
+/** Výdaje založené dřív stav nemají a starší „k_uhrade" je totéž co „novy" –
+ *  obojí bereme jako „K úhradě", ať nevypadnou z filtrů a přehledů. */
 export function expenseStage(stage: string | null | undefined): string {
-  return stage || EXPENSE_NEW_STAGE;
+  return !stage || stage === "k_uhrade" ? EXPENSE_NEW_STAGE : stage;
 }
 
 export function expenseStatusLabel(value: string | null | undefined) {
@@ -175,7 +174,7 @@ export function expenseStatusLabel(value: string | null | undefined) {
 
 // Úhrada výdaje se řídí stavem (ne samostatným booleanem). "uhrazeno" = zaplaceno.
 export const EXPENSE_PAID_STAGE = "uhrazeno";
-export const EXPENSE_TOPAY_STAGE = "k_uhrade";
+export const EXPENSE_TOPAY_STAGE = EXPENSE_NEW_STAGE;
 export function isExpensePaid(stage: string | null | undefined) {
   return stage === EXPENSE_PAID_STAGE;
 }

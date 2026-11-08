@@ -104,7 +104,8 @@ export async function aggregateExpensesQr(
     const ucet = ucetDodavatele(e.vendor);
     const iban = resolveIban(ucet);
     if (!iban) {
-      skippedNoBank.push(e.title);
+      // účet vyplněný, ale bez kódu banky – ať je vidět, co opravit
+      skippedNoBank.push(ucet ? `${e.title} (${e.vendor?.name}: účet ${ucet} bez kódu banky)` : e.title);
       continue;
     }
     const key = `${iban}|${e.currency}`;
@@ -130,7 +131,13 @@ export async function aggregateExpensesQr(
 
   if (map.size === 0) {
     if (skippedNoBank.length > 0 && skippedPaid === 0) {
-      return { error: "Vybrané výdaje nemají u dodavatele platný bankovní účet." };
+      const vadny = expenses.find((e) => ucetDodavatele(e.vendor));
+      const u = vadny ? ucetDodavatele(vadny.vendor) : null;
+      return {
+        error: u
+          ? `Účet dodavatele ${vadny!.vendor?.name} (${u}) je bez kódu banky. Doplň ho v Dodavatelích ve tvaru ${u}/kód banky.`
+          : "Dodavatel nemá vyplněný bankovní účet. Doplň ho v Dodavatelích.",
+      };
     }
     return { error: "Žádné neuhrazené výdaje s platebními údaji k vytvoření QR." };
   }
