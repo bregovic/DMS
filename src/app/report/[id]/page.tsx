@@ -10,8 +10,8 @@ import { AutoRefresh } from "@/components/ui/auto-refresh";
 
 export const metadata: Metadata = { title: "Report nákladů – DMS" };
 
-// Běh, který po restartu serveru nedoběhl, se po 25 minutách bere jako chyba.
-const STALE_MS = 25 * 60_000;
+// Běh, který po restartu serveru nedoběhl, se po 10 minutách bere jako chyba.
+const STALE_MS = 10 * 60_000;
 const isStale = (createdAt: Date) => Date.now() - createdAt.getTime() > STALE_MS;
 
 export default async function CostReportPage({ params }: PageProps<"/report/[id]">) {

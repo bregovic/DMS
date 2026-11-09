@@ -267,7 +267,7 @@ export async function createCostReport(projectId: string, subProjectId: string |
   const account = await aiAccountForProject(projectId);
   await assertBudget(account);
   const busy = await prisma.costReport.findFirst({
-    where: { projectId, status: "running", createdAt: { gte: new Date(Date.now() - 25 * 60_000) } },
+    where: { projectId, status: "running", createdAt: { gte: new Date(Date.now() - 10 * 60_000) } },
     select: { id: true },
   });
   if (busy) throw new Error("Report se už připravuje – počkej, až doběhne.");
