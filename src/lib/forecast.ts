@@ -11,9 +11,11 @@ export type ForecastRequestInput = {
   taskId: string | null;
   subId: string | null;
   realOnRequest: number; // reálné výdaje navázané přímo na tuto žádanku
+  ref?: string; // volitelný identifikátor – vrátí se u příspěvku žádanky bez úkolu
 };
 export type ForecastTaskInput = { id: string; parentId: string | null };
-export type ForecastContrib = { amount: number; subId: string | null };
+/** taskId = úkol, ke kterému zbytek patří (null = žádanka bez úkolu); ref = předaný identifikátor žádanky. */
+export type ForecastContrib = { amount: number; subId: string | null; taskId?: string | null; ref?: string };
 
 export function computeForecastContribs(
   requests: ForecastRequestInput[],
@@ -32,7 +34,7 @@ export function computeForecastContribs(
       g.sum += net;
       fcByTask.set(r.taskId, g);
     } else {
-      contribs.push({ amount: net, subId: r.subId });
+      contribs.push({ amount: net, subId: r.subId, taskId: null, ref: r.ref });
     }
   }
 
@@ -83,6 +85,6 @@ export function computeForecastContribs(
   }
 
   // 3) Zbylý forecast po úkolech.
-  for (const [id, fc] of baseFc) if (fc > 0) contribs.push({ amount: fc, subId: fcSub.get(id) ?? null });
+  for (const [id, fc] of baseFc) if (fc > 0) contribs.push({ amount: fc, subId: fcSub.get(id) ?? null, taskId: id });
   return contribs;
 }

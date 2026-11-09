@@ -66,6 +66,7 @@ import {
   expenseStage,
 } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
+import { CostReportButton } from "@/components/reports/cost-report-button";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
@@ -770,6 +771,16 @@ export default async function ProjectDetailPage({
         })
       : [];
 
+  // Poslední reporty nákladů této úrovně (#48).
+  const recentReports = isManager
+    ? await prisma.costReport.findMany({
+        where: { projectId: project.id, subProjectId: currentSub?.id ?? null },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, createdAt: true, status: true },
+      })
+    : [];
+
   // Dodavatel se stejným e-mailem jako přihlášený uživatel → předvyplní se u výdaje.
   // (myEmail je definováno výše.)
   const myVendorId = myEmail
@@ -857,6 +868,16 @@ export default async function ProjectDetailPage({
             <CalendarRange className="size-4" />
             Plánování
           </Link>
+          {isManager && (
+            <CostReportButton
+              projectId={project.id}
+              subProjectId={currentSub?.id ?? null}
+              recent={recentReports.map((r) => ({
+                id: r.id,
+                label: `${formatDate(r.createdAt)}${r.status === "error" ? " · nedokončený" : ""}`,
+              }))}
+            />
+          )}
           {(() => {
             const expLevel = currentSub ? spentBySub.get(currentSub.id) ?? 0 : total;
             const incLevel = currentSub ? incomeBySub.get(currentSub.id) ?? 0 : incomeTotal;

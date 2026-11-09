@@ -32,6 +32,7 @@ model User {
   // Údaje pro daňová podání (kontrolní hlášení, přiznání)
   /**
    * /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
@@ -464,8 +465,9 @@ model Project {
   subProjects    SubProject[]
   tasks          Task[]
 
-  planDrafts PlanDraft[]
-  invoices   Invoice[]
+  planDrafts  PlanDraft[]
+  invoices    Invoice[]
+  costReports CostReport[]
 
   @@index([ownerId])
 }
@@ -1037,6 +1039,30 @@ model PlanDraft {
   createdById     String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+// Report nákladů projektu / složky (#48) – uložený snímek: podklady spočítané
+// z dat + rozřazení výdajů a komentář z modelu. PDF se ukládá do dokumentů.
+model CostReport {
+  id           String   @id @default(cuid())
+  projectId    String
+  subProjectId String?
+  status       String   @default("running") // running | ready | error
+  prompt       String?
+  data         Json? // podklady (snímek dat v okamžiku vytvoření)
+  result       Json? // rozřazení a komentář z modelu
+  error        String?
+  model        String
+  costUsd      Float?
+  documentId   String? // uložené PDF
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
