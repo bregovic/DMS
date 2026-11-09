@@ -107,21 +107,30 @@ function compute(data: ReportData, result: ReportResult | null) {
   const cumulative = months.map((m) => ({ label: m.label, value: (acc += m.value) }));
   const vendors = [...byVendor.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-  // zbývající náklady po celcích
-  const fAssign = new Map((result?.forecastAssign ?? []).map((a) => [a.key, a.group]));
-  const fcPlan = new Map<string, number>();
+  // zbývající náklady po celcích: plán + pásmo po položkách + co v plánu chybí
+  const fAssign = new Map((result?.forecastAssign ?? []).map((a) => [a.key, a]));
+  const fc = new Map<string, { plan: number; low: number; high: number; notes: string[] }>();
+  const row = (g: string) => {
+    const r = fc.get(g) ?? { plan: 0, low: 0, high: 0, notes: [] };
+    fc.set(g, r);
+    return r;
+  };
   for (const f of data.forecast) {
-    const g = fAssign.get(f.key) ?? f.phase ?? "Ostatní";
-    fcPlan.set(g, (fcPlan.get(g) ?? 0) + f.amount);
+    const a = fAssign.get(f.key);
+    const r = row(a?.group ?? f.phase ?? "Ostatní");
+    r.plan += f.amount;
+    r.low += a?.low ?? f.amount;
+    r.high += a?.high ?? f.amount;
   }
-  const bands = new Map((result?.forecastBands ?? []).map((b) => [b.group, b]));
-  const fcNames = [...new Set([...fcPlan.keys(), ...bands.keys()])];
-  const fcRows = fcNames
-    .map((name) => {
-      const plan = fcPlan.get(name) ?? 0;
-      const b = bands.get(name);
-      return { name, plan, low: b?.low ?? plan, high: b?.high ?? plan, note: b?.note ?? "" };
-    })
+  for (const m of result?.forecastMissing ?? []) {
+    const r = row(m.group);
+    r.low += m.low;
+    r.high += m.high;
+    r.notes.push(`chybí v plánu: ${m.note}`);
+  }
+  for (const x of result?.forecastNotes ?? []) if (fc.has(x.group)) fc.get(x.group)!.notes.unshift(x.note);
+  const fcRows = [...fc.entries()]
+    .map(([name, r]) => ({ name, plan: r.plan, low: r.low, high: r.high, note: r.notes.join("; ") }))
     .filter((r) => r.plan > 0 || r.high > 0)
     .sort((a, b) => {
       const ia = order.indexOf(a.name);
@@ -136,7 +145,7 @@ function compute(data: ReportData, result: ReportResult | null) {
   const activities = [...act.values()]
     .map((a) => {
       const p = plans.get(`${a.vendor}|${a.activity}`);
-      return { ...a, plan: p?.plan ?? null, note: p?.note ?? null };
+      return { ...a, plan: p?.planTotal ?? null, note: p?.note ?? null };
     })
     .sort((a, b) => a.vendor.localeCompare(b.vendor, "cs") || b.actual - a.actual);
 
@@ -344,7 +353,7 @@ export function CostReportView({ data, result, error }: { data: ReportData; resu
   const scope = data.scopeName === data.projectName ? data.projectName : `${data.projectName} · ${data.scopeName}`;
   const finalLo = c.total + c.fcLow;
   const finalHi = c.total + c.fcHigh;
-  const hasBands = (result?.forecastBands.length ?? 0) > 0;
+  const hasBands = (result?.forecastAssign?.length ?? 0) > 0;
 
   return (
     <div className="rp">

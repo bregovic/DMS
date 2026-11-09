@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { REQUEST_FORECAST_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 import { computeForecastContribs, type ForecastRequestInput } from "@/lib/forecast";
 import { getExpenseCategoryMap } from "@/server/expense-categories";
-import { AI_MODEL, aiAccountForProject, assertBudget, callModel } from "@/server/extraction";
+import { aiAccountForProject, assertBudget, callModel } from "@/server/extraction";
+
+/** Rozřazení výdajů a srovnání s trhem potřebuje silnější model (AI_REPORT_MODEL). */
+const REPORT_MODEL = process.env.AI_REPORT_MODEL || process.env.AI_PLAN_MODEL || "gpt-5";
 import { catalogPriceList } from "@/server/plan-ai";
 
 /**
@@ -57,9 +60,13 @@ export type ReportData = {
 export type ReportResult = {
   groups: string[];
   assign: { key: string; group: string; kind: ReportKind; activity: string | null }[];
-  activities: { vendor: string; activity: string; plan: number | null; note: string | null }[];
-  forecastAssign: { key: string; group: string }[];
-  forecastBands: { group: string; low: number; high: number; note: string }[];
+  activities: { vendor: string; activity: string; planTotal: number | null; note: string | null }[];
+  /** Zbývající položky plánu: celek + realistické pásmo položky. */
+  forecastAssign: { key: string; group: string; low: number; high: number }[];
+  /** Náklady, které v plánu vůbec nejsou (bez úkolu i odhadu). */
+  forecastMissing: { group: string; low: number; high: number; note: string }[];
+  /** Co je ve zbývajících nákladech celku (krátce). */
+  forecastNotes: { group: string; note: string }[];
   comparisons: { item: string; ours: string; market: string; verdict: "good" | "ok" | "check" | "bad"; note: string | null }[];
   summary: { tone: "good" | "warn" | "info"; title: string; text: string }[];
   recommendations: string[];
@@ -222,32 +229,34 @@ const S = { type: "string" };
 const SCHEMA = obj({
   groups: arr(S),
   assign: arr(obj({ key: S, group: S, kind: { type: "string", enum: [...REPORT_KINDS] }, activity: str })),
-  activities: arr(obj({ vendor: S, activity: S, plan: n, note: str })),
-  forecastAssign: arr(obj({ key: S, group: S })),
-  forecastBands: arr(obj({ group: S, low: { type: "number" }, high: { type: "number" }, note: S })),
+  activities: arr(obj({ vendor: S, activity: S, planTotal: n, note: str })),
+  forecastAssign: arr(obj({ key: S, group: S, low: { type: "number" }, high: { type: "number" } })),
+  forecastMissing: arr(obj({ group: S, low: { type: "number" }, high: { type: "number" }, note: S })),
+  forecastNotes: arr(obj({ group: S, note: S })),
   comparisons: arr(obj({ item: S, ours: S, market: S, verdict: { type: "string", enum: ["good", "ok", "check", "bad"] }, note: str })),
   summary: arr(obj({ tone: { type: "string", enum: ["good", "warn", "info"] }, title: S, text: S })),
   recommendations: arr(S),
   assumptions: str,
 });
 
-const INSTRUCTIONS = `Jsi rozpočtář a stavbyvedoucí v Česku. Dostaneš výdaje stavby (projektu nebo jeho složky), zbývající plánované náklady a stav fází. Připrav podklady pro report nákladů. Piš česky, věcně, bez slova „AI“.
+const INSTRUCTIONS = `Jsi rozpočtář a stavbyvedoucí v Česku. Dostaneš výdaje stavby (projektu nebo jeho složky), zbývající plánované náklady a stav fází. Připrav podklady pro report nákladů. Piš česky, věcně, bez slova „AI“. Pokyn uživatele má přednost před vším ostatním.
 
-1) groups: 6–12 stavebních celků podle toho, co se na stavbě reálně dělá (např. Základy a deska, Hrubá stavba 1. NP, Strop, Střecha a krov, Fasáda a zateplení, Okna a výplně, Instalace, Interiér, Lešení, Projekt a povolení, Režie stavby). Seřaď je podle postupu stavby.
-2) assign: KAŽDÝ výdaj (key) přiřaď do jednoho celku z groups a druhu:
-   prace = práce řemeslníků a pomocníků (i když je v kategorii „materiál“ – rozhoduje dodavatel a popis; řemeslník placený po dnech je práce),
-   material = materiál a výrobky, stroje = pronájem strojů, lešení, bednění, kontejnery, doprava, čerpadlo betonu,
-   projekt = projekt, statik, geodet, poplatky, rezie = palivo, nářadí, drobná režie.
-   Celek odvoď z popisu, úkolu/fáze, dodavatele a DATA (výdaje bez úkolu patří k tomu, co se v tu dobu stavělo – podle fází a sousedních výdajů).
-   activity: u druhu prace krátký název činnosti (např. „Zdění 2. NP“, „Věnec 2. NP“, „Úklid a manipulace“), jinak null.
-3) activities: pro dodavatele práce a jejich činnosti uveď plán v Kč, pokud ho lze vyčíst z plánu (odhady hotových i nehotových úkolů, popisy „X dní × sazba“), jinak null. note: krátký postřeh (pomalé tempo, práce, kterou by levněji udělal pomocník, souběh dvou part…), jinak null. NEPOČÍTEJ součty – sečteme je sami.
-4) forecastAssign: každou zbývající položku (key f…) přiřaď do celku (můžeš použít i celky, které ve výdajích zatím nejsou, např. Energie, Koupelna, Terasa – přidej je do groups).
-   forecastBands: pro každý celek se zbývajícími náklady realistické pásmo low–high v Kč s DPH podle cen trhu ČR 2026. Když plán zjevně chybí nebo je jen za práci (materiál chybí), pásmo to zohlední. note: co v tom je, max 15 slov.
-5) comparisons: 5–10 srovnání jednotkových cen s trhem jen tam, kde z dat jde zjistit množství (m³ betonu, m² zateplení z faktury, sazba za den, Kč/m² plochy…). V „ours“ ukaž výpočet (např. „69 212 Kč / 22 m³ = 3 146 Kč/m³“). Trh: ceník z katalogu (ceny s DPH), jinak obvyklé ceny ČR 2026 se zdrojem. Nevymýšlej množství – když je odhaduješ, napiš „odhad“. verdict: good = levněji než trh, ok = na úrovni trhu, check = nelze rozhodnout / ověřit, bad = dráž.
-6) summary: 4–6 hlavních zjištění (tone good/warn/info, nadpis do 6 slov, text 1–2 věty s čísly).
-7) recommendations: 3–6 konkrétních doporučení.
-8) assumptions: z čeho vycházíš (plochy, sazby, pokyn uživatele), 1–2 věty.
-Pokyn uživatele má přednost.`;
+1) groups: 6–12 stavebních CELKŮ podle toho, co se reálně staví, seřazených podle postupu stavby (např. Základy a deska, Hrubá stavba 1. NP, Strop nad 1. NP, Hrubá stavba 2. NP a věnec, Střecha a krov, Fasáda a zateplení, Lešení, Okna a výplně, Instalace, Energie, Interiér a koupelna, Terasa, Dokončení a venkovní plochy, Projekt a povolení, Režie stavby). Celek není složka ani projekt. V assign i forecastAssign používej PŘESNĚ tyto názvy.
+2) assign: KAŽDÝ výdaj (key) přiřaď do celku a druhu. Kategorie z evidence je NESPOLEHLIVÁ – rozhoduje dodavatel a popis:
+   prace = práce lidí. Platby fyzickým osobám-řemeslníkům v kulatých denních částkách (např. 2 000, 3 000 Kč) nebo s popisem činnosti (zdění, šalování, výztuž, betonáž, úklid, nátěr, lepení, „stavební práce“, „výběr karta“, „platba za týden“) jsou VŽDY práce, i když jsou vedené jako materiál.
+   material = materiál a výrobky (i když je nakoupil řemeslník: „dřevo“, „fólie“, „materiál“ v popisu u dodavatele, který jinak pracuje, je materiál).
+   stroje = pronájem strojů, bednění, lešení (montáž i pronájem), kontejnery, doprava materiálu, čerpání betonu, půjčení dodávky.
+   projekt = projekt, statik, geodet, poplatky. rezie = palivo, nářadí, drobná režie.
+   Celek odvoď z popisu, úkolu/fáze a DATA – výdaj bez úkolu patří k tomu, co se v tu dobu stavělo (podle fází a sousedních výdajů).
+   activity: jen u druhu prace krátká činnost (např. „Zdění 2. NP“, „Věnec 2. NP“, „Úklid a manipulace“, „Sokl a zakládací lišta“), jinak null.
+3) activities: pro každou dvojici dodavatel + činnost z assign uveď planTotal = plánovaná CELKOVÁ cena činnosti v Kč (ne denní sazba!), jen když ji lze vyčíst z plánu (odhad úkolu, popis „X dní × sazba“), jinak null. note: krátký postřeh (pomalé tempo, práce, kterou by levněji udělal pomocník, souběh dvou part, podceněný plán), jinak null. Součty nepočítej.
+4) forecastAssign: každou zbývající položku plánu (key f…) přiřaď do celku a dej jí realistické pásmo low–high v Kč s DPH podle cen trhu ČR 2026 (když je částka v plánu jen za práci nebo zjevně nízká, pásmo to zohlední; když je reálná, low = high = částka).
+   forecastMissing: náklady, které v plánu nejsou vůbec nebo jsou bez ceny, ale stavba je zjevně bude mít (např. energetika bez ceny, WPC terasa, materiál koupelny), s pásmem a krátkou poznámkou.
+   forecastNotes: ke každému celku se zbývajícími náklady jedna krátká věta, co v tom je (max 15 slov).
+5) comparisons: 5–10 srovnání JEDNOTKOVÝCH cen s trhem tam, kde z dat, popisů nebo pokynu jde zjistit množství (m³ betonu, m² zateplení, Kč za člověkoden, Kč/m² podlahové plochy hrubé stavby, Kč za čerpání…). V „ours“ ukaž výpočet („69 212 Kč / 22 m³ = 3 146 Kč/m³“). Srovnávej stejné se stejným (dodávka betonu bez čerpání s ceníkovou cenou betonu dané třídy; práce s cenou práce). Trh: vyhledej aktuální ceny v ČR (ceníky betonáren, ceny řemeslníků, obvyklé ceny stavby) a uveď zdroj; ceník z katalogu ber jako doplněk. Množství nevymýšlej – odhad označ „odhad“. verdict: good = levněji než trh, ok = na úrovni, check = nelze rozhodnout, bad = dráž.
+6) summary: 4–6 hlavních zjištění pro majitele (tone good/warn/info, nadpis do 6 slov, 1–2 věty s konkrétními čísly): jak si stavba vede proti trhu, podíl práce, největší položky, co je ve výhledu podceněné, rizika.
+7) recommendations: 3–6 konkrétních doporučení (co ověřit, co poptat, kde ušetřit).
+8) assumptions: z čeho vycházíš (plochy, sazby, pokyn), 1–2 věty.`;
 
 export async function createCostReport(projectId: string, subProjectId: string | null, userId: string, prompt: string | null) {
   const account = await aiAccountForProject(projectId);
@@ -258,7 +267,7 @@ export async function createCostReport(projectId: string, subProjectId: string |
   });
   if (busy) throw new Error("Report se už připravuje – počkej, až doběhne.");
   const r = await prisma.costReport.create({
-    data: { projectId, subProjectId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
+    data: { projectId, subProjectId, prompt: prompt?.trim() || null, model: REPORT_MODEL, createdById: userId },
     select: { id: true },
   });
   return r.id;
@@ -313,28 +322,45 @@ export async function runCostReport(reportId: string) {
   }
 }
 
-/** Pojistky nad výstupem modelu: neznámé klíče pryč, chybějící výdaje do „Ostatní“. */
+/** Sjednocení názvu celku – pomlčky, mezery, velikost písmen. */
+const groupKey = (g: string) => g.replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\s+/g, " ").trim().toLowerCase();
+
+/** Pojistky nad výstupem modelu: neznámé klíče pryč, chybějící výdaje do „Ostatní“, sjednocené celky. */
 function normalize(res: ReportResult, data: ReportData): ReportResult {
-  const groups = [...new Set(res.groups.map((g) => g.trim()).filter(Boolean))];
+  const groups: string[] = [];
+  const canon = new Map<string, string>();
   const ensure = (g: string) => {
-    const t = g.trim() || "Ostatní";
-    if (!groups.includes(t)) groups.push(t);
-    return t;
+    const t = (g || "").replace(/\s+/g, " ").trim() || "Ostatní";
+    const k = groupKey(t);
+    if (!canon.has(k)) {
+      canon.set(k, t);
+      groups.push(t);
+    }
+    return canon.get(k)!;
   };
+  res.groups.forEach(ensure);
   const eKeys = new Set(data.expenses.map((e) => e.key));
   const seen = new Set<string>();
   const assign = res.assign
     .filter((a) => eKeys.has(a.key) && !seen.has(a.key) && seen.add(a.key))
-    .map((a) => ({ ...a, group: ensure(a.group), kind: REPORT_KINDS.includes(a.kind) ? a.kind : "material" }));
+    .map((a) => ({ ...a, group: ensure(a.group), kind: REPORT_KINDS.includes(a.kind) ? a.kind : ("material" as ReportKind) }));
   for (const e of data.expenses) if (!seen.has(e.key)) assign.push({ key: e.key, group: ensure("Ostatní"), kind: "material", activity: null });
-  const fKeys = new Set(data.forecast.map((f) => f.key));
+  const amount = new Map(data.forecast.map((f) => [f.key, f.amount]));
   const fSeen = new Set<string>();
+  const band = (lo: number, hi: number) => {
+    const l = Math.max(0, Math.round(Math.min(lo, hi)));
+    return { low: l, high: Math.max(l, Math.round(Math.max(lo, hi))) };
+  };
   const forecastAssign = res.forecastAssign
-    .filter((a) => fKeys.has(a.key) && !fSeen.has(a.key) && fSeen.add(a.key))
-    .map((a) => ({ key: a.key, group: ensure(a.group) }));
-  for (const f of data.forecast) if (!fSeen.has(f.key)) forecastAssign.push({ key: f.key, group: ensure(f.phase ?? "Ostatní") });
-  const forecastBands = res.forecastBands
-    .filter((b) => b.high >= 0)
-    .map((b) => ({ ...b, group: ensure(b.group), low: Math.max(0, Math.min(b.low, b.high)), high: Math.max(b.low, b.high) }));
-  return { ...res, groups, assign, forecastAssign, forecastBands };
+    .filter((a) => amount.has(a.key) && !fSeen.has(a.key) && fSeen.add(a.key))
+    .map((a) => ({ key: a.key, group: ensure(a.group), ...band(a.low, a.high) }));
+  for (const f of data.forecast)
+    if (!fSeen.has(f.key)) forecastAssign.push({ key: f.key, group: ensure(f.phase ?? "Ostatní"), low: f.amount, high: f.amount });
+  const forecastMissing = res.forecastMissing
+    .filter((m) => m.high > 0)
+    .map((m) => ({ ...m, group: ensure(m.group), ...band(m.low, m.high) }));
+  const forecastNotes = res.forecastNotes.map((x) => ({ ...x, group: ensure(x.group) }));
+  // „plán“ do 5 000 Kč je denní sazba, ne plán celé činnosti
+  const activities = res.activities.map((a) => ({ ...a, planTotal: a.planTotal != null && a.planTotal > 5000 ? a.planTotal : null }));
+  return { ...res, groups, assign, forecastAssign, forecastMissing, forecastNotes, activities };
 }
