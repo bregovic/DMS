@@ -55,6 +55,8 @@ export type ReportData = {
   expenses: ReportExpense[];
   forecast: ReportForecastItem[];
   phases: { title: string; done: number; total: number; start: string | null; end: string | null }[];
+  /** Odhady u hotových úkolů – plán k porovnání se skutečností. */
+  donePlan?: { title: string; phase: string | null; vendor: string | null; estimate: number }[];
 };
 
 export type ReportResult = {
@@ -209,6 +211,9 @@ export async function collectReportData(projectId: string, subProjectId: string 
     })),
     forecast,
     phases,
+    donePlan: tasks
+      .filter((t) => t.status === "done" && t.costEstimate != null && Number(t.costEstimate) > 0)
+      .map((t) => ({ title: t.title, phase: t.parent?.title ?? null, vendor: t.vendor?.name ?? null, estimate: Number(t.costEstimate) })),
   };
 }
 
@@ -249,7 +254,7 @@ const INSTRUCTIONS = `Jsi rozpočtář a stavbyvedoucí v Česku. Dostaneš výd
    stroje = pronájem strojů, bednění, lešení (montáž i pronájem), kontejnery, doprava materiálu, čerpání betonu, půjčení dodávky.
    projekt = projekt, statik, geodet, poplatky. rezie = palivo, nářadí, drobná režie.
    Celek odvoď z popisu, úkolu/fáze a DATA – výdaj bez úkolu patří k tomu, co se v tu dobu stavělo (podle fází a sousedních výdajů).
-3) activities: pro každou dvojici dodavatel práce + celek (z assign s druhem prace) uveď planTotal = plánovaná CELKOVÁ cena práce v tom celku v Kč (ne denní sazba!), jen když ji lze vyčíst z plánu (odhady úkolů, popis „X dní × sazba“), jinak null. note: krátký postřeh k práci v celku (co se dělalo, pomalé tempo, práce, kterou by levněji udělal pomocník, souběh dvou part, podceněný plán), max 20 slov, jinak null. Součty nepočítej – sečteme je sami.
+3) activities: pro každou dvojici dodavatel práce + celek (z assign s druhem prace) uveď planTotal = plánovaná CELKOVÁ cena práce v tom celku v Kč (ne denní sazba!), jen když ji lze vyčíst z plánu (plan_hotovych_ukolu i zbývající odhady, popis „X dní × sazba“), jinak null. note: krátký postřeh k práci v celku (co se dělalo, pomalé tempo, práce, kterou by levněji udělal pomocník, souběh dvou part, podceněný plán), max 20 slov, jinak null. Součty nepočítej – sečteme je sami.
 4) forecastAssign: každou zbývající položku plánu (key f…) přiřaď do celku a dej jí realistické pásmo low–high v Kč s DPH podle cen trhu ČR 2026 (když je částka v plánu jen za práci nebo zjevně nízká, pásmo to zohlední; když je reálná, low = high = částka).
    forecastMissing: náklady, které v plánu nejsou vůbec nebo jsou bez ceny, ale stavba je zjevně bude mít (např. energetika bez ceny, WPC terasa, materiál koupelny), s pásmem a krátkou poznámkou.
    forecastNotes: ke každému celku se zbývajícími náklady jedna krátká věta, co v tom je (max 15 slov).
@@ -293,6 +298,7 @@ export async function runCostReport(reportId: string) {
         ukol: e.task, faze: e.phase, ...(e.hours ? { hodiny: e.hours, sazba: e.rate } : {}),
       })),
       zbyva: data.forecast.map((f) => ({ key: f.key, polozka: f.title, faze: f.phase, dodavatel: f.vendor, castka: f.amount, popis: f.note })),
+      plan_hotovych_ukolu: (data.donePlan ?? []).map((t) => ({ ukol: t.title, faze: t.phase, dodavatel: t.vendor, odhad: t.estimate })),
       faze: data.phases.map((p) => `${p.title}: ${p.done}/${p.total} hotovo (${p.start ?? "?"} – ${p.end ?? "?"})`),
     };
     const account = await aiAccountForProject(r.projectId);
