@@ -53,7 +53,7 @@ function fallbackAssign(data: ReportData): ReportResult["assign"] {
           : /palivo|fuel|nářad|narad/.test(c)
             ? "rezie"
             : "material";
-    return { key: e.key, group: e.phase ?? e.task ?? "Bez zařazení", kind, activity: null };
+    return { key: e.key, group: e.phase ?? e.task ?? "Bez zařazení", kind };
   });
 }
 
@@ -79,9 +79,9 @@ function compute(data: ReportData, result: ReportResult | null) {
     byMonth.set(e.date.slice(0, 7), (byMonth.get(e.date.slice(0, 7)) ?? 0) + e.amount);
     const v = e.vendor ?? "(bez dodavatele)";
     byVendor.set(v, (byVendor.get(v) ?? 0) + e.amount);
-    if (a.kind === "prace" && a.activity) {
-      const k = `${v}|${a.activity}`;
-      const x = act.get(k) ?? { vendor: v, activity: a.activity, actual: 0 };
+    if (a.kind === "prace") {
+      const k = `${v}|${a.group}`;
+      const x = act.get(k) ?? { vendor: v, activity: a.group, actual: 0 };
       x.actual += e.amount;
       act.set(k, x);
     }
@@ -141,13 +141,17 @@ function compute(data: ReportData, result: ReportResult | null) {
   const fcLow = fcRows.reduce((s, r) => s + r.low, 0);
   const fcHigh = fcRows.reduce((s, r) => s + r.high, 0);
 
-  const plans = new Map((result?.activities ?? []).map((a) => [`${a.vendor}|${a.activity}`, a]));
+  const plans = new Map((result?.activities ?? []).map((a) => [`${a.vendor}|${"group" in a ? a.group : ""}`, a]));
   const activities = [...act.values()]
     .map((a) => {
       const p = plans.get(`${a.vendor}|${a.activity}`);
       return { ...a, plan: p?.planTotal ?? null, note: p?.note ?? null };
     })
     .sort((a, b) => a.vendor.localeCompare(b.vendor, "cs") || b.actual - a.actual);
+  // dodavatelé seřazení podle objemu práce
+  const vendorLabor = new Map<string, number>();
+  for (const a of activities) vendorLabor.set(a.vendor, (vendorLabor.get(a.vendor) ?? 0) + a.actual);
+  activities.sort((a, b) => (vendorLabor.get(b.vendor) ?? 0) - (vendorLabor.get(a.vendor) ?? 0) || a.vendor.localeCompare(b.vendor, "cs") || b.actual - a.actual);
 
   const done = data.phases.reduce((s, p) => s + p.done, 0);
   const all = data.phases.reduce((s, p) => s + p.total, 0);
@@ -574,7 +578,7 @@ export function CostReportView({ data, result, error }: { data: ReportData; resu
             <table className="rp-num">
               <thead>
                 <tr>
-                  <th>Dodavatel · činnost</th>
+                  <th>Dodavatel · celek</th>
                   <th>Skutečnost</th>
                   <th>Plán</th>
                   <th>Hodnocení</th>
