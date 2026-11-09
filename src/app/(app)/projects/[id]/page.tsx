@@ -1395,18 +1395,45 @@ export default async function ProjectDetailPage({
         }
       >
         {/* Balíčky – rozhoduje se o nich za celek, proto jsou nad seznamem. */}
+        {/* Balíček se řídí filtrem stavu: všechny jeho žádanky ve výpisu →
+            celý; jen část (zbytek ukončený) → sbalený na řádek; žádná → skrytý. */}
         {bundles
           .filter((b) => b.requests.some((r) => levelRequests.some((x) => x.id === r.id)))
-          .map((b) => (
-            <BundlePanel
-              key={b.id}
-              bundle={b}
-              projectId={project.id}
-              vendors={offerVendorItems}
-              isManager={isManager}
-              canAdd={canAdd}
-            />
-          ))}
+          .map((b) => {
+            const shownIds = new Set(shownRequests.map((x) => x.id));
+            const open = b.requests.filter((r) => shownIds.has(r.id));
+            if (open.length === 0) return null;
+            const panel = (
+              <BundlePanel
+                key={b.id}
+                bundle={b}
+                projectId={project.id}
+                vendors={offerVendorItems}
+                isManager={isManager}
+                canAdd={canAdd}
+              />
+            );
+            if (open.length === b.requests.length) return panel;
+            const closed = b.requests.filter((r) => !shownIds.has(r.id));
+            return (
+              <details key={b.id} className="group mb-6 border border-stone-300 bg-stone-50/60">
+                <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-3">
+                  <span className="min-w-0">
+                    <span className="text-sm font-medium text-stone-950">{b.name}</span>
+                    <span className="kicker mt-0.5 block">
+                      Balíček · ukončeno: {closed.map((r) => r.title).join(" · ")}
+                      {` · otevřené: ${open.map((r) => r.title).join(" · ")}`}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-stone-500 underline-offset-2 group-open:hidden hover:underline">
+                    Zobrazit celý balíček
+                  </span>
+                  <span className="hidden shrink-0 text-xs text-stone-500 group-open:inline">Skrýt</span>
+                </summary>
+                <div className="border-t border-stone-200 [&>section]:mb-0 [&>section]:border-0">{panel}</div>
+              </details>
+            );
+          })}
 
         {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
