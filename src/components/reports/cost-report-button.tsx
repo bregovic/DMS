@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileChartColumn } from "lucide-react";
+import { Plus } from "lucide-react";
 import { startCostReport } from "@/server/actions/cost-report";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,9 @@ import { chybaAkce } from "@/lib/chyba-akce";
 export function CostReportButton({
   projectId,
   subProjectId,
-  recent,
 }: {
   projectId: string;
   subProjectId: string | null;
-  recent: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,11 +28,11 @@ export function CostReportButton({
         onClick={() => setOpen(true)}
         className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white cursor-pointer sm:py-0"
       >
-        <FileChartColumn className="size-4" />
-        Report nákladů
+        <Plus className="size-4" />
+        Nový report
       </button>
       {open && (
-        <Dialog title="Report nákladů" size="md" onClose={() => setOpen(false)}>
+        <Dialog title="Nový report nákladů" size="md" onClose={() => setOpen(false)}>
           <form
             action={async (fd) => {
               setBusy(true);
@@ -60,20 +58,6 @@ export function CostReportButton({
                 className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:border-stone-950 focus-visible:outline-none"
               />
             </div>
-            {recent.length > 0 && (
-              <div className="space-y-1">
-                <p className="kicker">Předchozí reporty</p>
-                <ul className="space-y-0.5 text-sm">
-                  {recent.map((r) => (
-                    <li key={r.id}>
-                      <a href={`/report/${r.id}`} className="text-stone-700 underline-offset-2 hover:text-stone-950 hover:underline">
-                        {r.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Zrušit

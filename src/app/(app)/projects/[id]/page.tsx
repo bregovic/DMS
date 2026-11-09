@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Folder, CalendarRange, Paperclip } from "lucide-react";
+import { ArrowLeft, Folder, CalendarRange, Paperclip, FileChartColumn } from "lucide-react";
 import { requireUser } from "@/lib/dal";
 import { getProjectAccess, getTaskOnlyAccess } from "@/server/access";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +66,6 @@ import {
   expenseStage,
 } from "@/lib/constants";
 import { computeForecastContribs } from "@/lib/forecast";
-import { CostReportButton } from "@/components/reports/cost-report-button";
 import { getProjectTypeMap } from "@/server/project-types";
 import { getExpenseCategories } from "@/server/expense-categories";
 import { getDocumentTypes } from "@/server/document-types";
@@ -771,16 +770,6 @@ export default async function ProjectDetailPage({
         })
       : [];
 
-  // Poslední reporty nákladů této úrovně (#48).
-  const recentReports = isManager
-    ? await prisma.costReport.findMany({
-        where: { projectId: project.id, subProjectId: currentSub?.id ?? null },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { id: true, createdAt: true, status: true },
-      })
-    : [];
-
   // Dodavatel se stejným e-mailem jako přihlášený uživatel → předvyplní se u výdaje.
   // (myEmail je definováno výše.)
   const myVendorId = myEmail
@@ -869,14 +858,13 @@ export default async function ProjectDetailPage({
             Plánování
           </Link>
           {isManager && (
-            <CostReportButton
-              projectId={project.id}
-              subProjectId={currentSub?.id ?? null}
-              recent={recentReports.map((r) => ({
-                id: r.id,
-                label: `${formatDate(r.createdAt)}${r.status === "error" ? " · nedokončený" : ""}`,
-              }))}
-            />
+            <Link
+              href={`/projects/${project.id}/reporty${sub ? `?sub=${sub}` : ""}`}
+              className="flex items-center gap-2 border border-stone-300 px-4 py-2.5 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:bg-stone-950 hover:text-white sm:py-0"
+            >
+              <FileChartColumn className="size-4" />
+              Reporty
+            </Link>
           )}
           {(() => {
             const expLevel = currentSub ? spentBySub.get(currentSub.id) ?? 0 : total;

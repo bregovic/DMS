@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, FileDown, Printer, RefreshCw } from "lucide-react";
@@ -54,48 +54,53 @@ export function CostReportToolbar({
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(documentId);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [rerun, setRerun] = useState(false);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const started = useRef(false);
+
+  // Hotový report bez PDF: PDF se vytvoří a uloží do dokumentů samo (jednou).
+  useEffect(() => {
+    if (!ready || saved || started.current) return;
+    started.current = true;
+    (async () => {
+      setSaving(true);
+      try {
+        // počkat na písma, ať se do PDF nepropíše náhradní font
+        await document.fonts?.ready;
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("file", await reportPdf(fileName));
+        const res = await saveCostReportPdf(fd);
+        setSaved(res.documentId);
+      } catch (e) {
+        setSaveError(chybaAkce(e, "PDF se nepodařilo uložit."));
+      } finally {
+        setSaving(false);
+      }
+    })();
+  }, [ready, saved, id, fileName]);
 
   return (
     <div className="no-print sticky top-0 z-10 mb-6 border-b border-stone-200 bg-stone-100/95 backdrop-blur">
       <div className="mx-auto flex max-w-[210mm] flex-wrap items-center gap-2 px-2 py-3">
         <Link href={backHref} className={btn}>
-          <ArrowLeft className="size-4" /> Zpět
+          <ArrowLeft className="size-4" /> Reporty
         </Link>
         <span className="flex-1" />
         {ready && (
           <>
+            {saving && <span className="text-sm text-stone-500">Ukládám PDF…</span>}
+            {saveError && <span className="text-sm text-red-700">{saveError}</span>}
+            {saved && (
+              <a href={`/api/documents/${saved}`} target="_blank" rel="noreferrer" className={btn}>
+                <FileDown className="size-4" /> Stáhnout PDF
+              </a>
+            )}
             <button type="button" className={btn} onClick={() => window.print()}>
               <Printer className="size-4" /> Tisk
             </button>
-            <button
-              type="button"
-              className={btn}
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  const fd = new FormData();
-                  fd.set("id", id);
-                  fd.set("file", await reportPdf(fileName));
-                  const res = await saveCostReportPdf(fd);
-                  setSaved(res.documentId);
-                } catch (e) {
-                  window.alert(chybaAkce(e, "PDF se nepodařilo uložit."));
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              <FileDown className="size-4" /> {saving ? "Ukládám…" : saved ? "Uložit znovu" : "Uložit do dokumentů"}
-            </button>
-            {saved && (
-              <a href={`/api/documents/${saved}`} target="_blank" rel="noreferrer" className="text-sm text-stone-600 underline underline-offset-2 hover:text-stone-950">
-                Otevřít PDF
-              </a>
-            )}
           </>
         )}
         <button type="button" className={btn} onClick={() => setRerun(true)}>

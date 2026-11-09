@@ -84,3 +84,23 @@ export async function saveCostReportPdf(formData: FormData) {
   revalidatePath(`/report/${r.id}`);
   return { documentId: doc.id };
 }
+
+/** Smaže report i jeho uložené PDF. */
+export async function deleteCostReport(formData: FormData) {
+  const r = await prisma.costReport.findUnique({
+    where: { id: String(formData.get("id")) },
+    select: { id: true, projectId: true, documentId: true },
+  });
+  if (!r) return;
+  await managerOf(r.projectId);
+  if (r.documentId) {
+    const doc = await prisma.document.findFirst({ where: { id: r.documentId, projectId: r.projectId }, select: { id: true, fileName: true } });
+    if (doc) {
+      await prisma.document.delete({ where: { id: doc.id } });
+      await storage.delete(doc.fileName);
+    }
+  }
+  await prisma.costReport.delete({ where: { id: r.id } });
+  revalidatePath(`/projects/${r.projectId}/reporty`);
+  revalidatePath(`/projects/${r.projectId}`);
+}

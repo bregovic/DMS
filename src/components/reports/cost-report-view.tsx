@@ -161,6 +161,18 @@ function compute(data: ReportData, result: ReportResult | null) {
   return { total, unpaid, byKind, groups, months, cumulative, vendors, fcRows, fcPlanTotal, fcLow, fcHigh, activities, done, all, pace };
 }
 
+/** Souhrnná čísla reportu pro přehled reportů (stejný výpočet jako v reportu). */
+export function reportSummary(data: ReportData, result: ReportResult | null) {
+  const c = compute(data, result);
+  const hasBands = (result?.forecastAssign?.length ?? 0) > 0;
+  return {
+    total: c.total,
+    remaining: c.fcPlanTotal,
+    finalLow: c.total + (hasBands ? c.fcLow : c.fcPlanTotal),
+    finalHigh: c.total + (hasBands ? c.fcHigh : c.fcPlanTotal),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Grafy
 // ---------------------------------------------------------------------------

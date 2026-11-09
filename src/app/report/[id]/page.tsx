@@ -32,7 +32,7 @@ export default async function CostReportPage({ params }: PageProps<"/report/[id]
   const data = r.data as unknown as ReportData | null;
   const result = r.status === "ready" ? (r.result as unknown as ReportResult) : null;
   const error = stale ? "zpracování nedoběhlo" : r.status === "error" ? r.error : null;
-  const backHref = `/projects/${r.projectId}${r.subProjectId ? `?sub=${r.subProjectId}` : ""}`;
+  const backHref = `/projects/${r.projectId}/reporty${r.subProjectId ? `?sub=${r.subProjectId}` : ""}`;
   const day = r.createdAt.toISOString().slice(0, 10);
   const fileName = `Report nákladů – ${(data?.scopeName ?? r.project.name).replace(/[\\/:*?"<>|]+/g, " ")} ${day}.pdf`;
 
