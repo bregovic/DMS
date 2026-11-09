@@ -50,7 +50,7 @@ export default async function CostReportPage({ params }: PageProps<"/report/[id]
         fileName={fileName}
         prompt={r.prompt}
         documentId={r.documentId}
-        ready={!running && !!data}
+        ready={r.status === "ready" && !!data}
       />
       {running ? (
         <div className="mx-auto max-w-md px-4 py-24 text-center">
