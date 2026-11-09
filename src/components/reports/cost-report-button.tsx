@@ -56,7 +56,7 @@ export function CostReportButton({
                 id="cr-prompt"
                 name="prompt"
                 rows={4}
-                placeholder="Např. sazba Petr Hájek 3 000 Kč/den; plocha fasády ~170 m²"
+                placeholder="Např. denní sazby dodavatelů, plochy (fasáda, střecha), co v plánu chybí"
                 className="flex w-full rounded-none border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 placeholder:text-stone-400 focus-visible:border-stone-950 focus-visible:outline-none"
               />
             </div>
