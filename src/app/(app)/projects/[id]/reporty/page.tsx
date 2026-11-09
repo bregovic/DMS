@@ -10,8 +10,10 @@ import { CostReportButton } from "@/components/reports/cost-report-button";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { deleteCostReport } from "@/server/actions/cost-report";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
+import { after } from "next/server";
+import { claimOrphanedReport, runCostReport } from "@/server/cost-report";
 
-const STALE_MS = 10 * 60_000;
+const STALE_MS = 20 * 60_000;
 const isStale = (createdAt: Date) => Date.now() - createdAt.getTime() > STALE_MS;
 const nf0 = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
 const tis = (v: number) => `${nf0.format(Math.round(v / 1000))} tis.`;
@@ -42,7 +44,7 @@ export default async function CostReportsPage({
       orderBy: { createdAt: "desc" },
       select: {
         id: true, subProjectId: true, status: true, error: true, data: true, result: true, documentId: true,
-        createdAt: true, costUsd: true, createdById: true,
+        createdAt: true, costUsd: true, createdById: true, responseId: true,
       },
     }),
   ]);
@@ -59,6 +61,11 @@ export default async function CostReportsPage({
     select: { id: true, size: true },
   });
   const docSize = new Map(docs.map((d) => [d.id, d.size]));
+
+  // Osiřelé běhy (restart serveru) převzít a navázat na úlohu u OpenAI.
+  for (const r of reports)
+    if (r.status === "running" && r.responseId && !isStale(r.createdAt) && (await claimOrphanedReport(r.id)))
+      after(() => runCostReport(r.id));
 
   const rows = reports.map((r) => {
     const running = r.status === "running" && !isStale(r.createdAt);

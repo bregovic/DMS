@@ -267,7 +267,7 @@ export async function createCostReport(projectId: string, subProjectId: string |
   const account = await aiAccountForProject(projectId);
   await assertBudget(account);
   const busy = await prisma.costReport.findFirst({
-    where: { projectId, status: "running", createdAt: { gte: new Date(Date.now() - 10 * 60_000) } },
+    where: { projectId, status: "running", createdAt: { gte: new Date(Date.now() - 20 * 60_000) } },
     select: { id: true },
   });
   if (busy) throw new Error("Report se už připravuje – počkej, až doběhne.");
@@ -278,12 +278,30 @@ export async function createCostReport(projectId: string, subProjectId: string |
   return r.id;
 }
 
+/** Běh bez známky života déle než tolik je osiřelý (server se mezitím restartoval). */
+export const REPORT_HEARTBEAT_MS = 60_000;
+
+/**
+ * Převezme osiřelý běh (po restartu serveru) a naváže na úlohu u OpenAI.
+ * Vrací true, když se běh převzal – volající ho pak spustí na pozadí.
+ */
+export async function claimOrphanedReport(reportId: string) {
+  const claimed = await prisma.costReport.updateMany({
+    where: { id: reportId, status: "running", updatedAt: { lt: new Date(Date.now() - REPORT_HEARTBEAT_MS) } },
+    data: { status: "running" },
+  });
+  return claimed.count === 1;
+}
+
 export async function runCostReport(reportId: string) {
   try {
     const r = await prisma.costReport.findUnique({ where: { id: reportId } });
     if (!r) return;
-    const data = await collectReportData(r.projectId, r.subProjectId);
-    await prisma.costReport.update({ where: { id: r.id }, data: { data: data as unknown as Prisma.InputJsonValue } });
+    // Po restartu serveru: podklady už jsou uložené, úloha u OpenAI běží dál.
+    const resumed = !!(r.responseId && r.data);
+    const data = resumed ? (r.data as unknown as ReportData) : await collectReportData(r.projectId, r.subProjectId);
+    if (!resumed)
+      await prisma.costReport.update({ where: { id: r.id }, data: { data: data as unknown as Prisma.InputJsonValue } });
     if (data.expenses.length === 0 && data.forecast.length === 0) {
       await prisma.costReport.update({ where: { id: r.id }, data: { status: "error", error: "Ve složce nejsou žádné výdaje ani plánované náklady." } });
       return;
@@ -315,7 +333,20 @@ export async function runCostReport(reportId: string) {
       ],
       "cost_report",
       SCHEMA,
-      { effort: "low", maxOutput: 40_000, webSearch: true, account },
+      {
+        effort: "low",
+        maxOutput: 40_000,
+        webSearch: true,
+        account,
+        resumeId: resumed ? r.responseId : null,
+        onStarted: async (responseId) => {
+          await prisma.costReport.update({ where: { id: r.id }, data: { responseId } });
+        },
+        // známka života – podle ní se pozná osiřelý běh
+        onPoll: async () => {
+          await prisma.costReport.update({ where: { id: r.id }, data: { status: "running" } });
+        },
+      },
     );
     await prisma.costReport.update({
       where: { id: r.id },

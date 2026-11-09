@@ -446,7 +446,18 @@ export async function callModel<T>(
   content: unknown[],
   name: string,
   schema: unknown,
-  opts: { effort?: "minimal" | "low" | "medium"; maxOutput?: number; webSearch?: boolean; account?: AiAccount } = {},
+  opts: {
+    effort?: "minimal" | "low" | "medium";
+    maxOutput?: number;
+    webSearch?: boolean;
+    account?: AiAccount;
+    /** Navázat na už spuštěnou úlohu u OpenAI (po restartu serveru) místo nové. */
+    resumeId?: string | null;
+    /** Úloha u OpenAI založena – id si volající uloží, aby šlo po restartu navázat. */
+    onStarted?: (responseId: string) => Promise<void>;
+    /** Volá se při každé kontrole stavu (heartbeat běhu). */
+    onPoll?: () => Promise<void>;
+  } = {},
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
   // Volá se klíčem toho, kdo zpracování platí; bez něj to nemá na čí účet jít.
   const acc = opts.account ?? (await aiAccountForUser(null));
@@ -455,7 +466,9 @@ export async function callModel<T>(
   // PDF trvá i přes 5 min) jinak spadne na výchozím limitu Node fetch
   // („fetch failed“ po 300 s čekání na hlavičky odpovědi).
   const headers = { Authorization: `Bearer ${acc.apiKey}`, "Content-Type": "application/json" };
-  const res = await fetch("https://api.openai.com/v1/responses", {
+  const res = opts.resumeId
+    ? await fetch(`https://api.openai.com/v1/responses/${opts.resumeId}`, { headers, signal: AbortSignal.timeout(60_000) })
+    : await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers,
     signal: AbortSignal.timeout(120_000),
@@ -474,6 +487,7 @@ export async function callModel<T>(
   });
   let j = await res.json();
   if (!res.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${res.status}`);
+  if (!opts.resumeId && j?.id) await opts.onStarted?.(j.id);
   const deadline = Date.now() + 20 * 60_000;
   while (j.status === "queued" || j.status === "in_progress") {
     if (Date.now() > deadline) {
@@ -481,6 +495,7 @@ export async function callModel<T>(
       throw new Error("Zpracování trvalo příliš dlouho – zkus méně dokumentů.");
     }
     await new Promise((r) => setTimeout(r, 5000));
+    await opts.onPoll?.().catch(() => {});
     const poll = await fetch(`https://api.openai.com/v1/responses/${j.id}`, { headers, signal: AbortSignal.timeout(60_000) }).catch(() => null);
     if (!poll) continue; // krátký výpadek sítě – zkusit znovu
     const pj = await poll.json().catch(() => null);

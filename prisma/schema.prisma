@@ -1060,6 +1060,7 @@ model CostReport {
   model        String
   costUsd      Float?
   documentId   String? // uložené PDF
+  responseId   String? // rozběhnutá úloha u OpenAI – po restartu serveru se na ni naváže
   createdById  String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

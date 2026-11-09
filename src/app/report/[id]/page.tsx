@@ -7,11 +7,13 @@ import type { ReportData, ReportResult } from "@/server/cost-report";
 import { CostReportView } from "@/components/reports/cost-report-view";
 import { CostReportToolbar } from "@/components/reports/cost-report-toolbar";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
+import { after } from "next/server";
+import { claimOrphanedReport, runCostReport } from "@/server/cost-report";
 
 export const metadata: Metadata = { title: "Report nákladů – DMS" };
 
-// Běh, který po restartu serveru nedoběhl, se po 10 minutách bere jako chyba.
-const STALE_MS = 10 * 60_000;
+// Běh, který po restartu serveru nedoběhl, se po 20 minutách bere jako chyba.
+const STALE_MS = 20 * 60_000;
 const isStale = (createdAt: Date) => Date.now() - createdAt.getTime() > STALE_MS;
 
 export default async function CostReportPage({ params }: PageProps<"/report/[id]">) {
@@ -21,12 +23,15 @@ export default async function CostReportPage({ params }: PageProps<"/report/[id]
     where: { id },
     select: {
       id: true, projectId: true, subProjectId: true, status: true, prompt: true, data: true, result: true,
-      error: true, documentId: true, createdAt: true,
+      error: true, documentId: true, createdAt: true, responseId: true,
       project: { select: { name: true } },
     },
   });
   if (!r || !isManager(await getProjectRole(r.projectId, user))) notFound();
 
+  // Server se během zpracování restartoval (nasazení) – navázat na úlohu u OpenAI.
+  if (r.status === "running" && r.responseId && !isStale(r.createdAt) && (await claimOrphanedReport(r.id)))
+    after(() => runCostReport(r.id));
   const stale = r.status === "running" && isStale(r.createdAt);
   const running = r.status === "running" && !stale;
   const data = r.data as unknown as ReportData | null;
@@ -50,7 +55,7 @@ export default async function CostReportPage({ params }: PageProps<"/report/[id]
       {running ? (
         <div className="mx-auto max-w-md px-4 py-24 text-center">
           <p className="text-sm font-medium text-stone-950">Připravuji report…</p>
-          <p className="mt-1 text-sm text-stone-500">Rozřazení výdajů a srovnání cen trvá obvykle 1–3 minuty.</p>
+          <p className="mt-1 text-sm text-stone-500">Rozřazení výdajů a srovnání cen trvá obvykle 3–6 minut.</p>
         </div>
       ) : data ? (
         <CostReportView data={data} result={result} error={error} />
