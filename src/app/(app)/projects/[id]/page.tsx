@@ -18,8 +18,6 @@ import { RequestStatusSelect } from "@/components/requests/request-status-select
 import { OffersPanel } from "@/components/requests/offers-panel";
 import { RequestAttachments } from "@/components/requests/request-attachments";
 import { OfferComparison } from "@/components/requests/offer-comparison";
-import { BundlePanel } from "@/components/requests/bundle-panel";
-import { BundleManager } from "@/components/requests/bundle-manager";
 import { bundleViews } from "@/server/bundles";
 import { PlanAi } from "@/components/planning/plan-ai";
 import { planAiProps } from "@/server/plan-ai";
@@ -148,7 +146,9 @@ export default async function ProjectDetailPage({
           include: {
             vendor: { select: { name: true } },
             createdBy: { select: { name: true, email: true } },
+            tenders: { select: { tender: { select: { id: true, title: true, status: true } } } },
             documents: {
+              where: { gallery: false },
               select: {
                 id: true,
                 originalName: true,
@@ -182,6 +182,12 @@ export default async function ProjectDetailPage({
                 documents: {
                   select: { id: true, originalName: true },
                   orderBy: { createdAt: "asc" },
+                },
+                bundleOffer: {
+                  select: {
+                    price: true,
+                    documents: { select: { id: true, originalName: true }, orderBy: { createdAt: "asc" }, take: 1 },
+                  },
                 },
               },
             },
@@ -1386,11 +1392,12 @@ export default async function ProjectDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {isManager && (
-              <BundleManager
-                projectId={project.id}
-                requests={levelRequests.map((r) => ({ id: r.id, title: r.title, bundleId: r.bundleId }))}
-                bundles={bundles.map((b) => ({ id: b.id, name: b.name }))}
-              />
+              <Link
+                href={`/projects/${project.id}/rizeni${sub ? `?sub=${sub}` : ""}`}
+                className="inline-flex h-9 items-center border border-stone-300 px-3 text-sm text-stone-700 transition-colors hover:border-stone-950 hover:text-stone-950"
+              >
+                Poptávková řízení
+              </Link>
             )}
             {canAdd && (
               <NewRequestForm
@@ -1403,47 +1410,6 @@ export default async function ProjectDetailPage({
           </div>
         }
       >
-        {/* Balíčky – rozhoduje se o nich za celek, proto jsou nad seznamem. */}
-        {/* Balíček se řídí filtrem stavu: všechny jeho žádanky ve výpisu →
-            celý; jen část (zbytek ukončený) → sbalený na řádek; žádná → skrytý. */}
-        {bundles
-          .filter((b) => b.requests.some((r) => levelRequests.some((x) => x.id === r.id)))
-          .map((b) => {
-            const shownIds = new Set(shownRequests.map((x) => x.id));
-            const open = b.requests.filter((r) => shownIds.has(r.id));
-            if (open.length === 0) return null;
-            const panel = (
-              <BundlePanel
-                key={b.id}
-                bundle={b}
-                projectId={project.id}
-                vendors={offerVendorItems}
-                isManager={isManager}
-                canAdd={canAdd}
-              />
-            );
-            if (open.length === b.requests.length) return panel;
-            const closed = b.requests.filter((r) => !shownIds.has(r.id));
-            return (
-              <details key={b.id} className="group mb-6 border border-stone-300 bg-stone-50/60">
-                <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-3">
-                  <span className="min-w-0">
-                    <span className="text-sm font-medium text-stone-950">{b.name}</span>
-                    <span className="kicker mt-0.5 block">
-                      Balíček · ukončeno: {closed.map((r) => r.title).join(" · ")}
-                      {` · otevřené: ${open.map((r) => r.title).join(" · ")}`}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs text-stone-500 underline-offset-2 group-open:hidden hover:underline">
-                    Zobrazit celý balíček
-                  </span>
-                  <span className="hidden shrink-0 text-xs text-stone-500 group-open:inline">Skrýt</span>
-                </summary>
-                <div className="border-t border-stone-200 [&>section]:mb-0 [&>section]:border-0">{panel}</div>
-              </details>
-            );
-          })}
-
         {levelRequests.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">Zatím žádné žádanky.</p>
         ) : (
@@ -1468,7 +1434,8 @@ export default async function ProjectDetailPage({
             {shownRequests.map((r) => (
               <li
                 key={r.id}
-                className="group border-b border-stone-200 py-3.5"
+                id={`r-${r.id}`}
+                className="group scroll-mt-20 border-b border-stone-200 py-3.5"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
                   <div className="min-w-0 flex-1 basis-60">
@@ -1503,11 +1470,23 @@ export default async function ProjectDetailPage({
                         : ""}
                       {catMap.get(r.category) ?? r.category}
                       {r.vendor ? ` · ${r.vendor.name}` : " · dodavatel neurčen"}
-                      {r.bundleId ? ` · balíček ${bundles.find((b) => b.id === r.bundleId)?.name ?? ""}` : ""}
                       {r.price != null ? ` · ${formatCurrency(Number(r.price))}` : ""}
                       {r.requiredDate ? ` · do ${formatDate(r.requiredDate)}` : ""}
                       {` · zadal ${r.createdBy.name ?? r.createdBy.email ?? "?"}`}
                     </p>
+                    {isManager && r.tenders.length > 0 && (
+                      <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
+                        {r.tenders.map(({ tender: t }) => (
+                          <Link
+                            key={t.id}
+                            href={`/projects/${project.id}/rizeni/${t.id}`}
+                            className="text-stone-600 underline-offset-2 hover:text-stone-950 hover:underline"
+                          >
+                            Řízení: {t.title}
+                          </Link>
+                        ))}
+                      </p>
+                    )}
                     {r.offers.length > 0 &&
                       (() => {
                         // Průběžné vyhodnocení: kolik nabídek, nejlevnější, vybraná.
@@ -1607,19 +1586,29 @@ export default async function ProjectDetailPage({
                       : null,
                     note: o.note,
                     mismatch: o.mismatch,
-                    sourceDocId: o.extractionId ? (exDocMap.get(o.extractionId)?.id ?? null) : null,
-                    sourceDocName: o.extractionId ? (exDocMap.get(o.extractionId)?.name ?? null) : null,
+                    sourceDocId: o.extractionId
+                      ? (exDocMap.get(o.extractionId)?.id ?? null)
+                      : (o.bundleOffer?.documents[0]?.id ?? null),
+                    sourceDocName: o.extractionId
+                      ? (exDocMap.get(o.extractionId)?.name ?? null)
+                      : (o.bundleOffer?.documents[0]?.originalName ?? null),
                     rating: o.rating,
                     score: o.score,
                     status: o.status,
                     selected: o.selected,
-                    bundleName: o.bundleOfferId
-                      ? (bundles.find((b) => b.offers.some((x) => x.id === o.bundleOfferId))?.name ?? "balíček")
+                    bundleName: o.bundleOffer
+                      ? o.bundleOffer.price != null
+                        ? `celkem ${formatCurrency(Number(o.bundleOffer.price))}`
+                        : "bez celkové ceny"
                       : null,
                     planTaskCount: Array.isArray(o.planTasks) ? o.planTasks.length : 0,
                     tasksCreated: !!o.tasksCreatedAt,
                     canEdit:
                       isManager || (role === "active" && o.createdById === user.id),
+                    params: Array.isArray(o.params)
+                      ? (o.params as { label: string; value: string }[]).map((p) => `${p.label}: ${p.value}`).join(" · ")
+                      : null,
+                    viaPortal: !!o.submissionId,
                     docs: o.documents.map((d) => ({
                       id: d.id,
                       originalName: d.originalName,

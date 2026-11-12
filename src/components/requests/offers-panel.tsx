@@ -44,6 +44,9 @@ export type OfferView = {
   planTaskCount?: number;
   tasksCreated?: boolean;
   docs: { id: string; originalName: string }[];
+  /** Údaje vyplněné na dodavatelském portálu (#49). */
+  params?: string | null;
+  viaPortal?: boolean;
   /** Položky společné nabídky k téhle žádance (#47). */
   items?: {
     id: string;
@@ -252,11 +255,13 @@ export function OffersPanel({
                   )}
                 </p>
                 <p className="kicker mt-0.5">
+                  {o.viaPortal ? "z portálu · " : ""}
                   {o.bundleName ? `ze společné nabídky · ${o.bundleName} · ` : ""}
                   {o.deliveryDate ? `do ${formatDate(o.deliveryDate)}` : "termín neurčen"}
                   {o.rating ? ` · ${o.rating}` : ""}
                   {!o.canEdit ? ` · ${statusLabel(o.status)}` : ""}
                 </p>
+                {o.params && <p className="mt-0.5 text-xs text-stone-700">{o.params}</p>}
                 {o.note && <p className="mt-0.5 text-xs text-stone-500">{o.note}</p>}
                 {o.items && o.items.length > 0 && (
                   <ul className="mt-1 space-y-0.5 text-xs">

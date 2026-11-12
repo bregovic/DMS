@@ -33,6 +33,7 @@ model User {
   /**
    * /**
    * /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
@@ -89,6 +90,7 @@ model User {
   offersCreated       Offer[]         @relation("OfferCreatedBy")
   bundlesCreated      RequestBundle[] @relation("RequestBundleCreatedBy")
   bundleOffersCreated BundleOffer[]   @relation("BundleOfferCreatedBy")
+  tendersCreated      Tender[]        @relation("TenderCreatedBy")
   subProjectsCreated  SubProject[]    @relation("SubProjectCreatedBy")
   tasksCreated        Task[]          @relation("TaskCreatedBy")
   materials           Material[]      @relation("MaterialOwner")
@@ -162,15 +164,17 @@ model Vendor {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner        User                 @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  expenses     Expense[]
-  incomes      Income[]
-  projects     Project[]            @relation("ProjectVendors")
-  requests     Request[]
-  offers       Offer[]
-  bundleOffers BundleOffer[]
-  tasks        Task[]
-  availability VendorAvailability[]
+  owner             User                 @relation("VendorOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses          Expense[]
+  incomes           Income[]
+  projects          Project[]            @relation("ProjectVendors")
+  requests          Request[]
+  offers            Offer[]
+  bundleOffers      BundleOffer[]
+  tasks             Task[]
+  availability      VendorAvailability[]
+  tenderInvites     TenderInvite[]
+  tenderSubmissions TenderSubmission[]
 
   @@unique([ownerId, email])
   @@index([ownerId])
@@ -332,6 +336,10 @@ model Request {
   requiredDate DateTime?
   leadDays     Int? // dodací lhůta ve dnech (objednat do = potřeba − leadDays)
   status       String    @default("poptavka") // poptavka | nabidka | vyhovuje | objednano | schvaleno | zruseno
+  /**
+   * Údaje, které má dodavatel v nabídce vyplnit (#49): [{label, unit?, required?}].
+   */
+  offerFields  Json?
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -349,6 +357,7 @@ model Request {
   itemReviews ItemReview[]
 
   comparisons OfferComparison[]
+  tenders     TenderRequest[]
 
   @@index([projectId])
   @@index([bundleId])
@@ -360,43 +369,142 @@ model Request {
 // Nabídka k žádance (výběrové řízení). Dodavatel z evidence nebo volný název;
 // cenu, termín a poznámku lze doplnit dodatečně. Vybraná předvyplní žádanku.
 model Offer {
-  id             String    @id @default(cuid())
-  requestId      String
+  id              String    @id @default(cuid())
+  requestId       String
   // Část společné nabídky na balíček (#40). Cena části může chybět – pak platí
   // jen celková cena na BundleOffer a část znamená „tuhle žádanku kryje“.
-  bundleOfferId  String?
-  vendorId       String?
-  vendorName     String?
-  price          Decimal?  @db.Decimal(12, 2)
-  deliveryDate   DateTime?
-  note           String? // komentář / hodnocení nabídky
+  bundleOfferId   String?
+  vendorId        String?
+  vendorName      String?
+  price           Decimal?  @db.Decimal(12, 2)
+  deliveryDate    DateTime?
+  note            String? // komentář / hodnocení nabídky
   /**
    * Rozpory proti specifikaci žádanky (rozměr, počet, provedení), po řádcích.
    */
-  mismatch       String?
-  rating         String? // hodnocení dodavatele (text)
-  score          Int? // bodové hodnocení nabídky (pro řazení)
-  status         String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
-  selected       Boolean   @default(false)
+  mismatch        String?
+  rating          String? // hodnocení dodavatele (text)
+  score           Int? // bodové hodnocení nabídky (pro řazení)
+  status          String    @default("nova") // nova | vyhovuje | odmitnuta | vybrana
+  selected        Boolean   @default(false)
   // Z vytěžení AI (#33): odkud nabídka je a jaké úkoly navrhnout do plánu po výběru.
-  extractionId   String?
-  extractionPart Int?
-  planTasks      Json? // [{ title, days, kind: "order"|"wait"|"work" }]
-  tasksCreatedAt DateTime? // úkoly už založené (po výběru nabídky)
-  createdById    String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  extractionId    String?
+  extractionPart  Int?
+  planTasks       Json? // [{ title, days, kind: "order"|"wait"|"work" }]
+  tasksCreatedAt  DateTime? // úkoly už založené (po výběru nabídky)
+  // Podání přes dodavatelský portál (#49).
+  submissionId    String?
+  priceWithoutVat Decimal?  @db.Decimal(12, 2)
+  vatRate         Int?
+  validUntil      DateTime?
+  /**
+   * Vyplněné údaje nabídky [{label, value}].
+   */
+  params          Json?
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  request     Request      @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  bundleOffer BundleOffer? @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
-  vendor      Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  createdBy   User         @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  request     Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  bundleOffer BundleOffer?      @relation(fields: [bundleOfferId], references: [id], onDelete: Cascade)
+  vendor      Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdBy   User              @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  submission  TenderSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
   documents   Document[]
   expenses    Expense[] // realizované výdaje z vybrané nabídky
 
   @@index([requestId])
   @@index([vendorId])
   @@index([bundleOfferId])
+  @@index([submissionId])
+}
+
+// ---------------------------------------------------------------------------
+// Dodavatelský portál (#49): poptávkové řízení s veřejným odkazem, osobní
+// pozvánky a podání nabídek formulářem.
+// ---------------------------------------------------------------------------
+
+model Tender {
+  id           String    @id @default(cuid())
+  projectId    String
+  subProjectId String?
+  token        String    @unique // veřejný odkaz /p/<token>
+  title        String
+  intro        String? // úvodní text pro dodavatele
+  location     String? // obec, místní část
+  contact      String? // jméno a telefon pro dotazy
+  deadline     DateTime? // termín pro podání nabídek
+  status       String    @default("draft") // draft | open | closed
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subProject  SubProject?        @relation(fields: [subProjectId], references: [id], onDelete: SetNull)
+  createdBy   User               @relation("TenderCreatedBy", fields: [createdById], references: [id])
+  requests    TenderRequest[]
+  invites     TenderInvite[]
+  submissions TenderSubmission[]
+
+  @@index([projectId])
+}
+
+model TenderRequest {
+  tenderId  String
+  requestId String
+  sortOrder Int    @default(0)
+
+  tender  Tender  @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@id([tenderId, requestId])
+  @@index([requestId])
+}
+
+// Osobní pozvánka: vlastní odkaz, podle něj je vidět, kdo otevřel a kdo nereagoval.
+model TenderInvite {
+  id           String    @id @default(cuid())
+  tenderId     String
+  vendorId     String?
+  name         String
+  email        String?
+  token        String    @unique
+  sentAt       DateTime? // odeslání označené ručně
+  openedAt     DateTime?
+  lastOpenedAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  tender      Tender             @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  vendor      Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  submissions TenderSubmission[]
+
+  @@index([tenderId])
+  @@index([vendorId])
+}
+
+// Podání nabídky přes portál: kód pro sledování a odpověď zadavatele.
+model TenderSubmission {
+  id               String    @id @default(cuid())
+  tenderId         String
+  inviteId         String?
+  vendorId         String?
+  code             String    @unique
+  companyName      String
+  ico              String?
+  email            String
+  phone            String?
+  note             String?
+  reply            String? // odpověď zadavatele, vidí ji dodavatel po zveřejnění
+  replyPublishedAt DateTime?
+  createdAt        DateTime  @default(now())
+
+  tender Tender        @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  invite TenderInvite? @relation(fields: [inviteId], references: [id], onDelete: SetNull)
+  vendor Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  offers Offer[]
+
+  @@index([tenderId])
+  @@index([vendorId])
 }
 
 // Editovatelný číselník stavů (vestavěné jsou v kódu). scope = request | offer.
@@ -462,6 +570,7 @@ model Project {
   memberships    ProjectMembership[]
   requests       Request[]
   requestBundles RequestBundle[]
+  tenders        Tender[]
   subProjects    SubProject[]
   tasks          Task[]
 
@@ -494,6 +603,7 @@ model SubProject {
   tasks       Task[]
   documents   Document[]
   memberships SubProjectMembership[]
+  tenders     Tender[]
 
   @@index([projectId])
   @@index([parentId])
@@ -814,6 +924,10 @@ model Document {
   uploadedById  String
   createdAt     DateTime  @default(now())
   exportedAt    DateTime? // označeno jako stažené/vyexportováno (hromadné stažení příloh)
+  /**
+   * Fotka v galerii žádanky – vidí ji dodavatelé na portálu (#49).
+   */
+  gallery       Boolean   @default(false)
 
   extractions Extraction[]
   scan        DocScan?
