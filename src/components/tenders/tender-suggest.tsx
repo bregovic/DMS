@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import { CopyButton } from "@/components/portal/copy-button";
 import {
   addSuggestedVendors,
   startTenderSuggest,
@@ -93,6 +94,8 @@ export function TenderSuggest({
   }
 
   const running = status === "running";
+  // kdo ještě není osloven – jen ty jde vybrat
+  const free = result ? result.vendors.map((v, i) => (v.invited ? -1 : i)).filter((i) => i >= 0) : [];
   return (
     <div className="space-y-6">
       <form action={start} className="space-y-2">
@@ -124,9 +127,27 @@ export function TenderSuggest({
             <div>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="kicker">Navržení dodavatelé · {result.vendors.length}</p>
-                <button type="button" onClick={addVendors} disabled={pending || picked.size === 0} className={btn}>
-                  Oslovit vybrané{picked.size ? ` (${picked.size})` : ""}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-stone-600">
+                    <input
+                      type="checkbox"
+                      checked={free.length > 0 && free.every((i) => picked.has(i))}
+                      onChange={(e) => setPicked(new Set(e.target.checked ? free : []))}
+                      className="size-4 accent-stone-950"
+                    />
+                    Vybrat všechny
+                  </label>
+                  <CopyButton
+                    text={(picked.size ? [...picked] : result.vendors.map((_, i) => i))
+                      .map((i) => result.vendors[i]?.email)
+                      .filter(Boolean)
+                      .join("; ")}
+                    label={picked.size ? `Kopírovat e-maily vybraných (;)` : "Kopírovat e-maily (;)"}
+                  />
+                  <button type="button" onClick={addVendors} disabled={pending || picked.size === 0} className={btn}>
+                    Oslovit vybrané{picked.size ? ` (${picked.size})` : ""}
+                  </button>
+                </div>
               </div>
               <ul className="border-t border-stone-200">
                 {result.vendors.map((v, i) => (

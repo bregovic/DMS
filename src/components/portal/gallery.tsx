@@ -26,27 +26,35 @@ export function PortalGallery({ photos }: { photos: Photo[] }) {
   }, [idx, photos.length]);
 
   return (
-    <div className="mt-5">
-      <p className="kicker">Fotografie · {photos.length}</p>
-      <div className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-        {photos.map((p, i) => (
-          <button
-            key={p.src}
-            type="button"
-            onClick={() => setIdx(i)}
-            className="group relative aspect-[4/3] overflow-hidden bg-stone-100 cursor-zoom-in"
-            aria-label={`Zvětšit ${p.name}`}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={p.src}
-              alt={p.name}
-              loading="lazy"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-            />
-          </button>
-        ))}
-      </div>
+    <div>
+      <button
+        type="button"
+        onClick={() => setIdx(0)}
+        className="group relative block aspect-[4/3] w-full overflow-hidden bg-stone-200 cursor-zoom-in"
+        aria-label={`Zvětšit ${photos[0].name}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photos[0].src} alt={photos[0].name} className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+        {photos.length > 1 && (
+          <span className="absolute bottom-2 right-2 bg-stone-950/80 px-2 py-1 font-mono text-[11px] text-white">1 / {photos.length}</span>
+        )}
+      </button>
+      {photos.length > 1 && (
+        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-5">
+          {photos.slice(1).map((p, k) => (
+            <button
+              key={p.src}
+              type="button"
+              onClick={() => setIdx(k + 1)}
+              className="group relative aspect-square overflow-hidden bg-stone-200 cursor-zoom-in"
+              aria-label={`Zvětšit ${p.name}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.src} alt={p.name} loading="lazy" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.05]" />
+            </button>
+          ))}
+        </div>
+      )}
 
       {idx != null && (
         <div

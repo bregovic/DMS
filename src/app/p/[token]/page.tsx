@@ -93,92 +93,115 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
     photos: r.documents.map((d) => ({ src: `/api/p/${token}/img/${d.id}`, name: d.originalName })),
   }));
 
+  const daysLeft = t.deadline ? Math.ceil((new Date(t.deadline).setUTCHours(23, 59, 59) - Date.now()) / 86_400_000) : null;
+  const nItems = `${items.length} ${items.length === 1 ? "položka" : items.length < 5 ? "položky" : "položek"}`;
+  const meta = [
+    t.location && { k: "Místo", v: t.location },
+    t.realization && { k: "Realizace", v: t.realization },
+    { k: "Nabídky do", v: t.deadline ? formatDate(t.deadline) : "průběžně", badge: open && daysLeft != null && daysLeft >= 0 ? (daysLeft === 0 ? "dnes" : `zbývá ${daysLeft} ${daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}`) : null },
+    t.contact && { k: "Kontakt", v: t.contact },
+  ].filter(Boolean) as { k: string; v: string; badge?: string | null }[];
+
   return (
     <div className="min-h-screen bg-[#f4f3f0] text-stone-900">
       {preview && t.status !== "open" && (
-        <div className="bg-stone-950 px-4 py-2 text-center text-xs text-white">
-          Náhled · {t.status === "draft" ? "řízení není zveřejněné" : "řízení je uzavřené"}
+        <div className="bg-amber-400 px-4 py-2 text-center text-xs font-medium text-stone-950">
+          Náhled · {t.status === "draft" ? "řízení není zveřejněné" : t.status === "cancelled" ? "řízení je zrušené" : "řízení je uzavřené"}
         </div>
       )}
 
-      <header className="border-b border-stone-300/80 bg-white">
-        <div className="mx-auto max-w-4xl px-4 pb-10 pt-12 sm:px-8 sm:pt-16">
-          <p className="kicker">Poptávka{invite ? ` · pro ${invite.name}` : ""}</p>
-          <h1 className="display mt-3 text-4xl leading-[1.05] text-stone-950 sm:text-6xl">{t.title}</h1>
-          <dl className="mt-8 grid grid-cols-1 gap-x-10 gap-y-4 text-sm sm:grid-cols-3">
-            {t.location && (
-              <div>
-                <dt className="kicker">Místo</dt>
-                <dd className="mt-1 text-stone-950">{t.location}</dd>
+      <header className="relative overflow-hidden bg-stone-950 text-white">
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 size-[420px] rounded-full bg-[radial-gradient(circle,rgba(250,204,21,0.18),transparent_65%)]" />
+        <div className="relative mx-auto max-w-5xl px-4 pb-12 pt-10 sm:px-8 sm:pb-16 sm:pt-14">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-stone-400">
+            Poptávka · {nItems}
+            {invite ? ` · pro ${invite.name}` : ""}
+          </p>
+          <h1 className="display mt-4 max-w-3xl text-4xl leading-[1.02] sm:text-6xl">{t.title}</h1>
+          {t.intro && <p className="mt-5 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-stone-300">{t.intro}</p>}
+
+          <dl className="mt-9 grid grid-cols-1 gap-px overflow-hidden border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
+            {meta.map((m) => (
+              <div key={m.k} className="bg-stone-950 px-4 py-3.5">
+                <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400">{m.k}</dt>
+                <dd className="mt-1 text-[15px] text-white">
+                  {m.v}
+                  {m.badge && <span className="ml-2 bg-amber-400 px-1.5 py-0.5 align-middle text-[11px] font-medium text-stone-950">{m.badge}</span>}
+                </dd>
               </div>
-            )}
-            {t.realization && (
-              <div>
-                <dt className="kicker">Realizace</dt>
-                <dd className="mt-1 text-stone-950">{t.realization}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="kicker">Nabídky do</dt>
-              <dd className="mt-1 text-stone-950">{t.deadline ? formatDate(t.deadline) : "průběžně"}</dd>
-            </div>
-            {t.contact && (
-              <div>
-                <dt className="kicker">Kontakt</dt>
-                <dd className="mt-1 text-stone-950">{t.contact}</dd>
-              </div>
-            )}
+            ))}
           </dl>
-          {t.intro && <p className="mt-8 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-stone-700">{t.intro}</p>}
+
+          {(open || previewForm) && (
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
+              <a href="#nabidka" className="inline-flex h-12 items-center bg-amber-400 px-6 text-[15px] font-medium text-stone-950 transition-colors hover:bg-amber-300">
+                Podat nabídku ↓
+              </a>
+              <ol className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-stone-400">
+                {["Prohlédněte zadání", "Vyplňte cenu a údaje", "Stav sledujte pod kódem"].map((x, i) => (
+                  <li key={x} className="flex items-center gap-1.5">
+                    <span className="flex size-5 items-center justify-center rounded-full border border-stone-600 font-mono text-[10px] text-stone-300">{i + 1}</span>
+                    {x}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-8">
-        <h2 className="kicker mb-4">
-          Zadání · {items.length} {items.length === 1 ? "položka" : items.length < 5 ? "položky" : "položek"}
-        </h2>
-        <ol className="space-y-6">
+      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
+        <h2 className="kicker mb-5">Zadání · {nItems}</h2>
+        <ol className="space-y-8">
           {items.map((r, i) => (
-            <li key={r.id} id={`polozka-${r.id}`} className="border border-stone-300/80 bg-white shadow-[0_1px_0_rgba(41,37,36,0.04)]">
-              <div className="flex items-baseline gap-4 border-b border-stone-200 px-5 py-4 sm:px-7">
-                <span className="font-mono text-xs text-stone-400">{String(i + 1).padStart(2, "0")}</span>
-                <h3 className="display flex-1 text-2xl text-stone-950">{r.title}</h3>
-              </div>
-              <div className="px-5 py-5 sm:px-7">
-                <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                  {r.quantity != null && (
-                    <div>
-                      <dt className="kicker">Množství</dt>
-                      <dd className="mt-0.5 font-mono text-stone-950">
-                        {r.quantity.toLocaleString("cs-CZ")} {unitLabel(r.unit)}
-                      </dd>
-                    </div>
-                  )}
-                  {r.requiredDate && (
-                    <div>
-                      <dt className="kicker">Potřebujeme do</dt>
-                      <dd className="mt-0.5 text-stone-950">{formatDate(r.requiredDate)}</dd>
-                    </div>
-                  )}
-                </dl>
-                {r.description && (
-                  <div className="mt-4">
-                    <p className="kicker">Specifikace</p>
-                    <p className="mt-1.5 whitespace-pre-line text-[15px] leading-relaxed text-stone-800">{r.description}</p>
+            <li key={r.id} id={`polozka-${r.id}`} className="overflow-hidden border border-stone-300/80 bg-white shadow-[0_18px_40px_-30px_rgba(41,37,36,0.35)]">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr]">
+                <div className="p-5 sm:p-8">
+                  <div className="flex items-start gap-4">
+                    <span className="display flex size-11 shrink-0 items-center justify-center bg-stone-950 text-lg text-white">{i + 1}</span>
+                    <h3 className="display pt-1 text-2xl leading-tight text-stone-950 sm:text-3xl">{r.title}</h3>
                   </div>
-                )}
-                {r.photos.length > 0 && <PortalGallery photos={r.photos} />}
-                {r.fields.length > 0 && (
-                  <div className="mt-5">
-                    <p className="kicker">V nabídce prosíme uvést</p>
-                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                      {r.fields.map((f, k) => (
-                        <li key={k} className="border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
-                          {f.label}
-                          {f.unit ? ` [${f.unit}]` : ""}
-                        </li>
-                      ))}
-                    </ul>
+                  {(r.quantity != null || r.requiredDate) && (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {r.quantity != null && (
+                        <span className="border border-stone-300 bg-stone-50 px-3 py-1.5 text-sm">
+                          <span className="text-stone-500">Množství </span>
+                          <b className="font-mono font-medium text-stone-950">
+                            {r.quantity.toLocaleString("cs-CZ")} {unitLabel(r.unit)}
+                          </b>
+                        </span>
+                      )}
+                      {r.requiredDate && (
+                        <span className="border border-stone-300 bg-stone-50 px-3 py-1.5 text-sm">
+                          <span className="text-stone-500">Potřebujeme do </span>
+                          <b className="font-medium text-stone-950">{formatDate(r.requiredDate)}</b>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {r.description && (
+                    <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-stone-800">{r.description}</p>
+                  )}
+                  {r.fields.length > 0 && (
+                    <div className="mt-6 border-t border-stone-200 pt-4">
+                      <p className="kicker">V nabídce prosíme uvést</p>
+                      <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {r.fields.map((f, k) => (
+                          <li key={k} className="flex items-start gap-2 text-sm text-stone-800">
+                            <span className="mt-1.5 size-1.5 shrink-0 bg-amber-500" />
+                            <span>
+                              {f.label}
+                              {f.unit ? <span className="text-stone-400"> [{f.unit}]</span> : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                {r.photos.length > 0 && (
+                  <div className="border-t border-stone-200 bg-stone-100 p-3 lg:border-l lg:border-t-0">
+                    <PortalGallery photos={r.photos} />
                   </div>
                 )}
               </div>
@@ -186,7 +209,7 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
           ))}
         </ol>
 
-        <section className="mt-12">
+        <section id="nabidka" className="mt-14 scroll-mt-6">
           {open || previewForm ? (
             <PortalOfferForm
               previewOnly={previewForm}
@@ -199,16 +222,19 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
               }}
             />
           ) : (
-            <div className="border border-stone-300/80 bg-white px-6 py-8 text-center">
-              <p className="display text-2xl text-stone-950">{closedMsg.h}</p>
+            <div className="border border-stone-300/80 bg-white px-6 py-10 text-center">
+              <p className="display text-3xl text-stone-950">{closedMsg.h}</p>
               <p className="mt-2 text-sm text-stone-600">{closedMsg.p}</p>
             </div>
           )}
         </section>
       </main>
 
-      <footer className="mx-auto max-w-4xl px-4 pb-12 text-xs text-stone-400 sm:px-8">
-        Odeslaná nabídka dostane kód, pod kterým lze sledovat její stav.
+      <footer className="border-t border-stone-300/80">
+        <div className="mx-auto flex max-w-5xl flex-wrap justify-between gap-2 px-4 py-6 text-xs text-stone-500 sm:px-8">
+          <span>Odeslaná nabídka dostane kód, pod kterým lze sledovat její stav.</span>
+          <span>Údaje z formuláře slouží jen pro toto řízení.</span>
+        </div>
       </footer>
     </div>
   );

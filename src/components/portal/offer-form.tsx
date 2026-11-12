@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Paperclip } from "lucide-react";
 import { compressImage } from "@/lib/client-upload";
@@ -41,12 +41,15 @@ function FilePick({ name, hint }: { name: string; hint: string }) {
 }
 
 /** Jedna nabídka na položku: ceny a DPH, termíny, požadované údaje, příloha. */
-function ItemOffer({ item, single }: { item: Item; single: boolean }) {
+type Totals = { on: boolean; base: number | null; gross: number | null };
+
+function ItemOffer({ item, single, n, onTotals }: { item: Item; single: boolean; n: number; onTotals: (t: Totals) => void }) {
   const [on, setOn] = useState(true);
   const [base, setBase] = useState("");
   const [rate, setRate] = useState("21");
   const [gross, setGross] = useState("");
   const rc = rate === "rc";
+  useEffect(() => onTotals({ on, base: parse(base), gross: rc ? parse(base) : parse(gross) }), [on, base, gross, rc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recompute = (b: string, r: string) => {
     const n = parse(b);
@@ -60,6 +63,7 @@ function ItemOffer({ item, single }: { item: Item; single: boolean }) {
         {!single && (
           <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} className="size-5 accent-stone-950" />
         )}
+        <span className={`display flex size-8 shrink-0 items-center justify-center text-sm ${on ? "bg-stone-950 text-white" : "bg-stone-200 text-stone-500"}`}>{n}</span>
         <span className="display text-xl text-stone-950">{item.title}</span>
         {!single && !on && <span className="ml-auto text-xs text-stone-500">bez nabídky</span>}
       </label>
@@ -170,6 +174,10 @@ export function PortalOfferForm({
   const [company, setCompany] = useState("");
   const [address, setAddress] = useState<string | null>(null);
   const [icoState, setIcoState] = useState<"idle" | "loading" | "missing">("idle");
+  const [totals, setTotals] = useState<Record<string, Totals>>({});
+  const picked = Object.values(totals).filter((x) => x.on);
+  const sumBase = picked.reduce((a, x) => a + (x.base ?? 0), 0);
+  const sumGross = picked.reduce((a, x) => a + (x.gross ?? 0), 0);
 
   async function lookup(ico: string) {
     const clean = ico.replace(/\D/g, "");
@@ -236,8 +244,14 @@ export function PortalOfferForm({
           <p className="mt-2 text-sm text-stone-600">Položky, na které nabídku nepodáváte, odškrtněte.</p>
         )}
         <div className="mt-5 space-y-3">
-          {items.map((i) => (
-            <ItemOffer key={i.id} item={i} single={items.length === 1} />
+          {items.map((i, k) => (
+            <ItemOffer
+              key={i.id}
+              item={i}
+              n={k + 1}
+              single={items.length === 1}
+              onTotals={(x) => setTotals((t) => ({ ...t, [i.id]: x }))}
+            />
           ))}
         </div>
       </div>
@@ -286,6 +300,16 @@ export function PortalOfferForm({
           <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
         </div>
       </div>
+
+      {sumBase > 0 && (
+        <div className="flex flex-wrap items-baseline justify-between gap-3 border border-stone-950 bg-white px-5 py-4 sm:px-7">
+          <span className="kicker">Celkem za {picked.length} {picked.length === 1 ? "položku" : picked.length < 5 ? "položky" : "položek"}</span>
+          <span className="font-mono text-stone-950">
+            <b className="text-xl">{fmt(sumBase)} Kč</b> <span className="text-sm text-stone-500">bez DPH</span>
+            {sumGross > 0 && sumGross !== sumBase && <span className="ml-3 text-sm text-stone-600">{fmt(sumGross)} Kč s DPH</span>}
+          </span>
+        </div>
+      )}
 
       {error && <p className="border-l-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
 
