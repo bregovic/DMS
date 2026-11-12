@@ -31,7 +31,7 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
       intro: true,
       location: true,
       contact: true,
-      criteria: true,
+      realization: true,
       deadline: true,
       status: true,
       projectId: true,
@@ -106,6 +106,12 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
                 <dd className="mt-1 text-stone-950">{t.location}</dd>
               </div>
             )}
+            {t.realization && (
+              <div>
+                <dt className="kicker">Realizace</dt>
+                <dd className="mt-1 text-stone-950">{t.realization}</dd>
+              </div>
+            )}
             <div>
               <dt className="kicker">Nabídky do</dt>
               <dd className="mt-1 text-stone-950">{t.deadline ? formatDate(t.deadline) : "průběžně"}</dd>
@@ -118,12 +124,6 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
             )}
           </dl>
           {t.intro && <p className="mt-8 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-stone-700">{t.intro}</p>}
-          {t.criteria && (
-            <div className="mt-8 max-w-2xl">
-              <p className="kicker">Podle čeho vybíráme</p>
-              <p className="mt-1.5 whitespace-pre-line text-[15px] leading-relaxed text-stone-700">{t.criteria}</p>
-            </div>
-          )}
         </div>
       </header>
 

@@ -7,6 +7,7 @@ import { MobileTabBar } from "@/components/app/mobile-tabbar";
 import { VersionWatch } from "@/components/app/version-watch";
 import { unreadCount } from "@/server/notify";
 import { appVersion } from "@/lib/version";
+import { VerifyBanner } from "@/components/app/verify-banner";
 
 export default async function AppLayout({
   children,
@@ -33,6 +34,7 @@ export default async function AppLayout({
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {user.unverifiedEmail && <VerifyBanner email={user.unverifiedEmail} />}
         <header className="flex h-16 print:!hidden items-center justify-between border-b border-stone-300/80 px-4 sm:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <MobileNav />
@@ -41,7 +43,7 @@ export default async function AppLayout({
             </Link>
           </div>
           <div className="flex-1" />
-          <UserMenu name={user.name} email={user.email} unread={unread} />
+          <UserMenu name={user.name} email={user.email ?? user.unverifiedEmail ?? null} unread={unread} />
         </header>
         <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 sm:px-8 sm:pt-8 md:pb-8 lg:px-12">
           {children}

@@ -2,6 +2,8 @@
 
 import { AuthError } from "next-auth";
 import bcrypt from "bcryptjs";
+import { auth } from "@/auth";
+import { sendVerification } from "@/server/email-verify";
 import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -37,6 +39,8 @@ export async function registerAction(
 
   const passwordHash = await bcrypt.hash(password, 10);
   await prisma.user.create({ data: { name, email, passwordHash } });
+  // Ověřovací odkaz; chyba odeslání registraci neshodí (jde poslat znovu).
+  await sendVerification(email).catch(() => undefined);
 
   // signIn provede přesměrování (vyhodí redirect) – nechytat.
   await signIn("credentials", { email, password, redirectTo: "/" });
@@ -68,4 +72,13 @@ export async function googleSignInAction() {
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/login" });
+}
+
+/** Znovu poslat ověřovací odkaz přihlášenému neověřenému uživateli. */
+export async function resendVerification(): Promise<{ ok?: boolean; error?: string }> {
+  const session = await auth();
+  const email = session?.user?.unverifiedEmail;
+  if (!email) return { error: "E-mail je už ověřený." };
+  const r = await sendVerification(email);
+  return r.sent ? { ok: true } : { error: "Odeslání se nepovedlo. Zkus to později." };
 }

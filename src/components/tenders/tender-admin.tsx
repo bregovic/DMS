@@ -6,6 +6,7 @@ import { useFormAction } from "@/components/ui/use-form-action";
 import { Dialog } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/portal/copy-button";
 import { compressImage } from "@/lib/client-upload";
+import { FieldPicker, type Field } from "@/components/tenders/tender-fields";
 import {
   addGalleryPhotos,
   addInvites,
@@ -40,7 +41,7 @@ function Saved({ state, pending }: { state: State; pending: boolean }) {
 export function TenderSettingsForm({
   tender,
 }: {
-  tender: { id: string; title: string; intro: string | null; location: string | null; contact: string | null; deadline: string | null; criteria: string | null };
+  tender: { id: string; title: string; intro: string | null; location: string | null; contact: string | null; deadline: string | null; realization: string | null };
 }) {
   const [state, action, pending] = useFormAction<State>(updateTender, undefined);
   return (
@@ -65,12 +66,12 @@ export function TenderSettingsForm({
         </div>
       </div>
       <div>
-        <label className={lbl}>Úvodní text</label>
-        <textarea name="intro" rows={4} defaultValue={tender.intro ?? ""} className={field} />
+        <label className={lbl}>Realizace</label>
+        <input name="realization" defaultValue={tender.realization ?? ""} placeholder="např. duben–květen 2027" className={field} />
       </div>
       <div>
-        <label className={lbl}>Podle čeho vybíráme</label>
-        <textarea name="criteria" rows={4} defaultValue={tender.criteria ?? ""} className={field} />
+        <label className={lbl}>Úvodní text</label>
+        <textarea name="intro" rows={4} defaultValue={tender.intro ?? ""} className={field} />
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={pending} className={btn}>
@@ -95,7 +96,8 @@ export function RequestBriefForm({
     quantity: number | null;
     unit: string;
     requiredDate: string | null;
-    fieldsText: string;
+    fields: Field[];
+    suggestedFields: Field[];
   };
 }) {
   const [state, action, pending] = useFormAction<State>(updateRequestBrief, undefined);
@@ -123,14 +125,7 @@ export function RequestBriefForm({
       </div>
       <div>
         <label className={lbl}>Údaje k vyplnění v nabídce</label>
-        <textarea
-          name="offerFields"
-          rows={4}
-          defaultValue={request.fieldsText}
-          placeholder={"Výrobce a profil *\nUw [W/m²K]\nZasklení\nMontáž v ceně"}
-          className={`${field} font-mono text-xs`}
-        />
-        <p className="mt-1 text-xs text-stone-500">Jeden údaj na řádek, jednotka v [ ], povinný údaj s * na konci.</p>
+        <FieldPicker current={request.fields} suggested={request.suggestedFields} />
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={pending} className={btn}>

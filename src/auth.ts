@@ -47,13 +47,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) token.id = user.id;
+      const uid = typeof token.id === "string" ? token.id : null;
+      if (uid && account?.provider === "google") {
+        // Google e-mail ověřil. Kdyby si někdo dřív založil na tenhle e-mail
+        // účet s heslem bez ověření, heslo se zruší – účet patří majiteli e-mailu.
+        const u = await prisma.user.findUnique({ where: { id: uid }, select: { emailVerified: true } });
+        await prisma.user.update({
+          where: { id: uid },
+          data: { emailVerified: u?.emailVerified ?? new Date(), ...(u?.emailVerified ? {} : { passwordHash: null }) },
+        });
+        token.ev = true;
+      } else if (uid && !token.ev) {
+        // Neověřený účet se kontroluje při každém požadavku – po kliknutí
+        // na odkaz se přístupy zapnou bez nového přihlášení.
+        const u = await prisma.user.findUnique({ where: { id: uid }, select: { emailVerified: true } });
+        token.ev = !!u?.emailVerified;
+      }
       return token;
     },
     session({ session, token }) {
       if (token.id && session.user) {
         session.user.id = token.id as string;
+        if (!token.ev) {
+          // Bez ověření se podle e-mailu nic nepáruje (projekty, složky, úkoly).
+          session.user.unverifiedEmail = session.user.email ?? null;
+          (session.user as { email: string | null }).email = null;
+        }
       }
       return session;
     },

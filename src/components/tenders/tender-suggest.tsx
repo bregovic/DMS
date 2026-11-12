@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import {
   addSuggestedVendors,
   applySuggestedCriteria,
-  applySuggestedFields,
   startTenderSuggest,
 } from "@/server/actions/tenders";
 
@@ -201,11 +200,11 @@ export function TenderSuggest({
           {result.criteria.length > 0 && (
             <div>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="kicker">Kritéria výběru</p>
+                <p className="kicker">Navržená kritéria</p>
                 <form action={applySuggestedCriteria}>
                   <input type="hidden" name="id" value={tenderId} />
                   <button type="submit" className={btnOutline}>
-                    Použít do řízení
+                    Převzít
                   </button>
                 </form>
               </div>
@@ -225,28 +224,9 @@ export function TenderSuggest({
 
           {result.requests.map((r) => (
             <div key={r.requestId}>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="kicker">Údaje k vyplnění · {r.title}</p>
-                <form action={applySuggestedFields}>
-                  <input type="hidden" name="id" value={tenderId} />
-                  <input type="hidden" name="requestId" value={r.requestId} />
-                  <button type="submit" className={btnOutline}>
-                    Použít u žádanky
-                  </button>
-                </form>
-              </div>
-              <ul className="flex flex-wrap gap-1.5">
-                {r.offerFields.map((f, k) => (
-                  <li key={k} className="border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
-                    {f.label}
-                    {f.unit ? ` [${f.unit}]` : ""}
-                    {f.required ? " *" : ""}
-                  </li>
-                ))}
-              </ul>
               {r.gaps.length > 0 && (
                 <div className="mt-2 text-xs text-stone-600">
-                  <p className="font-medium text-stone-700">V zadání chybí</p>
+                  <p className="font-medium text-stone-700">V zadání chybí · {r.title}</p>
                   <ul className="mt-0.5 list-disc pl-4">
                     {r.gaps.map((g, k) => (
                       <li key={k}>{g}</li>

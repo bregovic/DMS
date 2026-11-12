@@ -8,7 +8,6 @@ import { requestStatusLabel } from "@/lib/constants";
 import { getProjectAccess, isManager } from "@/server/access";
 import {
   inviteEmail,
-  offerFieldsToText,
   offerPriceLine,
   portalLink,
   readOfferFields,
@@ -23,6 +22,7 @@ import { deleteTender, setTenderRequests, setTenderStatus } from "@/server/actio
 import { CopyButton } from "@/components/portal/copy-button";
 import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { TenderSuggest, type SuggestionView } from "@/components/tenders/tender-suggest";
+import { WeightsEditor } from "@/components/tenders/tender-fields";
 import type { TenderSuggestion } from "@/server/tender-ai";
 import { DeleteButton } from "@/components/ui/delete-button";
 import {
@@ -412,6 +412,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
               </div>
               <div className="space-y-6 px-5 py-4">
                 <RequestBriefForm
+                  key={`${r.id}-${t.aiAt?.toISOString() ?? ""}`}
                   tenderId={t.id}
                   request={{
                     id: r.id,
@@ -419,7 +420,9 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
                     quantity: r.quantity != null ? Number(r.quantity) : null,
                     unit: r.unit,
                     requiredDate: r.requiredDate ? r.requiredDate.toISOString().slice(0, 10) : null,
-                    fieldsText: offerFieldsToText(readOfferFields(r.offerFields)),
+                    fields: readOfferFields(r.offerFields).map((f) => ({ label: f.label, unit: f.unit ?? null, required: !!f.required })),
+                    suggestedFields:
+                      suggestion?.requests.find((x) => x.requestId === r.id)?.offerFields ?? [],
                   }}
                 />
                 <GalleryManager
@@ -431,6 +434,18 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
             </li>
           ))}
         </ol>
+      </section>
+
+      {/* Kritéria výběru – jen pro zadavatele */}
+      <section className="mb-12">
+        <h2 className="kicker mb-3">Kritéria výběru</h2>
+        <div className="border border-stone-300/80 bg-white p-5">
+          <WeightsEditor
+            key={JSON.stringify(t.weights ?? null)}
+            tenderId={t.id}
+            initial={Array.isArray(t.weights) ? (t.weights as { label: string; weight: number }[]) : []}
+          />
+        </div>
       </section>
 
       {/* Nastavení */}
@@ -445,7 +460,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
               location: t.location,
               contact: t.contact,
               deadline: t.deadline ? t.deadline.toISOString().slice(0, 10) : null,
-              criteria: t.criteria,
+              realization: t.realization,
             }}
           />
         </div>

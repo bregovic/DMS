@@ -35,6 +35,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
@@ -439,7 +440,12 @@ model Tender {
   /**
    * Podle čeho se vybírá – vidí dodavatel na portálu.
    */
-  criteria     String?
+  criteria     String? // dřívější text, nahrazeno weights
+  /**
+   * Kritéria výběru s vahou [{label, weight}] – jen pro zadavatele.
+   */
+  weights      Json?
+  realization  String? // kdy lze zakázku realizovat (např. „duben–květen 2027“)
   // Návrh dodavatelů a kritérií (#49): running | ready | error.
   aiStatus     String?
   aiError      String?

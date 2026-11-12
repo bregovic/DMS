@@ -96,7 +96,7 @@ export async function updateTender(_prev: { error?: string; ok?: boolean } | und
         location: str(formData.get("location"), 200),
         contact: str(formData.get("contact"), 300),
         deadline: dateOrNull(formData.get("deadline")),
-        criteria: str(formData.get("criteria"), 2000),
+        realization: str(formData.get("realization"), 200),
       },
     });
     revalidatePath(path(tender.projectId, tender.id));
@@ -377,8 +377,10 @@ export async function applySuggestedCriteria(formData: FormData) {
   const { tender } = await tenderCtx(String(formData.get("id")));
   const s = await suggestion(tender.id);
   if (!s?.criteria?.length) return;
-  const text = s.criteria.map((c) => `${c.label} – ${Math.round(c.weight)} %${c.note ? `: ${c.note}` : ""}`).join("\n");
-  await prisma.tender.update({ where: { id: tender.id }, data: { criteria: text.slice(0, 2000) } });
+  const weights = s.criteria
+    .slice(0, 10)
+    .map((c) => ({ label: c.label.slice(0, 80), weight: Math.max(0, Math.round(c.weight)) }));
+  await prisma.tender.update({ where: { id: tender.id }, data: { weights } });
   revalidatePath(path(tender.projectId, tender.id));
 }
 
@@ -431,4 +433,32 @@ export async function addSuggestedVendors(formData: FormData): Promise<{ error?:
   }
   revalidatePath(path(tender.projectId, tender.id));
   return { added };
+}
+
+/** Kritéria výběru s vahou – upravuje zadavatel (dodavatel je nevidí). */
+export async function saveTenderWeights(
+  _prev: { error?: string; ok?: boolean } | undefined,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  try {
+    const { tender } = await tenderCtx(String(formData.get("id")));
+    let rows: { label: string; weight: number }[] = [];
+    try {
+      rows = JSON.parse(String(formData.get("weights") || "[]"));
+    } catch {
+      return { error: "Neplatná kritéria." };
+    }
+    const weights = rows
+      .map((r) => ({
+        label: String(r.label ?? "").trim().slice(0, 80),
+        weight: Math.max(0, Math.min(100, Math.round(Number(r.weight) || 0))),
+      }))
+      .filter((r) => r.label)
+      .slice(0, 12);
+    await prisma.tender.update({ where: { id: tender.id }, data: { weights } });
+    revalidatePath(path(tender.projectId, tender.id));
+    return { ok: true };
+  } catch {
+    return { error: "Uložení se nepovedlo." };
+  }
 }
