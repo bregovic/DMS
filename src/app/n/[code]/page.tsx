@@ -40,6 +40,7 @@ export default async function TrackingPage({ params, searchParams }: PageProps<"
           price: true,
           priceWithoutVat: true,
           vatRate: true,
+          vatMode: true,
           status: true,
           selected: true,
           deliveryDate: true,
