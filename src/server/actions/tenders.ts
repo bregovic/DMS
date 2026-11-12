@@ -52,6 +52,7 @@ export async function createTender(formData: FormData) {
   const ids = formData.getAll("requestId").map(String).filter(Boolean);
   const requests = await prisma.request.findMany({
     where: { id: { in: ids }, projectId },
+    orderBy: { createdAt: "asc" },
     select: { id: true, title: true, subProjectId: true },
   });
   if (!requests.length) throw new Error("Vyber aspoň jednu žádanku.");
@@ -69,7 +70,7 @@ export async function createTender(formData: FormData) {
       title,
       contact: [owner?.name, owner?.email].filter(Boolean).join(", ") || null,
       createdById: user.id,
-      requests: { create: ids.filter((id) => requests.some((r) => r.id === id)).map((requestId, i) => ({ requestId, sortOrder: i })) },
+      requests: { create: requests.map((r, i) => ({ requestId: r.id, sortOrder: i })) },
     },
     select: { id: true },
   });

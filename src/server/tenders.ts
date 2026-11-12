@@ -137,7 +137,10 @@ export function tenderAcceptsOffers(t: { status: string; deadline: Date | null }
 type Sender = { name: string | null; contact: string | null };
 
 function podpis(s: Sender) {
-  return ["S pozdravem", s.name, s.contact].filter(Boolean).join("\n");
+  // Kontakt obvykle začíná jménem – nepsat ho dvakrát.
+  const contact =
+    s.name && s.contact?.startsWith(s.name) ? s.contact.slice(s.name.length).replace(/^[,\s]+/, "") : s.contact;
+  return ["S pozdravem", s.name, contact].filter(Boolean).join("\n");
 }
 
 export function inviteEmail(

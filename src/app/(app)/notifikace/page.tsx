@@ -15,6 +15,7 @@ const ICON: Record<string, typeof Bell> = {
   invoice_requested: Wallet,
   invoice_paid: Wallet,
   mail_received: Mail,
+  tender_offer: Receipt,
 };
 
 /**

@@ -19,7 +19,8 @@ function parse(v: string) {
   const n = Number(v.replace(/\s/g, "").replace(",", "."));
   return v.trim() && isFinite(n) ? n : null;
 }
-const fmt = (n: number) => (Math.round(n * 100) / 100).toFixed(2).replace(".", ",");
+const fmt = (n: number) =>
+  n.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Jedna nabídka na položku: ceny, termíny, požadované údaje, příloha. */
 function ItemOffer({ item, single }: { item: Item; single: boolean }) {
