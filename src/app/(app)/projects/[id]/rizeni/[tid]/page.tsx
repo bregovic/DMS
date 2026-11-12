@@ -281,8 +281,10 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
                 ? { text: `nabídka ${formatDate(inv.submissions[0].createdAt)}`, cls: "border-emerald-700 text-emerald-800" }
                 : inv.openedAt
                   ? { text: `otevřel ${formatDate(inv.openedAt)}`, cls: "border-stone-950 text-stone-950" }
-                  : inv.sentAt
+                  : inv.sentAt && !accepting
                     ? { text: "nereagoval", cls: "border-amber-600 text-amber-800" }
+                    : inv.sentAt
+                    ? { text: "odesláno", cls: "border-stone-400 text-stone-600" }
                     : { text: "neodesláno", cls: "border-stone-300 text-stone-500" };
               const st = inv.vendorId ? statsLabel(stats.get(inv.vendorId)) : null;
               return (
