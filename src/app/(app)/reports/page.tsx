@@ -1,3 +1,4 @@
+import { managedProjectIds } from "@/server/access";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,11 +52,13 @@ export default async function ReportsPage({
 }) {
   const user = await requireUser();
   const projectId = (await searchParams)?.project || null;
-  const projectWhere = { ownerId: user.id, ...(projectId ? { id: projectId } : {}) };
+  // Vlastník i spolusprávce.
+  const managedIds = await managedProjectIds(user);
+  const projectWhere = projectId ? { id: { in: managedIds.filter((x) => x === projectId) } } : { id: { in: managedIds } };
 
   const [projects, expenses, forecastReqs, catMap] = await Promise.all([
     prisma.project.findMany({
-      where: { ownerId: user.id },
+      where: { id: { in: managedIds } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

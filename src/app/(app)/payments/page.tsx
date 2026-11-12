@@ -1,3 +1,4 @@
+import { managedProjectIds } from "@/server/access";
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { FinanceNav } from "@/components/invoices/finance-nav";
@@ -33,6 +34,7 @@ export default async function PaymentsPage({
   const sort = str(sp.psort) || "due";
   const dir = str(sp.pdir) === "asc" ? "asc" : "desc";
 
+  const managedIds = await managedProjectIds(user);
   const [vendors, expenseStatuses] = await Promise.all([
     prisma.vendor.findMany({
       where: { ownerId: user.id },
@@ -53,7 +55,8 @@ export default async function PaymentsPage({
           : { OR: [{ stage: null }, { stage: { not: EXPENSE_PAID_STAGE } }] };
 
   const where: Prisma.ExpenseWhereInput = {
-    project: { ownerId: user.id },
+    // Vlastník i spolusprávce – spolusprávce doklady zpracovává.
+    projectId: { in: managedIds },
     ...(vendorId ? { vendorId } : {}),
     ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
     ...(from || to
@@ -97,7 +100,7 @@ export default async function PaymentsPage({
 
   // Žádosti o úhradu (faktury dodavatelů za vykázanou práci) – moje projekty.
   const invoiceRequests = await prisma.invoice.findMany({
-    where: { status: "requested", OR: [{ recipientId: user.id }, { project: { ownerId: user.id } }] },
+    where: { status: "requested", OR: [{ recipientId: user.id }, { projectId: { in: managedIds } }] },
     orderBy: { dueDate: "asc" },
     select: { kind: true, id: true, number: true, amount: true, currency: true, dueDate: true, supplier: true, project: { select: { name: true } } },
   });

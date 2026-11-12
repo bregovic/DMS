@@ -55,7 +55,8 @@ export async function createTender(formData: FormData) {
     orderBy: { createdAt: "asc" },
     select: { id: true, title: true, subProjectId: true },
   });
-  if (!requests.length) throw new Error("Vyber aspoň jednu žádanku.");
+  // Chyba vyhozená z akce se v produkci nezobrazí – vrátit se s hláškou v adrese.
+  if (!requests.length) redirect(`${path(projectId)}?chyba=zadanky`);
   const subProjectId = String(formData.get("subProjectId") || "") || null;
   const title =
     str(formData.get("title"), 200) ??
@@ -126,7 +127,7 @@ export async function setTenderRequests(formData: FormData) {
     select: { id: true },
   });
   const keep = ids.filter((id) => valid.some((v) => v.id === id));
-  if (!keep.length) throw new Error("Řízení musí mít aspoň jednu žádanku.");
+  if (!keep.length) return; // bez žádanky řízení nedává smysl – nic neměnit
   await prisma.$transaction([
     prisma.tenderRequest.deleteMany({ where: { tenderId: tender.id, requestId: { notIn: keep } } }),
     ...keep.map((requestId, i) =>
@@ -168,16 +169,16 @@ export async function updateRequestBrief(_prev: { error?: string; ok?: boolean }
 }
 
 /** Fotky do galerie žádanky – uvidí je dodavatelé na portálu. */
-export async function addGalleryPhotos(formData: FormData) {
+export async function addGalleryPhotos(formData: FormData): Promise<{ error?: string }> {
   const requestId = String(formData.get("requestId"));
   const r = await prisma.request.findUnique({
     where: { id: requestId },
     select: { id: true, projectId: true, subProjectId: true, project: { select: { ownerId: true } } },
   });
-  if (!r) throw new Error("Žádanka nenalezena.");
+  if (!r) return { error: "Žádanka nenalezena." };
   const user = await managerOf(r.projectId);
   const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
-  if (!files.length) throw new Error("Vyber fotky.");
+  if (!files.length) return { error: "Vyber fotky." };
   for (const file of files.slice(0, 20)) {
     if (!/^image\//.test(file.type)) continue;
     if (file.size > 14 * 1024 * 1024) continue;
@@ -200,6 +201,7 @@ export async function addGalleryPhotos(formData: FormData) {
   }
   const tenderId = String(formData.get("tenderId") || "");
   revalidatePath(tenderId ? path(r.projectId, tenderId) : `/projects/${r.projectId}`);
+  return {};
 }
 
 export async function removeGalleryPhoto(formData: FormData) {

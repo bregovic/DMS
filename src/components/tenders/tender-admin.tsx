@@ -171,9 +171,10 @@ export function GalleryManager({
     }
     startTransition(async () => {
       try {
-        await addGalleryPhotos(fd);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Nahrání se nepovedlo.");
+        const res = await addGalleryPhotos(fd);
+        if (res.error) setError(res.error);
+      } catch {
+        setError("Nahrání se nepovedlo.");
       }
       if (input.current) input.current.value = "";
     });
@@ -259,8 +260,8 @@ export function InviteAdder({ tenderId, vendors }: { tenderId: string; vendors: 
         await addInvites(fd);
         setPicked(new Set());
         setOpen(false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Uložení se nepovedlo.");
+      } catch {
+        setError("Uložení se nepovedlo. Načti stránku znovu.");
       }
     });
   }

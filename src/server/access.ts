@@ -14,10 +14,13 @@ export function canWrite(role: string | null | undefined): boolean {
 
 type SessionUser = { id: string; email?: string | null };
 
-const projectInclude = {
+/** Výdaje jen vlastní – seznam projektů je potřebuje jen pro dodavatele
+ *  (vidí své výdaje). Dřív se tahaly všechny výdaje všech projektů při
+ *  každém otevření přehledu. */
+const projectIncludeFor = (userId: string) => ({
   _count: { select: { expenses: true, documents: true } },
-  expenses: { select: { amount: true, createdById: true } },
-};
+  expenses: { where: { createdById: userId }, select: { amount: true, createdById: true } },
+});
 
 /**
  * Projekty, které uživatel spravuje – vlastní, nebo je v nich spolusprávce.
@@ -41,6 +44,7 @@ export async function managedProjectIds(user: SessionUser): Promise<string[]> {
 /** Projekty, ke kterým má uživatel přístup: vlastní + projektové i subprojektové členství. */
 export async function listProjectsForUser(user: SessionUser) {
   const email = user.email?.toLowerCase() ?? null;
+  const projectInclude = projectIncludeFor(user.id);
 
   const [owned, memberships, subMemberships] = await Promise.all([
     prisma.project.findMany({

@@ -115,6 +115,7 @@ export default async function TendersPage({
           <p className="mt-3 text-sm text-stone-500">Žádné otevřené žádanky.</p>
         ) : (
           <form action={createTender} className="mt-4 space-y-4">
+            {sp?.chyba === "zadanky" && <p className="text-sm text-red-700">Vyber aspoň jednu žádanku.</p>}
             <input type="hidden" name="projectId" value={id} />
             {sub && <input type="hidden" name="subProjectId" value={sub} />}
             <div>
