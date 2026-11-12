@@ -128,7 +128,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
   const back = `/projects/${id}/rizeni`;
   const savedWeights = Array.isArray(t.weights) ? (t.weights as { label: string; weight: number; note?: string }[]) : [];
   // Návrh dodavatelů: běh starší 15 min bez výsledku se bere jako chyba.
-  const aiRunning = t.aiStatus === "running" && Date.now() - t.updatedAt.getTime() < 15 * 60_000;
+  const aiRunning = t.aiStatus === "running" && Date.now() - t.updatedAt.getTime() < 30 * 60_000;
   const aiStatus = aiRunning ? "running" : t.aiStatus === "running" ? "error" : ((t.aiStatus ?? "idle") as "idle" | "ready" | "error");
   const raw = t.aiResult as TenderSuggestion | null;
   const reqTitle = new Map(t.requests.map((r) => [r.requestId, r.request.title]));

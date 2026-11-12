@@ -110,7 +110,7 @@ export function TenderSuggest({
             {(pending || running) && <Loader2 className="size-4 animate-spin" />}
             {running ? "Hledám dodavatele…" : result ? "Navrhnout znovu" : "Navrhnout dodavatele a kritéria"}
           </button>
-          {running && <span className="text-xs text-stone-500">Trvá to několik minut.</span>}
+          {running && <span className="text-xs text-stone-500">Trvá to 3–10 minut.</span>}
           {status === "error" && error && <span className="text-xs text-red-700">{error}</span>}
           {msg && <span className="text-xs text-stone-600">{msg}</span>}
         </div>

@@ -104,6 +104,7 @@ const SCHEMA = {
 };
 
 const INSTRUCTIONS = `Pomáháš soukromému stavebníkovi v Česku připravit poptávkové řízení. Dostaneš zadání (položky se specifikací) a místo stavby. Odpovídej česky.
+Pracuješ samostatně: nikdy se neptej a nic neodkládej – uživatel nemůže odpovědět. Když je zadání nejasné, zvol rozumný předpoklad a zmiň ho v note. Seznam firem (vendors) je povinný a nesmí být prázdný.
 
 1) requests – ke každé položce (requestId přesně podle vstupu):
 - offerFields: 4–8 údajů, které má dodavatel v nabídce vyplnit, aby šly nabídky férově porovnat (technologie/výrobek, klíčové technické parametry s jednotkou, tloušťka, záruka, termín realizace, co je v ceně – doprava, příprava, úklid…). Krátké popisky, jednotku zvlášť do unit (např. "mm", "W/m²K", "roky"). required=true jen u 2–3 nejdůležitějších. Neopakuj cenu a termín dodání – ty formulář má vždy.
@@ -174,7 +175,8 @@ export async function runTenderSuggest(tenderId: string) {
       `\n\nPoložky:\n${zadani}` +
       `\n\nDodavatelé v evidenci (název · IČO · e-mail):\n${known.map((v) => `${v.name} · ${v.ico ?? "—"} · ${v.email ?? "—"}`).join("\n")}`;
 
-    const { data, costUsd } = await callModel<TenderSuggestion>(
+    // eslint-disable-next-line prefer-const
+    let { data, costUsd } = await callModel<TenderSuggestion>(
       AI_MODEL,
       INSTRUCTIONS,
       [{ type: "input_text", text }],
@@ -182,6 +184,32 @@ export async function runTenderSuggest(tenderId: string) {
       SCHEMA,
       { effort: "medium", maxOutput: 24_000, webSearch: true, account },
     );
+
+    // Model se občas místo hledání zeptá („mám hledat do 40 km…?“) a firmy
+    // nevrátí – pak jedno opakování jen na firmy.
+    if ((data.vendors ?? []).length < 3) {
+      const znovu = await callModel<TenderSuggestion>(
+        AI_MODEL,
+        INSTRUCTIONS,
+        [
+          {
+            type: "input_text",
+            text: `${text}
+
+DŮLEŽITÉ: minule jsi nevrátil žádné firmy. Teď je vyhledej na webu a vrať aspoň 8 firem s kontakty a hodnocením. Neptej se.`,
+          },
+        ],
+        "tender_suggest",
+        SCHEMA,
+        { effort: "medium", maxOutput: 24_000, webSearch: true, account },
+      );
+      costUsd += znovu.costUsd;
+      if ((znovu.data.vendors ?? []).length > (data.vendors ?? []).length) {
+        data.vendors = znovu.data.vendors;
+        if (!data.criteria?.length) data.criteria = znovu.data.criteria;
+        if (!data.requests?.length) data.requests = znovu.data.requests;
+      }
+    }
 
     // Druhé kolo jen pro hodnocení: model ho u části firem v prvním kole
     // nedohledá (hledá hlavně firmy a kontakty).

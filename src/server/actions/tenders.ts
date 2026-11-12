@@ -333,7 +333,7 @@ export async function saveSubmissionReply(_prev: { error?: string; ok?: boolean 
 // Návrh údajů, kritérií a dodavatelů
 // ---------------------------------------------------------------------------
 
-const STALE_MS = 15 * 60_000;
+const STALE_MS = 30 * 60_000;
 
 export async function startTenderSuggest(formData: FormData): Promise<{ error?: string }> {
   const { tender } = await tenderCtx(String(formData.get("id")));
