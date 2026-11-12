@@ -112,6 +112,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
     price: number | null;
     priceWithoutVat: number | null;
     vatRate: number | null;
+    vatMode: string | null;
     deliveryDate: Date | null;
     validUntil: Date | null;
     note: string | null;
@@ -123,9 +124,11 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
   for (const { request: r } of tender.requests) {
     if (String(form.get(`offer_${r.id}`) ?? "") !== "1") continue;
     const vatRaw = String(form.get(`vatRate_${r.id}`) ?? "");
-    const vatRate = vatRaw === "" ? null : Number(vatRaw);
+    // „rc“ = přenesená daňová povinnost: bez DPH, cena celkem = základ
+    const vatMode = vatRaw === "rc" ? "rc" : null;
+    const vatRate = vatMode || vatRaw === "" ? null : Number(vatRaw);
     let priceWithoutVat = num(form.get(`priceWithoutVat_${r.id}`));
-    let price = num(form.get(`price_${r.id}`));
+    let price = vatMode ? priceWithoutVat : num(form.get(`price_${r.id}`));
     if (vatRate != null && ![0, 12, 21].includes(vatRate)) return bad("Neplatná sazba DPH.");
     if (vatRate != null && priceWithoutVat != null && price == null)
       price = Math.round(priceWithoutVat * (1 + vatRate / 100) * 100) / 100;
@@ -154,6 +157,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
       price,
       priceWithoutVat,
       vatRate,
+      vatMode,
       deliveryDate: date(form.get(`delivery_${r.id}`)),
       validUntil: date(form.get(`valid_${r.id}`)),
       note: txt(form.get(`note_${r.id}`), 2000),
@@ -162,6 +166,13 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
     });
   }
   if (!drafts.length) return bad("Vyberte aspoň jednu položku, na kterou podáváte nabídku.");
+  // Přílohy k celé nabídce – uloží se jednou a připojí ke každé nabídce.
+  const common = form.getAll("file_all").filter((f): f is File => f instanceof File && f.size > 0).slice(0, 8);
+  for (const f of common) {
+    if (f.size > PORTAL_MAX_FILE) return bad(`Soubor „${f.name}“ je větší než 15 MB.`);
+    if (!PORTAL_FILE_TYPES.test(f.type)) return bad(`Soubor „${f.name}“: přiložte PDF, obrázek, Word nebo Excel.`);
+    total += f.size;
+  }
   if (total > PORTAL_MAX_TOTAL) return bad("Přílohy mají dohromady víc než 40 MB.");
 
   // Dodavatel v evidenci vlastníka: z pozvánky, podle IČO nebo e-mailu, jinak nový.
@@ -256,6 +267,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
         price: d.price,
         priceWithoutVat: d.priceWithoutVat,
         vatRate: d.vatRate,
+        vatMode: d.vatMode,
         deliveryDate: d.deliveryDate,
         validUntil: d.validUntil,
         note: [d.note, note].filter(Boolean).join("\n\n").slice(0, 4000) || null,
@@ -282,6 +294,31 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
           uploadedById: tender.createdById,
         },
       });
+    }
+  }
+
+  if (common.length) {
+    const offers = await prisma.offer.findMany({ where: { submissionId: submission.id }, select: { id: true, requestId: true } });
+    for (const f of common) {
+      const buf = Buffer.from(await f.arrayBuffer());
+      const key = await storage.save(buf, f.name, `${requestFolder(ownerId, tender.projectId, offers[0].requestId)}/nabidky`);
+      for (const o of offers) {
+        const d = drafts.find((x) => x.requestId === o.requestId);
+        await prisma.document.create({
+          data: {
+            projectId: tender.projectId,
+            subProjectId: d?.subProjectId ?? null,
+            offerId: o.id,
+            fileName: key,
+            originalName: f.name.slice(0, 250),
+            mimeType: f.type,
+            size: buf.length,
+            type: "offer",
+            summary: `Portál · ${companyName ?? email}`.slice(0, 500),
+            uploadedById: tender.createdById,
+          },
+        });
+      }
     }
   }
 

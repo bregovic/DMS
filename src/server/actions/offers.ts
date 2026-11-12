@@ -148,7 +148,7 @@ export async function updateOffer(formData: FormData) {
     },
   });
 
-  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`, "layout");
 }
 
 // Příloha k nabídce (PDF/sken nabídky). Owner + aktivní dodavatel (svou nabídku).
@@ -186,7 +186,7 @@ export async function attachOfferFile(formData: FormData) {
       uploadedById: (await requireUser()).id,
     },
   });
-  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`, "layout");
 }
 
 export async function setOfferStatus(formData: FormData) {
@@ -196,7 +196,7 @@ export async function setOfferStatus(formData: FormData) {
   if (!canEdit) throw new UserError("Stav nabídky nemůžeš měnit.");
   await prisma.offer.update({ where: { id: offer.id }, data: { status } });
   await dropComparisons({ requestIds: [offer.requestId] });
-  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`, "layout");
 }
 
 export async function deleteOffer(formData: FormData) {
@@ -207,7 +207,7 @@ export async function deleteOffer(formData: FormData) {
     prisma.offer.delete({ where: { id: offer.id } }),
   );
   await dropComparisons({ requestIds: [offer.requestId] });
-  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`, "layout");
 }
 
 // Vybere vítěznou nabídku: označí ji, ostatní odznačí a předvyplní žádanku
@@ -229,7 +229,7 @@ export async function selectOffer(formData: FormData) {
       where: { id: full.id },
       data: { selected: false, status: "nova" },
     });
-    revalidatePath(`/projects/${projectId}`);
+    revalidatePath(`/projects/${projectId}`, "layout");
     return;
   }
 
@@ -253,7 +253,7 @@ export async function selectOffer(formData: FormData) {
   ]);
 
   const created = await createPlanTasksFromOffer(full.id, user.id);
-  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}`, "layout");
   if (created > 0) revalidatePath("/planning");
 }
 

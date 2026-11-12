@@ -76,6 +76,12 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
   }
 
   const open = tenderAcceptsOffers(t);
+  // Správce v náhledu konceptu vidí formulář celý, jen odeslat půjde až po zveřejnění.
+  const previewForm = !open && preview && t.status === "draft";
+  const closedMsg =
+    t.status === "cancelled"
+      ? { h: "Řízení bylo zrušeno", p: "Děkujeme za zájem. Nabídky se už nepřijímají." }
+      : { h: "Příjem nabídek skončil", p: "Děkujeme za zájem." };
   const items = t.requests.map(({ request: r }) => ({
     id: r.id,
     title: r.title,
@@ -181,8 +187,9 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
         </ol>
 
         <section className="mt-12">
-          {open ? (
+          {open || previewForm ? (
             <PortalOfferForm
+              previewOnly={previewForm}
               token={token}
               items={items.map((r) => ({ id: r.id, title: r.title, fields: r.fields }))}
               defaults={{
@@ -193,8 +200,8 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
             />
           ) : (
             <div className="border border-stone-300/80 bg-white px-6 py-8 text-center">
-              <p className="display text-2xl text-stone-950">Příjem nabídek skončil</p>
-              <p className="mt-2 text-sm text-stone-600">Děkujeme za zájem.</p>
+              <p className="display text-2xl text-stone-950">{closedMsg.h}</p>
+              <p className="mt-2 text-sm text-stone-600">{closedMsg.p}</p>
             </div>
           )}
         </section>

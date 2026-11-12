@@ -36,6 +36,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
@@ -398,6 +399,7 @@ model Offer {
   submissionId    String?
   priceWithoutVat Decimal?  @db.Decimal(12, 2)
   vatRate         Int?
+  vatMode         String? // "rc" = přenesená daňová povinnost (bez DPH, daň přizná odběratel)
   validUntil      DateTime?
   /**
    * Vyplněné údaje nabídky [{label, value}].
@@ -436,7 +438,7 @@ model Tender {
   location     String? // obec, místní část
   contact      String? // jméno a telefon pro dotazy
   deadline     DateTime? // termín pro podání nabídek
-  status       String    @default("draft") // draft | open | closed
+  status       String    @default("draft") // draft | open | closed | cancelled
   /**
    * Podle čeho se vybírá – vidí dodavatel na portálu.
    */

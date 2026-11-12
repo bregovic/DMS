@@ -12,6 +12,7 @@ import { deleteWithFiles, requestFolder } from "@/server/document-files";
 import { after } from "next/server";
 import { newToken, offerFieldsFromText } from "@/server/tenders";
 import { runTenderSuggest, type TenderSuggestion } from "@/server/tender-ai";
+import { fetchAres } from "@/server/doc-scan";
 
 /**
  * Správa poptávkových řízení (#49). Řízení zakládá a spravuje jen vlastník
@@ -109,7 +110,7 @@ export async function updateTender(_prev: { error?: string; ok?: boolean } | und
 export async function setTenderStatus(formData: FormData) {
   const { tender } = await tenderCtx(String(formData.get("id")));
   const status = String(formData.get("status"));
-  if (!["draft", "open", "closed"].includes(status)) throw new UserError("Neplatný stav.");
+  if (!["draft", "open", "closed", "cancelled"].includes(status)) throw new UserError("Neplatný stav.");
   await prisma.tender.update({ where: { id: tender.id }, data: { status } });
   revalidatePath(path(tender.projectId, tender.id));
   revalidatePath(path(tender.projectId));
@@ -244,6 +245,35 @@ export async function addInvites(formData: FormData) {
         data: { tenderId: tender.id, vendorId: v.id, name: v.name, email: v.email, token: newToken() },
       });
     }
+  }
+  // Hromadně: řádek = jeden dodavatel, v libovolném pořadí e-mail, název a IČO.
+  const bulk = String(formData.get("bulk") ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 40);
+  for (const line of bulk) {
+    const em = line.match(/[^\s,;<>]+@[^\s,;<>]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() ?? null;
+    const ic = line.match(/\b\d{8}\b/)?.[0] ?? null;
+    let nm = line.replace(em ?? "", "").replace(ic ?? "", "").replace(/IČO?:?/gi, "").replace(/[<>]/g, "").replace(/^[\s,;|–-]+|[\s,;|–-]+$/g, "").replace(/\s*[,;|]\s*[,;|]?\s*/g, ", ").trim() || null;
+    if (!em && !ic && !nm) continue;
+    let v = await prisma.vendor.findFirst({
+      where: {
+        ownerId: tender.project.ownerId,
+        OR: [...(ic ? [{ ico: ic }] : []), ...(em ? [{ email: { equals: em, mode: "insensitive" as const } }] : [])],
+      },
+      select: { id: true, name: true, email: true },
+    });
+    if (!v && (ic || em)) {
+      const ares = ic ? await fetchAres(ic) : null;
+      if (!nm) nm = ares?.name ?? null;
+      v = await prisma.vendor.create({
+        data: { ownerId: tender.project.ownerId, name: (nm || em || ic || "Dodavatel").slice(0, 200), email: em, ico: ic, dic: ares?.dic ?? null, address: ares?.address ?? null, category: "construction" },
+        select: { id: true, name: true, email: true },
+      });
+    }
+    if (v && existing.some((e) => e.vendorId === v!.id)) continue;
+    if (em && existing.some((e) => e.email === em)) continue;
+    await prisma.tenderInvite.create({
+      data: { tenderId: tender.id, vendorId: v?.id ?? null, name: (v?.name || nm || em || "Dodavatel").slice(0, 200), email: em ?? v?.email ?? null, token: newToken() },
+    });
+    existing.push({ vendorId: v?.id ?? null, email: em });
   }
   if (name || email) {
     if (!email || !existing.some((e) => e.email === email)) {

@@ -25,11 +25,25 @@ import { TenderSuggest, type SuggestionView } from "@/components/tenders/tender-
 import { WeightsEditor } from "@/components/tenders/tender-fields";
 import type { TenderSuggestion } from "@/server/tender-ai";
 import { DeleteButton } from "@/components/ui/delete-button";
+import { selectOffer, setOfferStatus } from "@/server/actions/offers";
+import { formatCurrency } from "@/lib/utils";
+
+const OFFER_LABEL: Record<string, string> = { nova: "nová", vyhovuje: "vyhovuje", odmitnuta: "nevyhovuje", vybrana: "vybraná" };
+const OFFER_BADGE: Record<string, string> = {
+  nova: "border-stone-300 text-stone-600",
+  vyhovuje: "border-stone-950 text-stone-950",
+  odmitnuta: "border-stone-300 bg-stone-100 text-stone-400",
+  vybrana: "border-emerald-700 bg-emerald-700 text-white",
+};
+const smallBtn =
+  "inline-flex h-7 items-center border border-stone-300 bg-white px-2 text-xs text-stone-700 hover:border-stone-950 hover:text-stone-950 cursor-pointer";
+const smallBtnGo = "inline-flex h-7 items-center bg-stone-950 px-2.5 text-xs font-medium text-white hover:bg-stone-800 cursor-pointer";
 import {
   EmailDraft,
   GalleryManager,
   InviteAdder,
   InviteRowActions,
+  ConfirmButton,
   ReplyForm,
   RequestBriefForm,
   TenderSettingsForm,
@@ -201,6 +215,21 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
                 </button>
               </form>
             )}
+            {t.status !== "cancelled" && (
+              <ConfirmButton
+                action={setTenderStatus}
+                fields={{ id: t.id, status: "cancelled" }}
+                label="Zrušit řízení"
+                confirm="Zrušit řízení? Dodavatelé na portálu uvidí, že řízení bylo zrušeno. Podané nabídky zůstanou."
+              />
+            )}
+            <DeleteButton
+              action={deleteTender}
+              fields={{ id: t.id }}
+              label="Smazat"
+              confirm="Smazat řízení? Odkazy přestanou fungovat, podané nabídky zůstanou u žádanek."
+              className="inline-flex h-9 items-center border border-stone-300 bg-white px-3 text-sm text-stone-500 hover:border-red-700 hover:text-red-700 cursor-pointer"
+            />
           </div>
         </div>
 
@@ -224,6 +253,38 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
       {/* Nabídky */}
       <section className="mb-12">
         <h2 className="kicker mb-3">Podané nabídky · {t.submissions.length}</h2>
+        {t.submissions.length > 0 && (
+          <div className="mb-5 overflow-x-auto border border-stone-300/80 bg-white">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 text-left text-xs text-stone-500">
+                  <th className="px-3 py-2 font-medium">Položka</th>
+                  <th className="px-3 py-2 font-medium">Nabídek</th>
+                  <th className="px-3 py-2 font-medium">Nejlevnější bez DPH</th>
+                  <th className="px-3 py-2 font-medium">Vyhovuje</th>
+                  <th className="px-3 py-2 font-medium">Vybraná</th>
+                </tr>
+              </thead>
+              <tbody>
+                {t.requests.map(({ request: r }) => {
+                  const os = t.submissions.flatMap((s) => s.offers.filter((o) => o.request.id === r.id).map((o) => ({ ...o, firm: s.companyName })));
+                  const base = (o: (typeof os)[number]) => Number(o.priceWithoutVat ?? o.price ?? Infinity);
+                  const best = [...os].sort((a, b) => base(a) - base(b))[0];
+                  const chosen = os.find((o) => o.selected || o.status === "vybrana");
+                  return (
+                    <tr key={r.id} className="border-b border-stone-100 last:border-0">
+                      <td className="px-3 py-2 text-stone-900">{r.title}</td>
+                      <td className="px-3 py-2 font-mono">{os.length}</td>
+                      <td className="px-3 py-2">{best && isFinite(base(best)) ? `${formatCurrency(base(best))} · ${best.firm}` : "—"}</td>
+                      <td className="px-3 py-2 font-mono">{os.filter((o) => o.status === "vyhovuje").length}</td>
+                      <td className="px-3 py-2">{chosen ? chosen.firm : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         {t.submissions.length === 0 ? (
           <p className="text-sm text-stone-500">Zatím žádná nabídka.</p>
         ) : (
@@ -260,8 +321,25 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
                             </Link>
                             <span className="flex items-center gap-2">
                               <span className="font-mono text-sm text-stone-950">{offerPriceLine(o)}</span>
-                              {sel && <span className="border border-emerald-700 bg-emerald-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white">vybraná</span>}
                             </span>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${OFFER_BADGE[sel ? "vybrana" : o.status] ?? OFFER_BADGE.nova}`}>
+                              {sel ? "vybraná" : (OFFER_LABEL[o.status] ?? o.status)}
+                            </span>
+                            {!sel && o.status !== "vyhovuje" && (
+                              <ConfirmButton action={setOfferStatus} fields={{ id: o.id, status: "vyhovuje" }} label="Vyhovuje" className={smallBtn} />
+                            )}
+                            {!sel && o.status !== "odmitnuta" && (
+                              <ConfirmButton action={setOfferStatus} fields={{ id: o.id, status: "odmitnuta" }} label="Nevyhovuje" className={smallBtn} />
+                            )}
+                            <ConfirmButton
+                              action={selectOffer}
+                              fields={{ id: o.id }}
+                              label={sel ? "Zrušit výběr" : "Vybrat"}
+                              confirm={sel ? undefined : `Vybrat nabídku ${s.companyName} pro „${o.request.title}“? Ostatní nabídky na tuto položku se odznačí.`}
+                              className={sel ? smallBtn : smallBtnGo}
+                            />
                           </div>
                           <p className="mt-0.5 text-xs text-stone-500">
                             {[
@@ -464,15 +542,6 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
               deadline: t.deadline ? t.deadline.toISOString().slice(0, 10) : null,
               realization: t.realization,
             }}
-          />
-        </div>
-        <div className="mt-4">
-          <DeleteButton
-            action={deleteTender}
-            fields={{ id: t.id }}
-            label="Smazat řízení"
-            confirm="Smazat řízení? Odkazy přestanou fungovat, podané nabídky zůstanou u žádanek."
-            className="inline-flex items-center text-xs text-stone-400 hover:text-red-700 cursor-pointer"
           />
         </div>
       </section>

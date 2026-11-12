@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Paperclip } from "lucide-react";
+import { compressImage } from "@/lib/client-upload";
 
 type Field = { label: string; unit?: string | null; required?: boolean };
 type Item = { id: string; title: string; fields: Field[] };
 
 const field =
-  "block w-full rounded-none border border-stone-300 bg-white px-3 py-2.5 text-[15px] text-stone-950 placeholder:text-stone-400 focus-visible:border-stone-950 focus-visible:outline-none";
+  "block w-full rounded-none border border-stone-300 bg-white px-3 py-2.5 text-[15px] text-stone-950 placeholder:text-stone-400 focus-visible:border-stone-950 focus-visible:outline-none disabled:bg-stone-100 disabled:text-stone-500";
 const label = "kicker mb-1.5 block";
 
 const MAX_FILE = 15 * 1024 * 1024;
@@ -19,34 +20,48 @@ function parse(v: string) {
   const n = Number(v.replace(/\s/g, "").replace(",", "."));
   return v.trim() && isFinite(n) ? n : null;
 }
-const fmt = (n: number) =>
-  n.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Jedna nabídka na položku: ceny, termíny, požadované údaje, příloha. */
+function FilePick({ name, hint }: { name: string; hint: string }) {
+  const [files, setFiles] = useState<File[]>([]);
+  return (
+    <label className="flex cursor-pointer items-center gap-2 border border-dashed border-stone-400 px-3 py-3 text-sm text-stone-600 hover:border-stone-950 hover:text-stone-950">
+      <Paperclip className="size-4 shrink-0" />
+      <span className="min-w-0 truncate">{files.length ? files.map((f) => f.name).join(", ") : hint}</span>
+      <input
+        type="file"
+        name={name}
+        accept={ACCEPT}
+        multiple
+        className="sr-only"
+        onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 5))}
+      />
+    </label>
+  );
+}
+
+/** Jedna nabídka na položku: ceny a DPH, termíny, požadované údaje, příloha. */
 function ItemOffer({ item, single }: { item: Item; single: boolean }) {
-  const [on, setOn] = useState(single);
+  const [on, setOn] = useState(true);
   const [base, setBase] = useState("");
   const [rate, setRate] = useState("21");
   const [gross, setGross] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const rc = rate === "rc";
 
   const recompute = (b: string, r: string) => {
     const n = parse(b);
-    if (n != null && r !== "") setGross(fmt(n * (1 + Number(r) / 100)));
+    if (n == null) return;
+    setGross(fmt(r === "rc" ? n : n * (1 + Number(r) / 100)));
   };
 
   return (
     <div className={`border bg-white ${on ? "border-stone-950" : "border-stone-300/80"}`}>
       <label className={`flex items-center gap-3 px-5 py-4 sm:px-7 ${single ? "" : "cursor-pointer"}`}>
         {!single && (
-          <input
-            type="checkbox"
-            checked={on}
-            onChange={(e) => setOn(e.target.checked)}
-            className="size-5 accent-stone-950"
-          />
+          <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} className="size-5 accent-stone-950" />
         )}
         <span className="display text-xl text-stone-950">{item.title}</span>
+        {!single && !on && <span className="ml-auto text-xs text-stone-500">bez nabídky</span>}
       </label>
       <input type="hidden" name={`offer_${item.id}`} value={on ? "1" : "0"} />
 
@@ -54,7 +69,7 @@ function ItemOffer({ item, single }: { item: Item; single: boolean }) {
         <div className="space-y-5 border-t border-stone-200 px-5 py-5 sm:px-7">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <span className={label}>Cena bez DPH (Kč)</span>
+              <span className={label}>Cena bez DPH (Kč) *</span>
               <input
                 name={`priceWithoutVat_${item.id}`}
                 inputMode="decimal"
@@ -67,7 +82,7 @@ function ItemOffer({ item, single }: { item: Item; single: boolean }) {
               />
             </div>
             <div>
-              <span className={label}>Sazba DPH</span>
+              <span className={label}>DPH</span>
               <select
                 name={`vatRate_${item.id}`}
                 className={field}
@@ -79,24 +94,27 @@ function ItemOffer({ item, single }: { item: Item; single: boolean }) {
               >
                 <option value="21">21 %</option>
                 <option value="12">12 %</option>
-                <option value="0">0 % / neplátce</option>
+                <option value="0">0 % / neplátce DPH</option>
+                <option value="rc">Přenesená daňová povinnost</option>
               </select>
             </div>
             <div>
-              <span className={label}>Cena s DPH (Kč)</span>
+              <span className={label}>{rc ? "Cena celkem (bez DPH)" : "Cena s DPH (Kč)"}</span>
               <input
                 name={`price_${item.id}`}
                 inputMode="decimal"
                 className={`${field} font-mono`}
                 value={gross}
+                disabled={rc}
                 onChange={(e) => setGross(e.target.value)}
               />
             </div>
           </div>
+          {rc && <p className="-mt-2 text-xs text-stone-500">Daň přizná odběratel – faktura bez DPH.</p>}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <span className={label}>Termín dodání</span>
+              <span className={label}>Termín dodání / realizace</span>
               <input type="date" name={`delivery_${item.id}`} className={field} />
             </div>
             <div>
@@ -122,23 +140,11 @@ function ItemOffer({ item, single }: { item: Item; single: boolean }) {
 
           <div>
             <span className={label}>Poznámka k položce</span>
-            <textarea name={`note_${item.id}`} rows={3} className={field} />
+            <textarea name={`note_${item.id}`} rows={2} className={field} />
           </div>
-
           <div>
-            <span className={label}>Nabídka v souboru</span>
-            <label className="flex cursor-pointer items-center gap-2 border border-dashed border-stone-400 px-3 py-3 text-sm text-stone-600 hover:border-stone-950 hover:text-stone-950">
-              <Paperclip className="size-4" />
-              {files.length ? files.map((f) => f.name).join(", ") : "Přiložit soubor (PDF, obrázek, Word, Excel · do 15 MB)"}
-              <input
-                type="file"
-                name={`file_${item.id}`}
-                accept={ACCEPT}
-                multiple
-                className="sr-only"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 5))}
-              />
-            </label>
+            <span className={label}>Nabídka k položce v souboru</span>
+            <FilePick name={`file_${item.id}`} hint="Přiložit soubor (PDF, obrázek, Word, Excel · do 15 MB)" />
           </div>
         </div>
       )}
@@ -150,10 +156,13 @@ export function PortalOfferForm({
   token,
   items,
   defaults,
+  previewOnly = false,
 }: {
   token: string;
   items: Item[];
   defaults: { email: string; ico: string; phone: string };
+  /** Náhled konceptu pro zadavatele – formulář vidět, odeslat nejde. */
+  previewOnly?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -180,20 +189,33 @@ export function PortalOfferForm({
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (previewOnly) return;
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    let total = 0;
-    for (const [, v] of fd.entries()) {
-      if (v instanceof File) {
-        if (v.size > MAX_FILE) return setError(`Soubor „${v.name}“ je větší než 15 MB.`);
-        total += v.size;
-      }
-    }
-    if (total > MAX_TOTAL) return setError("Přílohy mají dohromady víc než 40 MB.");
-    if (!items.some((i) => fd.get(`offer_${i.id}`) === "1"))
+    const raw = new FormData(e.currentTarget);
+    if (!items.some((i) => raw.get(`offer_${i.id}`) === "1"))
       return setError("Vyberte aspoň jednu položku, na kterou podáváte nabídku.");
 
     setBusy(true);
+    // Fotky se před odesláním zmenší (delší strana 2000 px, JPEG) – nezabírají zbytečně místo.
+    const fd = new FormData();
+    let total = 0;
+    for (const [k, v] of raw.entries()) {
+      if (v instanceof File) {
+        if (!v.size) continue;
+        const f = v.type.startsWith("image/") ? await compressImage(v) : v;
+        if (f.size > MAX_FILE) {
+          setBusy(false);
+          return setError(`Soubor „${v.name}“ je větší než 15 MB.`);
+        }
+        total += f.size;
+        fd.append(k, f);
+      } else fd.append(k, v);
+    }
+    if (total > MAX_TOTAL) {
+      setBusy(false);
+      return setError("Přílohy mají dohromady víc než 40 MB.");
+    }
+
     try {
       const res = await fetch(`/api/p/${token}/submit`, { method: "POST", body: fd });
       const j = (await res.json().catch(() => ({}))) as { code?: string | null; error?: string };
@@ -211,7 +233,7 @@ export function PortalOfferForm({
       <div>
         <h2 className="display text-3xl text-stone-950">Podat nabídku</h2>
         {items.length > 1 && (
-          <p className="mt-2 text-sm text-stone-600">Nabídku lze podat na všechny položky nebo jen na některé.</p>
+          <p className="mt-2 text-sm text-stone-600">Položky, na které nabídku nepodáváte, odškrtněte.</p>
         )}
         <div className="mt-5 space-y-3">
           {items.map((i) => (
@@ -253,8 +275,12 @@ export function PortalOfferForm({
             </div>
           </div>
           <div>
-            <span className={label}>Poznámka k nabídce</span>
-            <textarea name="note" rows={3} className={field} />
+            <span className={label}>Zpráva k nabídce</span>
+            <textarea name="note" rows={4} className={field} placeholder="Doplňující informace, podmínky, dotazy k zadání…" />
+          </div>
+          <div>
+            <span className={label}>Přílohy k celé nabídce</span>
+            <FilePick name="file_all" hint="Cenová nabídka, technické listy, reference… (do 15 MB/soubor)" />
           </div>
           {/* past na roboty */}
           <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
@@ -263,14 +289,20 @@ export function PortalOfferForm({
 
       {error && <p className="border-l-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="flex w-full items-center justify-center gap-2 bg-stone-950 px-6 py-4 text-base font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-60 cursor-pointer sm:w-auto"
-      >
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        {busy ? "Odesílám…" : "Odeslat nabídku"}
-      </button>
+      {previewOnly ? (
+        <p className="border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Náhled – odeslat nabídku půjde, až řízení v DMS zveřejníte.
+        </p>
+      ) : (
+        <button
+          type="submit"
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 bg-stone-950 px-6 py-4 text-base font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-60 cursor-pointer sm:w-auto"
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? "Odesílám…" : "Odeslat nabídku"}
+        </button>
+      )}
     </form>
   );
 }

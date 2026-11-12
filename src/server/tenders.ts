@@ -11,6 +11,7 @@ export const TENDER_STATUSES = [
   { value: "draft", label: "Koncept" },
   { value: "open", label: "Přijímá nabídky" },
   { value: "closed", label: "Uzavřeno" },
+  { value: "cancelled", label: "Zrušeno" },
 ] as const;
 
 export function tenderStatusLabel(v: string) {
@@ -199,9 +200,10 @@ export function replyEmail(tenderTitle: string, text: string, link: string) {
 }
 
 /** Krátký přehled ceny nabídky pro výpisy. */
-export function offerPriceLine(o: { price: unknown; priceWithoutVat: unknown; vatRate: number | null }) {
+export function offerPriceLine(o: { price: unknown; priceWithoutVat: unknown; vatRate: number | null; vatMode?: string | null }) {
   const s = o.price != null ? formatCurrency(Number(o.price)) : null;
   const b = o.priceWithoutVat != null ? formatCurrency(Number(o.priceWithoutVat)) : null;
+  if (o.vatMode === "rc") return `${b ?? s ?? "bez ceny"} bez DPH · přenesená daňová povinnost`;
   if (s && b) return `${b} bez DPH · ${s} s DPH${o.vatRate != null ? ` (${o.vatRate} %)` : ""}`;
   return s ?? b ?? "bez ceny";
 }

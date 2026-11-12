@@ -250,7 +250,7 @@ export function InviteAdder({ tenderId, vendors }: { tenderId: string; vendors: 
   function submit(fd: FormData) {
     setError(null);
     for (const id of picked) fd.append("vendorId", id);
-    if (!picked.size && !String(fd.get("name") || "").trim() && !String(fd.get("email") || "").trim()) {
+    if (!picked.size && !String(fd.get("bulk") || "").trim()) {
       setError("Vyber dodavatele nebo vyplň kontakt.");
       return;
     }
@@ -306,11 +306,14 @@ export function InviteAdder({ tenderId, vendors }: { tenderId: string; vendors: 
               </ul>
             </div>
             <div>
-              <p className={lbl}>Nový kontakt</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input name="name" placeholder="Firma" className={field} />
-                <input name="email" type="email" placeholder="E-mail" className={field} />
-              </div>
+              <p className={lbl}>Další dodavatelé</p>
+              <textarea
+                name="bulk"
+                rows={4}
+                placeholder={"Okna Novák s.r.o., info@oknanovak.cz, 12345678\npetr@izolace-dvorak.cz\n27082440"}
+                className={`${field} font-mono text-xs`}
+              />
+              <p className="mt-1 text-xs text-stone-500">Jeden na řádek – e-mail, název a IČO v libovolném pořadí. Podle IČO se doplní název z ARES.</p>
             </div>
             {error && <p className="text-sm text-red-700">{error}</p>}
             <div className="flex justify-end gap-2">
@@ -400,6 +403,37 @@ export function EmailDraft({
         </Dialog>
       )}
     </>
+  );
+}
+
+/** Tlačítko se souhlasem – stav řízení, stav nabídky. */
+export function ConfirmButton({
+  action,
+  fields,
+  label,
+  confirm,
+  className,
+}: {
+  action: (fd: FormData) => void | Promise<void>;
+  fields: Record<string, string>;
+  label: string;
+  confirm?: string;
+  className?: string;
+}) {
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (confirm && !window.confirm(confirm)) e.preventDefault();
+      }}
+    >
+      {Object.entries(fields).map(([k, v]) => (
+        <input key={k} type="hidden" name={k} value={v} />
+      ))}
+      <button type="submit" className={className ?? btnOutline}>
+        {label}
+      </button>
+    </form>
   );
 }
 
