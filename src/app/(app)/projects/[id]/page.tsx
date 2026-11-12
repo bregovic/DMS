@@ -215,7 +215,6 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   // Porovnání nakoupených položek s ceníkem katalogu
-  const priceCheck = await projectPriceSummary(id);
 
   // Doklady (účtenky/faktury) čekající na kontrolu – z vytěžení příloh
   // doklady přiložené k příjmům (Income.documentId nemá relaci, dotáhneme zvlášť)
@@ -239,6 +238,8 @@ export default async function ProjectDetailPage({
   // Dokumenty jsou jen v kořeni projektu – ve složce se spadne na výchozí.
   const requestedTab = parseProjectTab(sp?.tab);
   const tab = requestedTab === "dokumenty" && sub ? parseProjectTab(null) : requestedTab;
+  // Porovnání s ceníkem jen pro záložku Výdaje – jinde se nezobrazuje.
+  const priceCheck = tab === "vydaje" ? await projectPriceSummary(id) : null;
 
   // Dodavatel s přístupem jen k jedné složce: pusť ho rovnou do ní (ne na root projektu)
   if (scopeSubIds && scopeSubIds.length === 1 && sub === null) {
@@ -785,7 +786,8 @@ export default async function ProjectDetailPage({
     : undefined;
 
   // Našeptávání činností: unikátní názvy výdajů z celého projektu (napříč dodavateli).
-  const titleRows = canAdd
+  // Našeptávání jen tam, kde se zakládá výdaj nebo výkaz.
+  const titleRows = canAdd && (tab === "vydaje" || tab === "vykazy")
     ? await prisma.expense.findMany({
         where: { projectId: id },
         select: { title: true },
