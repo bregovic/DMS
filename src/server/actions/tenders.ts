@@ -379,7 +379,7 @@ export async function applySuggestedCriteria(formData: FormData) {
   if (!s?.criteria?.length) return;
   const weights = s.criteria
     .slice(0, 10)
-    .map((c) => ({ label: c.label.slice(0, 80), weight: Math.max(0, Math.round(c.weight)) }));
+    .map((c) => ({ label: c.label.slice(0, 80), weight: Math.max(0, Math.round(c.weight)), note: (c.note ?? "").slice(0, 200) }));
   await prisma.tender.update({ where: { id: tender.id }, data: { weights } });
   revalidatePath(path(tender.projectId, tender.id));
 }
@@ -442,7 +442,7 @@ export async function saveTenderWeights(
 ): Promise<{ error?: string; ok?: boolean }> {
   try {
     const { tender } = await tenderCtx(String(formData.get("id")));
-    let rows: { label: string; weight: number }[] = [];
+    let rows: { label: string; weight: number; note?: string }[] = [];
     try {
       rows = JSON.parse(String(formData.get("weights") || "[]"));
     } catch {
@@ -452,6 +452,7 @@ export async function saveTenderWeights(
       .map((r) => ({
         label: String(r.label ?? "").trim().slice(0, 80),
         weight: Math.max(0, Math.min(100, Math.round(Number(r.weight) || 0))),
+        note: String(r.note ?? "").trim().slice(0, 200),
       }))
       .filter((r) => r.label)
       .slice(0, 12);

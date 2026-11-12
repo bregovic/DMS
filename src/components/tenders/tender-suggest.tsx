@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import {
   addSuggestedVendors,
-  applySuggestedCriteria,
   startTenderSuggest,
 } from "@/server/actions/tenders";
 
@@ -149,12 +148,16 @@ export function TenderSuggest({
                         <span className="flex flex-wrap items-baseline gap-x-2">
                           <span className="text-sm font-medium text-stone-950">{v.aresName || v.name}</span>
                           {v.city && <span className="text-xs text-stone-500">{v.city}</span>}
-                          {v.rating != null && (
-                            <span className="text-xs text-stone-700">
+                          {v.rating != null ? (
+                            <span className="border border-stone-950 px-1.5 text-xs font-medium text-stone-950">
                               ★ {v.rating.toLocaleString("cs-CZ")}
-                              {v.ratingCount ? ` (${v.ratingCount})` : ""}
-                              {v.ratingSource ? ` · ${v.ratingSource}` : ""}
+                              <span className="font-normal text-stone-500">
+                                {v.ratingCount ? ` · ${v.ratingCount} recenzí` : ""}
+                                {v.ratingSource ? ` · ${v.ratingSource}` : ""}
+                              </span>
                             </span>
+                          ) : (
+                            <span className="text-xs text-stone-400">bez hodnocení</span>
                           )}
                           {v.invited ? (
                             <span className="text-[10px] uppercase tracking-wide text-stone-500">osloven</span>
@@ -191,31 +194,6 @@ export function TenderSuggest({
                         </span>
                       </span>
                     </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {result.criteria.length > 0 && (
-            <div>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="kicker">Navržená kritéria</p>
-                <form action={applySuggestedCriteria}>
-                  <input type="hidden" name="id" value={tenderId} />
-                  <button type="submit" className={btnOutline}>
-                    Převzít
-                  </button>
-                </form>
-              </div>
-              <ul className="space-y-1 text-sm">
-                {result.criteria.map((c, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="w-12 shrink-0 text-right font-mono text-stone-950">{Math.round(c.weight)} %</span>
-                    <span className="text-stone-800">
-                      {c.label}
-                      {c.note && <span className="text-stone-500"> – {c.note}</span>}
-                    </span>
                   </li>
                 ))}
               </ul>

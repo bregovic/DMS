@@ -117,8 +117,19 @@ export function FieldPicker({ current, suggested }: { current: Field[]; suggeste
 type State = { error?: string; ok?: boolean } | undefined;
 
 /** Kritéria výběru s vahou v procentech – jen pro zadavatele. */
-export function WeightsEditor({ tenderId, initial }: { tenderId: string; initial: { label: string; weight: number }[] }) {
-  const [rows, setRows] = useState(initial.length ? initial : [{ label: "Cena", weight: 100 }]);
+type Weight = { label: string; weight: number; note?: string };
+
+export function WeightsEditor({
+  tenderId,
+  initial,
+  fromSuggestion = false,
+}: {
+  tenderId: string;
+  initial: Weight[];
+  /** Předvyplněno z návrhu, zatím neuložené. */
+  fromSuggestion?: boolean;
+}) {
+  const [rows, setRows] = useState<Weight[]>(initial.length ? initial : [{ label: "Cena", weight: 100, note: "" }]);
   const [state, action, pending] = useFormAction<State>(saveTenderWeights, undefined);
   const sum = rows.reduce((a, r) => a + (Number(r.weight) || 0), 0);
 
@@ -128,12 +139,20 @@ export function WeightsEditor({ tenderId, initial }: { tenderId: string; initial
       <input type="hidden" name="weights" value={JSON.stringify(rows)} />
       <ul className="space-y-1.5">
         {rows.map((r, i) => (
-          <li key={i} className="flex items-center gap-2">
+          <li key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <input
               value={r.label}
               onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))}
-              className={field}
+              placeholder="Kritérium"
+              className={`${field} sm:max-w-56`}
               aria-label="Kritérium"
+            />
+            <input
+              value={r.note ?? ""}
+              onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, note: e.target.value } : x)))}
+              placeholder="parametr, např. realizace do 6 týdnů"
+              className={field}
+              aria-label="Parametr"
             />
             <input
               type="number"
@@ -157,7 +176,7 @@ export function WeightsEditor({ tenderId, initial }: { tenderId: string; initial
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setRows([...rows, { label: "", weight: 0 }])} className={ghost}>
+        <button type="button" onClick={() => setRows([...rows, { label: "", weight: 0, note: "" }])} className={ghost}>
           <Plus className="size-3.5" /> Kritérium
         </button>
         <span className={`text-xs ${sum === 100 ? "text-stone-500" : "text-amber-700"}`}>Součet {sum} %</span>
@@ -165,6 +184,7 @@ export function WeightsEditor({ tenderId, initial }: { tenderId: string; initial
           Uložit
         </button>
         {state?.ok && !pending && <span className="text-xs text-stone-500">Uloženo</span>}
+        {fromSuggestion && !state?.ok && <span className="text-xs text-amber-700">Podle návrhu – zatím neuloženo</span>}
         {state?.error && <span className="text-xs text-red-700">{state.error}</span>}
       </div>
     </form>

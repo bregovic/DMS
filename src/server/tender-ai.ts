@@ -109,12 +109,12 @@ const INSTRUCTIONS = `Pomáháš soukromému stavebníkovi v Česku připravit p
 - offerFields: 4–8 údajů, které má dodavatel v nabídce vyplnit, aby šly nabídky férově porovnat (technologie/výrobek, klíčové technické parametry s jednotkou, tloušťka, záruka, termín realizace, co je v ceně – doprava, příprava, úklid…). Krátké popisky, jednotku zvlášť do unit (např. "mm", "W/m²K", "roky"). required=true jen u 2–3 nejdůležitějších. Neopakuj cenu a termín dodání – ty formulář má vždy.
 - gaps: co v zadání chybí nebo je nejasné a dodavatel se na to zeptá (rozsah v m², přístup, podklad…). Krátce, max 5.
 
-2) criteria: 3–6 kritérií výběru s vahou v procentech (součet 100) a krátkou poznámkou – cena, kvalita/technologie, reference, termín, záruka…
+2) criteria: 3–6 kritérií výběru s vahou v procentech (součet 100); note = parametr, podle kterého se kritérium hodnotí (např. "realizace do 6 týdnů od objednávky", "záruka min. 10 let", "λ ≤ 0,039"). Cena, kvalita/technologie, reference a hodnocení, termín, záruka…
 
-3) vendors: vyhledej na webu 6–12 skutečných firem, které tuto práci dělají v dojezdu místa stavby (přednostně do 50 km). U každé:
-- name, ico (8 číslic – dohledej na webu firmy nebo v obchodním rejstříku; když nenajdeš, null), web, email a phone z webu firmy (nevymýšlej – když na webu nejsou, null), city.
-- rating a ratingCount z veřejných recenzí (Google, Firmy.cz, Seznam…) a ratingSource = odkud (např. "Google", "Firmy.cz"); když nenajdeš, null.
-- references: jednou větou doložitelné reference nebo specializace (např. "stříkaná PUR izolace podkroví RD, Icynene").
+3) vendors: vyhledej na webu 8–12 skutečných firem, které tuto práci dělají v dojezdu místa stavby (přednostně do 50 km), a vyber ty s NEJLEPŠÍM veřejným hodnocením. Postup: najdi kandidáty (vyhledávání typu "<práce> <obec>", Firmy.cz, Google Maps), u každého dohledej hodnocení a počet recenzí (Google Maps, Firmy.cz) a kontaktní e-mail z webu firmy. Přednost mají firmy s hodnocením 4,5 a víc, aspoň 10 recenzemi a veřejným e-mailem. Seřaď od nejlépe hodnocené. U každé:
+- name, ico (8 číslic – z webu firmy, patičky, obchodních podmínek nebo obchodního rejstříku; když nenajdeš, null), web, email a phone z webu firmy (nevymýšlej – když na webu nejsou, null), city.
+- rating (např. 4.8) a ratingCount (počet recenzí) a ratingSource = odkud ("Google", "Firmy.cz"). Hodnocení opravdu dohledej, je to hlavní kritérium výběru; null jen když firma žádné recenze nemá.
+- references: jednou větou doložitelné reference nebo specializace.
 - why: proč ji navrhuješ, jednou větou.
 - requestIds: na které položky se hodí.
 Uváděj jen firmy, které jsi na webu skutečně našel. Firmy, které už jsou v evidenci uživatele (seznam níže), zahrň taky, pokud se hodí – použij stejný název a IČO.
@@ -183,6 +183,56 @@ export async function runTenderSuggest(tenderId: string) {
       { effort: "medium", maxOutput: 24_000, webSearch: true, account },
     );
 
+    // Druhé kolo jen pro hodnocení: model ho u části firem v prvním kole
+    // nedohledá (hledá hlavně firmy a kontakty).
+    let costTotal = costUsd;
+    const bezHodnoceni = (data.vendors ?? []).filter((v) => v.rating == null || v.email == null);
+    if (bezHodnoceni.length) {
+      try {
+        const r2 = await callModel<{ vendors: { name: string; rating: number | null; ratingCount: number | null; ratingSource: string | null; email: string | null }[] }>(
+          AI_MODEL,
+          `Dohledej na webu u každé firmy veřejné hodnocení (Google Maps nebo Firmy.cz: průměr hvězdiček a počet recenzí) a kontaktní e-mail z webu firmy. Firma je v Česku. Nevymýšlej – co nenajdeš, vrať null. name vrať přesně podle vstupu. ratingSource = "Google" nebo "Firmy.cz".`,
+          [
+            {
+              type: "input_text",
+              text: bezHodnoceni.map((v) => `${v.name}${v.city ? `, ${v.city}` : ""}${v.web ? `, ${v.web}` : ""}${v.ico ? `, IČO ${v.ico}` : ""}`).join("\n"),
+            },
+          ],
+          "vendor_ratings",
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["vendors"],
+            properties: {
+              vendors: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "rating", "ratingCount", "ratingSource", "email"],
+                  properties: { name: { type: "string" }, rating: nnum, ratingCount: nnum, ratingSource: nstr, email: nstr },
+                },
+              },
+            },
+          },
+          { effort: "low", maxOutput: 8_000, webSearch: true, account },
+        );
+        costTotal += r2.costUsd;
+        for (const x of r2.data.vendors ?? []) {
+          const v = data.vendors.find((y) => y.name === x.name);
+          if (!v) continue;
+          if (v.rating == null && x.rating != null) {
+            v.rating = x.rating;
+            v.ratingCount = x.ratingCount;
+            v.ratingSource = x.ratingSource;
+          }
+          if (!v.email && x.email) v.email = x.email;
+        }
+      } catch {
+        // hodnocení je doplněk – bez něj návrh platí dál
+      }
+    }
+
     // Ověření: IČO v ARES, shoda s evidencí, platné žádanky.
     const validIds = new Set(t.requests.map((r) => r.request.id));
     data.requests = (data.requests ?? [])
@@ -222,13 +272,18 @@ export async function runTenderSuggest(tenderId: string) {
       }),
     );
 
+    // Nejlépe hodnocení nahoře; váží i počet recenzí (4,9 z 3 < 4,8 ze 120).
+    const skore = (v: { rating: number | null; ratingCount: number | null }) =>
+      v.rating == null ? -1 : v.rating - 1 / Math.sqrt((v.ratingCount ?? 0) + 1);
+    data.vendors.sort((a, b) => skore(b) - skore(a));
+
     await prisma.tender.update({
       where: { id: t.id },
       data: {
         aiStatus: "ready",
         aiError: null,
         aiResult: data as unknown as Prisma.InputJsonValue,
-        aiCostUsd: costUsd,
+        aiCostUsd: costTotal,
         aiAt: new Date(),
       },
     });

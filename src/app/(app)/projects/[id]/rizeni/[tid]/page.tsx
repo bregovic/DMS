@@ -126,6 +126,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
         (inv.vendor?.ico && s.ico === inv.vendor.ico),
     );
   const back = `/projects/${id}/rizeni`;
+  const savedWeights = Array.isArray(t.weights) ? (t.weights as { label: string; weight: number; note?: string }[]) : [];
   // Návrh dodavatelů: běh starší 15 min bez výsledku se bere jako chyba.
   const aiRunning = t.aiStatus === "running" && Date.now() - t.updatedAt.getTime() < 15 * 60_000;
   const aiStatus = aiRunning ? "running" : t.aiStatus === "running" ? "error" : ((t.aiStatus ?? "idle") as "idle" | "ready" | "error");
@@ -318,6 +319,19 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
         </div>
       </section>
 
+      {/* Kritéria výběru – jen pro zadavatele; bez uložených se předvyplní z návrhu */}
+      <section className="mb-12">
+        <h2 className="kicker mb-3">Kritéria výběru</h2>
+        <div className="border border-stone-300/80 bg-white p-5">
+          <WeightsEditor
+            key={`${JSON.stringify(t.weights ?? null)}-${t.aiAt?.toISOString() ?? ""}`}
+            tenderId={t.id}
+            initial={savedWeights.length ? savedWeights : (suggestion?.criteria ?? []).map((c) => ({ label: c.label, weight: Math.round(c.weight), note: c.note }))}
+            fromSuggestion={!savedWeights.length && !!suggestion?.criteria.length}
+          />
+        </div>
+      </section>
+
       {/* Pozvánky */}
       <section className="mb-12">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -434,18 +448,6 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
             </li>
           ))}
         </ol>
-      </section>
-
-      {/* Kritéria výběru – jen pro zadavatele */}
-      <section className="mb-12">
-        <h2 className="kicker mb-3">Kritéria výběru</h2>
-        <div className="border border-stone-300/80 bg-white p-5">
-          <WeightsEditor
-            key={JSON.stringify(t.weights ?? null)}
-            tenderId={t.id}
-            initial={Array.isArray(t.weights) ? (t.weights as { label: string; weight: number }[]) : []}
-          />
-        </div>
       </section>
 
       {/* Nastavení */}
