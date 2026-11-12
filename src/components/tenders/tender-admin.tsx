@@ -351,7 +351,8 @@ export function EmailDraft({
   markSent?: { tenderId: string; count: number };
 }) {
   const [open, setOpen] = useState(false);
-  const mailto = `mailto:${markSent ? "" : (to ?? "")}?${markSent && to ? `bcc=${encodeURIComponent(to)}&` : ""}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const toUrl = (to ?? "").replace(/\s*;\s*/g, ","); // mailto chce čárky
+  const mailto = `mailto:${markSent ? "" : toUrl}?${markSent && toUrl ? `bcc=${encodeURIComponent(toUrl)}&` : ""}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={btnOutline}>
@@ -403,6 +404,50 @@ export function EmailDraft({
         </Dialog>
       )}
     </>
+  );
+}
+
+/** Přidání oslovených z jiných zdrojů: vložený seznam adres, názvů a IČO. */
+export function BulkInviteForm({ tenderId }: { tenderId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  function submit() {
+    if (!text.trim()) return;
+    const fd = new FormData();
+    fd.set("id", tenderId);
+    fd.set("bulk", text);
+    setMsg(null);
+    startTransition(async () => {
+      try {
+        await addInvites(fd);
+        setText("");
+        setMsg("Přidáno.");
+      } catch {
+        setMsg("Uložení se nepovedlo. Načti stránku znovu.");
+      }
+    });
+  }
+  return (
+    <div className="mt-4 border border-stone-300/80 bg-white p-4">
+      <p className={lbl}>Přidat oslovené</p>
+      <textarea
+        rows={3}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"info@firma.cz; nabidky@stavby.cz; petr@izolace.cz\nOkna Novák s.r.o., info@oknanovak.cz, 12345678"}
+        className={`${field} font-mono text-xs`}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={submit} disabled={pending || !text.trim()} className={btn}>
+          {pending && <Loader2 className="size-4 animate-spin" />}
+          Přidat do oslovených
+        </button>
+        <span className="text-xs text-stone-500">
+          {msg ?? "Adresy oddělené středníkem, čárkou nebo po řádcích; k řádku lze připsat název a IČO."}
+        </span>
+      </div>
+    </div>
   );
 }
 

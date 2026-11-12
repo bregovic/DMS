@@ -44,6 +44,7 @@ import {
   InviteAdder,
   InviteRowActions,
   ConfirmButton,
+  BulkInviteForm,
   ReplyForm,
   RequestBriefForm,
   TenderSettingsForm,
@@ -427,13 +428,14 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
           <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <EmailDraft
-              to={t.invites.map((i) => i.email).filter(Boolean).join(", ") || null}
+              to={t.invites.map((i) => i.email).filter(Boolean).join("; ") || null}
               toLabel="Komu (skrytá kopie)"
               subject={generic.subject}
               body={generic.body}
               trigger="Pozvánka pro všechny"
               markSent={unsent > 0 ? { tenderId: t.id, count: unsent } : undefined}
             />
+            <CopyButton text={t.invites.map((i) => i.email).filter(Boolean).join("; ")} label="Kopírovat adresy (;)" />
           </div>
           <ul className="border-t border-stone-200">
             {t.invites.map((inv) => {
@@ -465,6 +467,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
           </ul>
           </>
         )}
+        <BulkInviteForm tenderId={t.id} />
       </section>
 
       {/* Zadání */}

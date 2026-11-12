@@ -247,7 +247,13 @@ export async function addInvites(formData: FormData) {
     }
   }
   // Hromadně: řádek = jeden dodavatel, v libovolném pořadí e-mail, název a IČO.
-  const bulk = String(formData.get("bulk") ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 40);
+  // Řádek s víc e-maily (seznam z pošty „a@x.cz; b@y.cz“) se rozdělí po středníku / čárce.
+  const bulk = String(formData.get("bulk") ?? "")
+    .split(/\r?\n/)
+    .flatMap((l) => ((l.match(/@/g) || []).length > 1 ? l.split(/[;,\t]/) : [l]))
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 100);
   for (const line of bulk) {
     const em = line.match(/[^\s,;<>]+@[^\s,;<>]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() ?? null;
     const ic = line.match(/\b\d{8}\b/)?.[0] ?? null;
