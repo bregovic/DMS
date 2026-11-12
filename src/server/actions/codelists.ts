@@ -4,6 +4,7 @@
 import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
+import { isAppAdmin } from "@/server/admin";
 import { prisma } from "@/lib/prisma";
 import { slugifyType } from "@/server/project-types";
 import { slugifyCategory } from "@/server/expense-categories";
@@ -84,7 +85,9 @@ export async function addCodelistItem(formData: FormData) {
 }
 
 export async function renameCodelistItem(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
+  // Společné pro všechny účty – měnit a mazat smí jen správce aplikace.
+  if (!(await isAppAdmin(user))) throw new UserError("Přejmenovat a mazat položky číselníků může jen správce aplikace.");
   const kind = String(formData.get("kind")) as Kind;
   const id = String(formData.get("id"));
   const label = String(formData.get("label") || "").trim();
@@ -102,7 +105,9 @@ export async function renameCodelistItem(formData: FormData) {
 }
 
 export async function deleteCodelistItem(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
+  // Společné pro všechny účty – měnit a mazat smí jen správce aplikace.
+  if (!(await isAppAdmin(user))) throw new UserError("Přejmenovat a mazat položky číselníků může jen správce aplikace.");
   const kind = String(formData.get("kind")) as Kind;
   const id = String(formData.get("id"));
 

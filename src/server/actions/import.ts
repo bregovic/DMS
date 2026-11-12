@@ -8,7 +8,6 @@ import {
   getExpenseCategories,
   slugifyCategory,
 } from "@/server/expense-categories";
-import { fullAccessProjectIds } from "@/server/access";
 
 export type ImportSummary = {
   created: number;
@@ -52,8 +51,16 @@ export async function importExpensesCsv(
     return { error: "Vyber CSV soubor." };
   }
 
-  // Projekty s plným přístupem (vlastní + členství) + jejich vlastníci.
-  const accessIds = await fullAccessProjectIds(user);
+  // Kam smí importovat: vlastní projekty a celoprojektové členství kromě
+  // čtenáře. Cizí výdaje přepisuje jen vlastník a spolusprávce, dodavatel
+  // (active) jen své. Dřív stačilo jakékoli členství, i čtenář.
+  const email = user.email?.toLowerCase() ?? null;
+  const [ownedRows, memRows] = await Promise.all([
+    prisma.project.findMany({ where: { ownerId: user.id }, select: { id: true } }),
+    email ? prisma.projectMembership.findMany({ where: { email }, select: { projectId: true, role: true } }) : Promise.resolve([]),
+  ]);
+  const managerIds = new Set([...ownedRows.map((p) => p.id), ...memRows.filter((m) => m.role === "member").map((m) => m.projectId)]);
+  const accessIds = new Set([...managerIds, ...memRows.filter((m) => m.role === "active").map((m) => m.projectId)]);
   const projectOwner = new Map<string, string>(); // projectId -> ownerId
 
   // UTF-8 s fallbackem na Windows-1250 (české Excel CSV).
@@ -152,6 +159,7 @@ export async function importExpensesCsv(
         projectId = p.id;
         projectOwner.set(projectId, user.id);
         accessIds.add(projectId);
+        managerIds.add(projectId);
         newProjects++;
       }
       projectCache.set(pKey, projectId);
@@ -236,7 +244,10 @@ export async function importExpensesCsv(
     let didUpdate = false;
     if (rowId) {
       const existing = await prisma.expense.findFirst({
-        where: { id: rowId, projectId: { in: [...accessIds] } },
+        where: {
+          id: rowId,
+          OR: [{ projectId: { in: [...managerIds] } }, { projectId: { in: [...accessIds] }, createdById: user.id }],
+        },
         select: { id: true },
       });
       if (existing) {

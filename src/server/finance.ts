@@ -1,3 +1,4 @@
+import { amountCzk } from "@/lib/vat";
 import { prisma } from "@/lib/prisma";
 import { REQUEST_FORECAST_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
 import { computeForecastContribs, type ForecastRequestInput } from "@/lib/forecast";
@@ -23,15 +24,15 @@ export async function projectFinance(
   const dateWhere = period && (period.gte || period.lte) ? { date: period } : {};
 
   const [exp, inc, reqs, tasks, taskExp] = await Promise.all([
-    prisma.expense.groupBy({
-      by: ["projectId"],
+    // Částky v korunách (cizí měna kurzem dokladu) – součet přes groupBy
+    // sčítal EUR jako Kč.
+    prisma.expense.findMany({
       where: { projectId: { in: projectIds }, ...dateWhere },
-      _sum: { amount: true },
+      select: { projectId: true, amount: true, currency: true, exchangeRate: true },
     }),
-    prisma.income.groupBy({
-      by: ["projectId"],
+    prisma.income.findMany({
       where: { projectId: { in: projectIds }, ...dateWhere },
-      _sum: { amount: true },
+      select: { projectId: true, amount: true, currency: true, exchangeRate: true },
     }),
     prisma.request.findMany({
       where: { projectId: { in: projectIds }, status: { in: REQUEST_FORECAST_STATUSES } },
@@ -61,8 +62,8 @@ export async function projectFinance(
     }),
   ]);
 
-  for (const e of exp) out.get(e.projectId)!.spent = Number(e._sum.amount ?? 0);
-  for (const i of inc) out.get(i.projectId)!.income = Number(i._sum.amount ?? 0);
+  for (const e of exp) out.get(e.projectId)!.spent += amountCzk(e);
+  for (const i of inc) out.get(i.projectId)!.income += amountCzk(i);
 
   const realByTask = new Map<string, number>();
   for (const e of taskExp)

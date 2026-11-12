@@ -53,6 +53,7 @@ import { deleteTask } from "@/server/actions/tasks";
 import { deleteDocument } from "@/server/actions/documents";
 import { createExpenseFromRequest, deleteRequest } from "@/server/actions/requests";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { amountCzk } from "@/lib/vat";
 import {
   requestStatusLabel,
   roleLabel,
@@ -338,11 +339,12 @@ export default async function ProjectDetailPage({
   const visIncomes = onlyMine
     ? project.incomes.filter((i) => i.createdById === user.id)
     : project.incomes;
-  const incomeTotal = visIncomes.reduce((s, i) => s + Number(i.amount), 0);
+  // V korunách – příjem v EUR se dřív sčítal jako Kč.
+  const incomeTotal = visIncomes.reduce((s, i) => s + amountCzk(i), 0);
   const incomeBySub = new Map<string, number>();
   for (const i of visIncomes) {
     if (!i.subProjectId) continue;
-    const amt = Number(i.amount);
+    const amt = amountCzk(i);
     for (const sid of [i.subProjectId, ...ancestorsOf(i.subProjectId)]) {
       incomeBySub.set(sid, (incomeBySub.get(sid) ?? 0) + amt);
     }

@@ -1,11 +1,13 @@
 import { requireUser } from "@/lib/dal";
+import { isAppAdmin } from "@/server/admin";
 import { prisma } from "@/lib/prisma";
 import { SettingsNav } from "@/components/account/settings-nav";
 import { CodelistManager } from "@/components/account/codelist-manager";
 
 /** Vlastní číselníky: typy, kategorie a stavy používané v projektech. */
 export default async function CodelistSettingsPage() {
-  await requireUser();
+  const user = await requireUser();
+  const admin = await isAppAdmin(user);
   const [projTypes, expCats, docTypes, reqStatuses, offerStatuses, expStatuses, taskStatuses] = await Promise.all([
     prisma.projectType.findMany({ orderBy: { label: "asc" }, select: { id: true, label: true } }),
     prisma.expenseCategory.findMany({ orderBy: { label: "asc" }, select: { id: true, label: true } }),
@@ -27,6 +29,7 @@ export default async function CodelistSettingsPage() {
           Smazat lze jen položku, která se nikde nepoužívá.
         </p>
         <CodelistManager
+          canEdit={admin}
           groups={[
             { kind: "projectType", title: "Typy projektů", items: projTypes },
             { kind: "expenseCategory", title: "Kategorie výdajů", items: expCats },

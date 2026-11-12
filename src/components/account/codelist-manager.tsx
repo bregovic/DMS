@@ -116,7 +116,7 @@ function AddRow({ kind }: { kind: string }) {
   );
 }
 
-export function CodelistManager({ groups }: { groups: Group[] }) {
+export function CodelistManager({ groups, canEdit = true }: { groups: Group[]; canEdit?: boolean }) {
   return (
     <div className="max-w-md space-y-2">
       {groups.map((g) => (
@@ -130,9 +130,15 @@ export function CodelistManager({ groups }: { groups: Group[] }) {
             <p className="text-sm text-stone-400">Žádné vlastní položky.</p>
           ) : (
             <ul className="border-t border-stone-200">
-              {g.items.map((it) => (
-                <Row key={it.id} kind={g.kind} item={it} />
-              ))}
+              {g.items.map((it) =>
+                canEdit ? (
+                  <Row key={it.id} kind={g.kind} item={it} />
+                ) : (
+                  <li key={it.id} className="border-b border-stone-200 py-2 text-sm text-stone-800">
+                    {it.label}
+                  </li>
+                ),
+              )}
             </ul>
           )}
           <AddRow kind={g.kind} />
