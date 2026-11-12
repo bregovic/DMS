@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { decryptSecret } from "@/lib/secret-box";
@@ -344,17 +345,17 @@ export async function assertBudget(account?: AiAccount | string | null) {
     typeof account === "string" || account == null
       ? await aiAccountForUser(typeof account === "string" ? account : null)
       : account;
-  if (AI_LIMITS.disabled) throw new Error("Automatické zpracování je vypnuté.");
-  if (!acc.apiKey) throw new Error("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
+  if (AI_LIMITS.disabled) throw new UserError("Automatické zpracování je vypnuté.");
+  if (!acc.apiKey) throw new UserError("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
   await closeStaleRuns();
   const u = await aiUsage(acc.userId);
   if (u.month >= AI_LIMITS.accountMonthlyUsd)
-    throw new Error(`Měsíční limit automatického zpracování (${AI_LIMITS.accountMonthlyUsd} USD) je vyčerpaný.`);
+    throw new UserError(`Měsíční limit automatického zpracování (${AI_LIMITS.accountMonthlyUsd} USD) je vyčerpaný.`);
   if (u.today >= AI_LIMITS.accountDailyUsd)
-    throw new Error(`Denní limit automatického zpracování (${AI_LIMITS.accountDailyUsd} USD) je vyčerpaný – zkus to zítra.`);
+    throw new UserError(`Denní limit automatického zpracování (${AI_LIMITS.accountDailyUsd} USD) je vyčerpaný – zkus to zítra.`);
   // Brzda nad součtem všech účtů – kdyby limit na účet někdo přenastavil.
   if (u.appMonth >= AI_LIMITS.monthlyUsd || u.appToday >= AI_LIMITS.dailyUsd)
-    throw new Error("Limit automatického zpracování je vyčerpaný.");
+    throw new UserError("Limit automatického zpracování je vyčerpaný.");
   const userId = acc.userId;
   if (userId) {
     const hour = new Date(Date.now() - 3600_000);
@@ -368,9 +369,9 @@ export async function assertBudget(account?: AiAccount | string | null) {
       prisma.planDraft.count({ where: { ...mine, status: "running" } }),
     ]);
     if (e + c + p >= AI_LIMITS.runsPerHour)
-      throw new Error(`Za poslední hodinu už bylo ${e + c + p} zpracování (limit ${AI_LIMITS.runsPerHour}). Zkus to za chvíli.`);
+      throw new UserError(`Za poslední hodinu už bylo ${e + c + p} zpracování (limit ${AI_LIMITS.runsPerHour}). Zkus to za chvíli.`);
     if (re + rc + rp >= AI_LIMITS.parallel)
-      throw new Error("Už běží několik zpracování – počkej, až doběhnou.");
+      throw new UserError("Už běží několik zpracování – počkej, až doběhnou.");
   }
 }
 
@@ -392,7 +393,7 @@ export function extractable(mimeType: string, name: string) {
 export async function filePart(buf: Buffer, name: string, mimeType: string) {
   const e = ext(name);
   if (buf.length > AI_LIMITS.maxFileBytes)
-    throw new Error(`Soubor „${name}“ je pro AI moc velký (limit ${Math.round(AI_LIMITS.maxFileBytes / 1048576)} MB).`);
+    throw new UserError(`Soubor „${name}“ je pro AI moc velký (limit ${Math.round(AI_LIMITS.maxFileBytes / 1048576)} MB).`);
   if (mimeType === "application/pdf" || e === "pdf")
     return { type: "input_file", filename: name, file_data: `data:application/pdf;base64,${buf.toString("base64")}` };
   if (mimeType.startsWith("image/"))
@@ -432,7 +433,7 @@ export async function filePart(buf: Buffer, name: string, mimeType: string) {
     text = buf.toString("utf8");
   }
   text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  if (!text) throw new Error("Z dokumentu se nepodařilo přečíst žádný text.");
+  if (!text) throw new UserError("Z dokumentu se nepodařilo přečíst žádný text.");
   return {
     type: "input_text",
     text: `Obsah souboru „${name}“ (převedeno na text):\n\n${text.slice(0, MAX_TEXT)}${text.length > MAX_TEXT ? "\n[… zkráceno]" : ""}`,
@@ -461,7 +462,7 @@ export async function callModel<T>(
 ): Promise<{ data: T; costUsd: number; inTok: number; outTok: number }> {
   // Volá se klíčem toho, kdo zpracování platí; bez něj to nemá na čí účet jít.
   const acc = opts.account ?? (await aiAccountForUser(null));
-  if (!acc.apiKey) throw new Error("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
+  if (!acc.apiKey) throw new UserError("Automatické zpracování není nastavené – chybí klíč k API v Nastavení.");
   // Úloha na pozadí u OpenAI + průběžná kontrola: dlouhé volání (plán z mnoha
   // PDF trvá i přes 5 min) jinak spadne na výchozím limitu Node fetch
   // („fetch failed“ po 300 s čekání na hlavičky odpovědi).
@@ -486,13 +487,13 @@ export async function callModel<T>(
     }),
   });
   let j = await res.json();
-  if (!res.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${res.status}`);
+  if (!res.ok) throw new UserError(j?.error?.message || `OpenAI HTTP ${res.status}`);
   if (!opts.resumeId && j?.id) await opts.onStarted?.(j.id);
   const deadline = Date.now() + 20 * 60_000;
   while (j.status === "queued" || j.status === "in_progress") {
     if (Date.now() > deadline) {
       await fetch(`https://api.openai.com/v1/responses/${j.id}/cancel`, { method: "POST", headers }).catch(() => {});
-      throw new Error("Zpracování trvalo příliš dlouho – zkus méně dokumentů.");
+      throw new UserError("Zpracování trvalo příliš dlouho – zkus méně dokumentů.");
     }
     await new Promise((r) => setTimeout(r, 5000));
     await opts.onPoll?.().catch(() => {});
@@ -501,8 +502,8 @@ export async function callModel<T>(
     const pj = await poll.json().catch(() => null);
     if (poll.ok && pj) j = pj;
   }
-  if (j.status === "failed") throw new Error(j.error?.message || "Zpracování selhalo.");
-  if (j.status === "cancelled") throw new Error("Zpracování bylo zrušeno.");
+  if (j.status === "failed") throw new UserError(j.error?.message || "Zpracování selhalo.");
+  if (j.status === "cancelled") throw new UserError("Zpracování bylo zrušeno.");
   const inTok = j.usage?.input_tokens ?? 0;
   const outTok = j.usage?.output_tokens ?? 0;
   const [pin, pout] = PRICES[model] ?? PRICES["gpt-5-mini"];
@@ -514,11 +515,11 @@ export async function callModel<T>(
     .create({ data: { kind: name, model, costUsd, userId: acc.userId, projectId: acc.projectId ?? null } })
     .catch(() => {});
   if (j.status === "incomplete")
-    throw new Error("Výsledek byl useknutý (strop délky) – zkus menší dokument nebo užší upřesnění.");
+    throw new UserError("Výsledek byl useknutý (strop délky) – zkus menší dokument nebo užší upřesnění.");
   const text = j.output
     ?.find((o: { type: string }) => o.type === "message")
     ?.content?.find((c: { type: string }) => c.type === "output_text")?.text;
-  if (!text) throw new Error("Model nevrátil výsledek.");
+  if (!text) throw new UserError("Model nevrátil výsledek.");
   return { data: JSON.parse(text) as T, costUsd, inTok, outTok };
 }
 
@@ -532,10 +533,10 @@ export async function createExtraction(documentId: string, userId: string, instr
     where: { id: documentId },
     select: { id: true, projectId: true, requestId: true },
   });
-  if (!doc?.requestId) throw new Error("Příloha nepatří k žádance.");
+  if (!doc?.requestId) throw new UserError("Příloha nepatří k žádance.");
   await assertBudget(await aiAccountForProject(doc.projectId));
   const busy = await prisma.extraction.findFirst({ where: { documentId: doc.id, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Tahle příloha se už zpracovává.");
+  if (busy) throw new UserError("Tahle příloha se už zpracovává.");
   const ex = await prisma.extraction.create({
     data: {
       projectId: doc.projectId,
@@ -634,11 +635,11 @@ export async function createComparison(
   webSearch = false,
 ) {
   const offers = await prisma.offer.count({ where: { requestId } });
-  if (offers === 0) throw new Error("Žádanka zatím nemá žádnou nabídku.");
+  if (offers === 0) throw new UserError("Žádanka zatím nemá žádnou nabídku.");
   const rq = await prisma.request.findUnique({ where: { id: requestId }, select: { projectId: true } });
   await assertBudget(await aiAccountForProject(rq?.projectId ?? null));
   const busy = await prisma.offerComparison.findFirst({ where: { requestId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Porovnání už běží.");
+  if (busy) throw new UserError("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
     data: { requestId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId, webSearch },
     select: { id: true },
@@ -657,11 +658,11 @@ export async function createBundleComparison(
     prisma.bundleOffer.count({ where: { bundleId } }),
     prisma.offer.count({ where: { request: { bundleId } } }),
   ]);
-  if (offers + parts === 0) throw new Error("Balíček zatím nemá žádnou nabídku.");
+  if (offers + parts === 0) throw new UserError("Balíček zatím nemá žádnou nabídku.");
   const bn = await prisma.requestBundle.findUnique({ where: { id: bundleId }, select: { projectId: true } });
   await assertBudget(await aiAccountForProject(bn?.projectId ?? null));
   const busy = await prisma.offerComparison.findFirst({ where: { bundleId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Porovnání už běží.");
+  if (busy) throw new UserError("Porovnání už běží.");
   const c = await prisma.offerComparison.create({
     data: { bundleId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId, webSearch },
     select: { id: true },

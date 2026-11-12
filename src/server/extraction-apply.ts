@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { dropComparisons } from "@/server/comparisons";
 import type { Prisma } from "@/generated/prisma/client";
@@ -121,10 +122,10 @@ export async function applyExtractionCore(input: ApplyInput): Promise<ApplyResul
       document: { select: { originalName: true } },
     },
   });
-  if (!ex?.result) throw new Error("Návrh nenalezen.");
-  if (ex.status === "applied") throw new Error("Všechny části návrhu už jsou založené.");
+  if (!ex?.result) throw new UserError("Návrh nenalezen.");
+  if (ex.status === "applied") throw new UserError("Všechny části návrhu už jsou založené.");
   const project = await prisma.project.findUnique({ where: { id: ex.projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   const result = ex.result as unknown as ExtractionResult;
 
   // Dodavatel
@@ -170,7 +171,7 @@ export async function applyExtractionCore(input: ApplyInput): Promise<ApplyResul
   const vybrane = input.parts
     .filter((x) => !ex.appliedParts.includes(x.index) && validReq.has(x.requestId) && result.parts[x.index])
     .map((x) => ({ ...x, p: result.parts[x.index] }));
-  if (vybrane.length === 0) throw new Error("Vyber aspoň jednu část nabídky a její žádanku.");
+  if (vybrane.length === 0) throw new UserError("Vyber aspoň jednu část nabídky a její žádanku.");
 
   const offers = mergeParts(vybrane, hlavicka(result, ex.document.originalName));
   const applied = [...new Set([...ex.appliedParts, ...vybrane.map((x) => x.index)])];

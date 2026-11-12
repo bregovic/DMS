@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { managedProjectIds } from "@/server/access";
 import { vatRowsCzk } from "@/lib/vat";
@@ -96,7 +97,7 @@ export async function buildDp3(userId: string, period: Dp3Period) {
       select: { vatBase: true, vatAmount: true, vatBreakdown: true, currency: true, exchangeRate: true },
     }),
   ]);
-  if (!me) throw new Error("Uživatel nenalezen.");
+  if (!me) throw new UserError("Uživatel nenalezen.");
 
   const acc = () => ({ 21: { base: 0, vat: 0 }, 12: { base: 0, vat: 0 }, 0: { base: 0, vat: 0 } });
   // doklady v cizí měně se do přiznání počítají přepočtené kurzem

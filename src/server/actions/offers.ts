@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +42,7 @@ async function requestCtx(requestId: string): Promise<{
     where: { id: requestId },
     select: { id: true, projectId: true, project: { select: { ownerId: true } } },
   });
-  if (!request) throw new Error("Žádanka nenalezena.");
+  if (!request) throw new UserError("Žádanka nenalezena.");
   const role = await getProjectRole(request.projectId, user);
   return {
     request: { id: request.id, projectId: request.projectId },
@@ -57,7 +59,7 @@ export async function createOffer(formData: FormData) {
   const requestId = String(formData.get("requestId"));
   const { request, ctx } = await requestCtx(requestId);
   if (!canWrite(ctx.role)) {
-    throw new Error("Nemáš oprávnění přidávat nabídky.");
+    throw new UserError("Nemáš oprávnění přidávat nabídky.");
   }
 
   let vendorId = String(formData.get("vendorId") || "") || null;
@@ -104,7 +106,7 @@ async function offerCtx(offerId: string) {
       request: { select: { projectId: true, project: { select: { ownerId: true } } } },
     },
   });
-  if (!offer) throw new Error("Nabídka nenalezena.");
+  if (!offer) throw new UserError("Nabídka nenalezena.");
   const projectId = offer.request.projectId;
   const role = await getProjectRole(projectId, user);
   const canEdit = isManager(role) || (role === "active" && offer.createdById === user.id);
@@ -114,7 +116,7 @@ async function offerCtx(offerId: string) {
 export async function updateOffer(formData: FormData) {
   const id = String(formData.get("id"));
   const { offer, projectId, canEdit } = await offerCtx(id);
-  if (!canEdit) throw new Error("Tuto nabídku nemůžeš upravit.");
+  if (!canEdit) throw new UserError("Tuto nabídku nemůžeš upravit.");
 
   const ownerId = (
     await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } })
@@ -153,17 +155,17 @@ export async function updateOffer(formData: FormData) {
 export async function attachOfferFile(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, offer, projectId, canEdit } = await offerCtx(id);
-  if (!canEdit) throw new Error("K této nabídce nemůžeš přidat přílohu.");
+  if (!canEdit) throw new UserError("K této nabídce nemůžeš přidat přílohu.");
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
-  if (file.size > 8 * 1024 * 1024) throw new Error("Soubor je větší než 8 MB.");
+  if (!(file instanceof File) || file.size === 0) throw new UserError("Vyber soubor.");
+  if (file.size > 8 * 1024 * 1024) throw new UserError("Soubor je větší než 8 MB.");
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -191,7 +193,7 @@ export async function setOfferStatus(formData: FormData) {
   const id = String(formData.get("id"));
   const status = String(formData.get("status") || "nova");
   const { offer, projectId, canEdit } = await offerCtx(id);
-  if (!canEdit) throw new Error("Stav nabídky nemůžeš měnit.");
+  if (!canEdit) throw new UserError("Stav nabídky nemůžeš měnit.");
   await prisma.offer.update({ where: { id: offer.id }, data: { status } });
   await dropComparisons({ requestIds: [offer.requestId] });
   revalidatePath(`/projects/${projectId}`);
@@ -200,7 +202,7 @@ export async function setOfferStatus(formData: FormData) {
 export async function deleteOffer(formData: FormData) {
   const id = String(formData.get("id"));
   const { offer, projectId, canEdit } = await offerCtx(id);
-  if (!canEdit) throw new Error("Tuto nabídku nemůžeš smazat.");
+  if (!canEdit) throw new UserError("Tuto nabídku nemůžeš smazat.");
   await deleteWithFiles({ offerId: offer.id }, () =>
     prisma.offer.delete({ where: { id: offer.id } }),
   );
@@ -213,13 +215,13 @@ export async function deleteOffer(formData: FormData) {
 export async function selectOffer(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, offer, projectId, role } = await offerCtx(id);
-  if (!isManager(role)) throw new Error("Vybrat nabídku může jen vlastník nebo spolusprávce.");
+  if (!isManager(role)) throw new UserError("Vybrat nabídku může jen vlastník nebo spolusprávce.");
 
   const full = await prisma.offer.findUnique({
     where: { id: offer.id },
     select: { id: true, requestId: true, vendorId: true, price: true, selected: true },
   });
-  if (!full) throw new Error("Nabídka nenalezena.");
+  if (!full) throw new UserError("Nabídka nenalezena.");
 
   if (full.selected) {
     // Zrušení výběru

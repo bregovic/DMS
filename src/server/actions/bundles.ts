@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -33,7 +35,7 @@ function dateOrNull(v: FormDataEntryValue | null): Date | null {
 async function projectCtx(projectId: string) {
   const user = await requireUser();
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   const role = await getProjectRole(projectId, user);
   return { user, project, role };
 }
@@ -44,7 +46,7 @@ async function bundleCtx(bundleId: string) {
     where: { id: bundleId },
     select: { id: true, projectId: true, name: true, project: { select: { ownerId: true } } },
   });
-  if (!bundle) throw new Error("Balíček nenalezen.");
+  if (!bundle) throw new UserError("Balíček nenalezen.");
   const role = await getProjectRole(bundle.projectId, user);
   return { user, bundle, role, ownerId: bundle.project.ownerId };
 }
@@ -57,9 +59,9 @@ async function bundleCtx(bundleId: string) {
 export async function createBundle(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const { user, role } = await projectCtx(projectId);
-  if (!isManager(role)) throw new Error("Balíček zakládá správce projektu.");
+  if (!isManager(role)) throw new UserError("Balíček zakládá správce projektu.");
   const name = String(formData.get("name") || "").trim();
-  if (!name) throw new Error("Zadej název balíčku.");
+  if (!name) throw new UserError("Zadej název balíčku.");
   const ids = formData.getAll("requestIds").map(String).filter(Boolean);
 
   const bundle = await prisma.requestBundle.create({
@@ -74,7 +76,7 @@ export async function createBundle(formData: FormData) {
 
 export async function updateBundle(formData: FormData) {
   const { bundle, role } = await bundleCtx(String(formData.get("id")));
-  if (!isManager(role)) throw new Error("Nemáš oprávnění.");
+  if (!isManager(role)) throw new UserError("Nemáš oprávnění.");
   const name = String(formData.get("name") || "").trim();
   await prisma.requestBundle.update({
     where: { id: bundle.id },
@@ -90,7 +92,7 @@ export async function updateBundle(formData: FormData) {
 /** Rozpustit balíček – žádanky zůstanou, jen se odpojí (nabídky zaniknou). */
 export async function deleteBundle(formData: FormData) {
   const { bundle, role } = await bundleCtx(String(formData.get("id")));
-  if (!isManager(role)) throw new Error("Nemáš oprávnění.");
+  if (!isManager(role)) throw new UserError("Nemáš oprávnění.");
   // Kaskádou padnou společné nabídky i jejich části – smazat i jejich soubory.
   await deleteWithFiles(
     { OR: [{ bundleOffer: { bundleId: bundle.id } }, { offer: { bundleOffer: { bundleId: bundle.id } } }] },
@@ -103,13 +105,13 @@ export async function deleteBundle(formData: FormData) {
 export async function setRequestsBundle(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const { role } = await projectCtx(projectId);
-  if (!isManager(role)) throw new Error("Nemáš oprávnění.");
+  if (!isManager(role)) throw new UserError("Nemáš oprávnění.");
   const ids = formData.getAll("requestIds").map(String).filter(Boolean);
-  if (!ids.length) throw new Error("Nevybral jsi žádnou žádanku.");
+  if (!ids.length) throw new UserError("Nevybral jsi žádnou žádanku.");
   const bundleId = String(formData.get("bundleId") || "") || null;
   if (bundleId) {
     const b = await prisma.requestBundle.findFirst({ where: { id: bundleId, projectId }, select: { id: true } });
-    if (!b) throw new Error("Balíček nenalezen.");
+    if (!b) throw new UserError("Balíček nenalezen.");
   }
   // Složení balíčku se změnilo – porovnání za celek i u žádanek neplatí.
   await dropComparisons({ requestIds: ids, bundleIds: bundleId ? [bundleId] : [] });
@@ -169,12 +171,12 @@ async function syncParts(
 
 export async function createBundleOffer(formData: FormData) {
   const { user, bundle, role, ownerId } = await bundleCtx(String(formData.get("bundleId")));
-  if (!canWrite(role)) throw new Error("Nemáš oprávnění přidávat nabídky.");
+  if (!canWrite(role)) throw new UserError("Nemáš oprávnění přidávat nabídky.");
   const { vendorId, vendorName } = await readVendor(formData, ownerId);
 
   const reqs = await prisma.request.findMany({ where: { bundleId: bundle.id }, select: { id: true } });
   const parts = readParts(formData, reqs.map((r) => r.id));
-  if (parts.length === 0) throw new Error("Označ, kterých žádanek se nabídka týká.");
+  if (parts.length === 0) throw new UserError("Označ, kterých žádanek se nabídka týká.");
 
   const offer = await prisma.bundleOffer.create({
     data: {
@@ -207,7 +209,7 @@ async function bundleOfferCtx(id: string) {
       bundle: { select: { id: true, projectId: true, project: { select: { ownerId: true } } } },
     },
   });
-  if (!offer) throw new Error("Nabídka nenalezena.");
+  if (!offer) throw new UserError("Nabídka nenalezena.");
   const role = await getProjectRole(offer.bundle.projectId, user);
   const canEdit = isManager(role) || (canWrite(role) && offer.createdById === user.id);
   return { user, offer, role, canEdit, projectId: offer.bundle.projectId, ownerId: offer.bundle.project.ownerId };
@@ -215,11 +217,11 @@ async function bundleOfferCtx(id: string) {
 
 export async function updateBundleOffer(formData: FormData) {
   const { user, offer, canEdit, projectId, ownerId } = await bundleOfferCtx(String(formData.get("id")));
-  if (!canEdit) throw new Error("Tuhle nabídku nemůžeš upravit.");
+  if (!canEdit) throw new UserError("Tuhle nabídku nemůžeš upravit.");
   const { vendorId, vendorName } = await readVendor(formData, ownerId);
   const reqs = await prisma.request.findMany({ where: { bundleId: offer.bundleId }, select: { id: true } });
   const parts = readParts(formData, reqs.map((r) => r.id));
-  if (parts.length === 0) throw new Error("Označ, kterých žádanek se nabídka týká.");
+  if (parts.length === 0) throw new UserError("Označ, kterých žádanek se nabídka týká.");
 
   await prisma.bundleOffer.update({
     where: { id: offer.id },
@@ -239,7 +241,7 @@ export async function updateBundleOffer(formData: FormData) {
 
 export async function setBundleOfferStatus(formData: FormData) {
   const { offer, canEdit, projectId } = await bundleOfferCtx(String(formData.get("id")));
-  if (!canEdit) throw new Error("Stav nabídky nemůžeš měnit.");
+  if (!canEdit) throw new UserError("Stav nabídky nemůžeš měnit.");
   const status = String(formData.get("status") || "nova");
   await prisma.$transaction([
     prisma.bundleOffer.update({ where: { id: offer.id }, data: { status } }),
@@ -250,7 +252,7 @@ export async function setBundleOfferStatus(formData: FormData) {
 
 export async function deleteBundleOffer(formData: FormData) {
   const { offer, canEdit, projectId } = await bundleOfferCtx(String(formData.get("id")));
-  if (!canEdit) throw new Error("Tuhle nabídku nemůžeš smazat.");
+  if (!canEdit) throw new UserError("Tuhle nabídku nemůžeš smazat.");
   await deleteWithFiles(
     { OR: [{ bundleOfferId: offer.id }, { offer: { bundleOfferId: offer.id } }] },
     () => prisma.bundleOffer.delete({ where: { id: offer.id } }),
@@ -261,10 +263,10 @@ export async function deleteBundleOffer(formData: FormData) {
 
 export async function attachBundleOfferFile(formData: FormData) {
   const { user, offer, canEdit, projectId, ownerId } = await bundleOfferCtx(String(formData.get("id")));
-  if (!canEdit) throw new Error("K této nabídce nemůžeš přidat přílohu.");
+  if (!canEdit) throw new UserError("K této nabídce nemůžeš přidat přílohu.");
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
-  if (file.size > 8 * 1024 * 1024) throw new Error("Soubor je větší než 8 MB.");
+  if (!(file instanceof File) || file.size === 0) throw new UserError("Vyber soubor.");
+  if (file.size > 8 * 1024 * 1024) throw new UserError("Soubor je větší než 8 MB.");
 
   await assertUploadQuota(user, projectId, file.size);
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -315,7 +317,7 @@ function splitLump(
  */
 export async function selectBundleOffer(formData: FormData) {
   const { offer, role, projectId } = await bundleOfferCtx(String(formData.get("id")));
-  if (!isManager(role)) throw new Error("Vybrat nabídku může jen vlastník nebo spolusprávce.");
+  if (!isManager(role)) throw new UserError("Vybrat nabídku může jen vlastník nebo spolusprávce.");
 
   const full = await prisma.bundleOffer.findUnique({
     where: { id: offer.id },
@@ -328,7 +330,7 @@ export async function selectBundleOffer(formData: FormData) {
       offers: { select: { id: true, requestId: true, price: true } },
     },
   });
-  if (!full) throw new Error("Nabídka nenalezena.");
+  if (!full) throw new UserError("Nabídka nenalezena.");
 
   if (full.selected) {
     await prisma.$transaction([

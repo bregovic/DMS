@@ -1,5 +1,7 @@
 "use client";
 
+import { isGenericServerError, userMessage } from "@/lib/user-error";
+
 // Chybová hranice pro (app) sekce – editorial „něco se pokazilo" + retry.
 export default function Error({
   error,
@@ -16,9 +18,11 @@ export default function Error({
         Akci se nepodařilo dokončit. Zkus to prosím znovu; pokud problém
         přetrvává, obnov stránku.
       </p>
-      {error?.message && (
+      {userMessage(error) ? (
+        <p className="mt-4 text-base text-stone-900">{userMessage(error)}</p>
+      ) : error?.message && !isGenericServerError(error.message) ? (
         <p className="mt-2 font-mono text-xs text-stone-400">{error.message}</p>
-      )}
+      ) : null}
       <button
         type="button"
         onClick={reset}

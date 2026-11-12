@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -23,17 +25,17 @@ export async function createExpense(formData: FormData) {
 
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
+    throw new UserError("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název.");
+  if (!title) throw new UserError("Zadej název.");
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   // Dodavatel (komu výdaj patří) – jen vlastníka projektu (izolace mezi účty).
   let vendorId = String(formData.get("vendorId") || "") || null;
@@ -72,7 +74,7 @@ export async function createExpense(formData: FormData) {
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!subProjectId || !scope.has(subProjectId)) {
-      throw new Error("Do této složky nemáš oprávnění přidávat.");
+      throw new UserError("Do této složky nemáš oprávnění přidávat.");
     }
   }
 
@@ -85,7 +87,7 @@ export async function createExpense(formData: FormData) {
     hours = num(formData.get("hours"));
     rate = num(formData.get("rate"));
     if (!hours || hours <= 0 || !rate || rate <= 0) {
-      throw new Error("Zadej počet hodin a hodinovou sazbu.");
+      throw new UserError("Zadej počet hodin a hodinovou sazbu.");
     }
     amount = Math.round(hours * rate * 100) / 100;
     // Ulož sazbu k dodavateli (návrh pro příště)
@@ -96,7 +98,7 @@ export async function createExpense(formData: FormData) {
     }
   } else {
     amount = num(formData.get("amount"));
-    if (!amount || amount <= 0) throw new Error("Zadej částku.");
+    if (!amount || amount <= 0) throw new UserError("Zadej částku.");
   }
 
   /* Příjem se ukládá jako záporná částka. Díky tomu všechny existující
@@ -157,7 +159,7 @@ export async function createExpense(formData: FormData) {
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
     if (file.size > 8 * 1024 * 1024) {
-      throw new Error("Sken je větší než 8 MB.");
+      throw new UserError("Sken je větší než 8 MB.");
     }
     const docType = String(formData.get("scanType") || "receipt");
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -193,17 +195,17 @@ export async function updateExpense(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Upravit výdaj může jen vlastník projektu.");
+    throw new UserError("Upravit výdaj může jen vlastník projektu.");
   }
 
   const existing = await prisma.expense.findFirst({
     where: { id, projectId },
     select: { id: true, subProjectId: true, project: { select: { ownerId: true } } },
   });
-  if (!existing) throw new Error("Výdaj nenalezen.");
+  if (!existing) throw new UserError("Výdaj nenalezen.");
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název.");
+  if (!title) throw new UserError("Zadej název.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
@@ -227,7 +229,7 @@ export async function updateExpense(formData: FormData) {
   if (moveTo) {
     const [mp, ms] = moveTo.split(":");
     if (mp && mp !== projectId) {
-      if (!isManager(await getProjectRole(mp, user))) throw new Error("Do toho projektu nemáš přístup.");
+      if (!isManager(await getProjectRole(mp, user))) throw new UserError("Do toho projektu nemáš přístup.");
       cilProjectId = mp;
     }
     subProjectId = ms || null;
@@ -254,7 +256,7 @@ export async function updateExpense(formData: FormData) {
     hours = num(formData.get("hours"));
     rate = num(formData.get("rate"));
     if (!hours || hours <= 0 || !rate || rate <= 0) {
-      throw new Error("Zadej počet hodin a hodinovou sazbu.");
+      throw new UserError("Zadej počet hodin a hodinovou sazbu.");
     }
     amount = Math.round(hours * rate * 100) / 100;
     if (vendorId) {
@@ -264,7 +266,7 @@ export async function updateExpense(formData: FormData) {
     }
   } else {
     amount = num(formData.get("amount"));
-    if (!amount || amount <= 0) throw new Error("Zadej částku.");
+    if (!amount || amount <= 0) throw new UserError("Zadej částku.");
   }
 
   /* Příjem se ukládá jako záporná částka. Díky tomu všechny existující
@@ -348,7 +350,7 @@ export async function setExpenseStage(formData: FormData) {
   const stage = String(formData.get("stage") || "").trim() || null;
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Stav výdaje mění jen vlastník projektu.");
+    throw new UserError("Stav výdaje mění jen vlastník projektu.");
   }
   await prisma.expense.updateMany({ where: { id, projectId }, data: { stage } });
   revalidatePath(`/projects/${projectId}`);
@@ -369,9 +371,9 @@ export async function bulkUpdateExpenses(formData: FormData) {
   // které spravuju, a mazat hromadně tam nejde.
   const cross = !projectId;
   if (cross) {
-    if (op === "delete") throw new Error("Hromadné mazání jde jen v projektu.");
+    if (op === "delete") throw new UserError("Hromadné mazání jde jen v projektu.");
   } else if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Hromadnou změnu může provést jen vlastník projektu.");
+    throw new UserError("Hromadnou změnu může provést jen vlastník projektu.");
   }
   if (ids.length === 0) return;
 
@@ -395,7 +397,7 @@ export async function bulkUpdateExpenses(formData: FormData) {
     const stage = String(formData.get("stage") || "").trim() || null;
     await prisma.expense.updateMany({ where, data: { stage } });
   } else {
-    throw new Error("Neznámá operace.");
+    throw new UserError("Neznámá operace.");
   }
 
   if (projectId) revalidatePath(`/projects/${projectId}`);
@@ -410,7 +412,7 @@ export async function approveExpense(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Schvalovat může jen vlastník projektu.");
+    throw new UserError("Schvalovat může jen vlastník projektu.");
   }
   await prisma.expense.updateMany({
     where: { id, projectId },
@@ -426,7 +428,7 @@ export async function setExpensePaid(formData: FormData) {
   const paid = String(formData.get("paid")) === "true";
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Stav úhrady mění jen vlastník projektu.");
+    throw new UserError("Stav úhrady mění jen vlastník projektu.");
   }
   // Úhrada = stav "uhrazeno" (jinak "k úhradě").
   await prisma.expense.updateMany({
@@ -443,7 +445,7 @@ export async function deleteExpense(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Mazat může jen vlastník projektu.");
+    throw new UserError("Mazat může jen vlastník projektu.");
   }
   // Skeny i z úložiště (R2) – jen výdaje tohoto projektu; nejdřív záznamy, pak soubory.
   await deleteWithFiles({ projectId, expenseId: id }, () =>
@@ -479,8 +481,8 @@ export async function getExpenseEditData(expenseId: string) {
       items: { orderBy: { line: "asc" } },
     },
   });
-  if (!e) throw new Error("Výdaj nenalezen.");
-  if (!isManager(await getProjectRole(e.projectId, user))) throw new Error("Nemáš oprávnění.");
+  if (!e) throw new UserError("Výdaj nenalezen.");
+  if (!isManager(await getProjectRole(e.projectId, user))) throw new UserError("Nemáš oprávnění.");
   // Kam jde výdaj přesunout: projekty, které uživatel spravuje, i s jejich
   // složkami. Cesta se skládá, ať je v jednom seznamu poznat vnoření.
   const ids = await managedProjectIds(user);
@@ -534,10 +536,10 @@ export async function setItemClaim(formData: FormData) {
     where: { id: itemId },
     select: { id: true, expense: { select: { id: true, projectId: true } } },
   });
-  if (!item) throw new Error("Položka nenalezena.");
+  if (!item) throw new UserError("Položka nenalezena.");
   // Nárok je věc evidence vlastníka – mění ho jen vlastník a spolusprávce.
   const ids = await managedProjectIds(user);
-  if (!ids.includes(item.expense.projectId)) throw new Error("Nemáš oprávnění.");
+  if (!ids.includes(item.expense.projectId)) throw new UserError("Nemáš oprávnění.");
 
   const patch = await prepocetNaroku(item.expense.id, [{ id: itemId, deductible }]);
   if (patch) await prisma.expense.update({ where: { id: item.expense.id }, data: patch });

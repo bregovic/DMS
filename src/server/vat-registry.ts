@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 /**
  * Registr plátců DPH (MF ČR): zveřejněné bankovní účty a spolehlivost plátce.
  * Používá se v nastavení – účet na faktuře má být ten zveřejněný, jinak
@@ -14,7 +15,7 @@ const ENDPOINT = "https://adisrws.mfcr.cz/adistc/axis2/services/rozhraniCRPDPH.r
 
 export async function vatRegistry(dicRaw: string): Promise<VatRegistryResult> {
   const dic = dicRaw.replace(/\s/g, "").toUpperCase().replace(/^CZ/, "");
-  if (!/^\d{8,10}$/.test(dic)) throw new Error("DIČ musí být ve tvaru CZ a 8–10 číslic.");
+  if (!/^\d{8,10}$/.test(dic)) throw new UserError("DIČ musí být ve tvaru CZ a 8–10 číslic.");
   const body = `<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:roz="http://adis.mfcr.cz/rozhraniCRPDPH/">
   <soapenv:Body><roz:StatusNespolehlivyPlatceRequest><roz:dic>${dic}</roz:dic></roz:StatusNespolehlivyPlatceRequest></soapenv:Body>
@@ -25,7 +26,7 @@ export async function vatRegistry(dicRaw: string): Promise<VatRegistryResult> {
     body,
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error("Registr plátců DPH je nedostupný.");
+  if (!res.ok) throw new UserError("Registr plátců DPH je nedostupný.");
   const xml = await res.text();
 
   const status = /nespolehlivyPlatce="([^"]+)"/.exec(xml)?.[1] ?? "NENALEZEN";

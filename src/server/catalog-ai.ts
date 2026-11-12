@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { evalFormula } from "@/lib/formula";
 import { AI_MODEL, aiAccountForUser, assertBudget, callModel } from "@/server/extraction";
@@ -92,7 +93,7 @@ Formát katalogu (dodrž ho přesně):
 /** Navrhnout úkon přes AI (s vyhledáváním cen na webu). */
 export async function proposeOperation(title: string, userId: string, note?: string | null): Promise<CatalogProposal> {
   const name = title.trim();
-  if (name.length < 3) throw new Error("Zadej název činnosti.");
+  if (name.length < 3) throw new UserError("Zadej název činnosti.");
   const account = await aiAccountForUser(userId);
   await assertBudget(account);
   const [materials, ops] = await Promise.all([
@@ -133,7 +134,7 @@ export function validateProposal(p: CatalogProposal): CatalogProposal {
     try {
       evalFormula(f, vars);
     } catch (e) {
-      throw new Error(`Vzorec ${what} („${f}“) nejde spočítat: ${e instanceof Error ? e.message : e}`);
+      throw new UserError(`Vzorec ${what} („${f}“) nejde spočítat: ${e instanceof Error ? e.message : e}`);
     }
   };
   check(p.operation.quantityFormula, "množství");

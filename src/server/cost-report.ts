@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { REQUEST_FORECAST_STATUSES, TASK_DONE_STATUSES } from "@/lib/constants";
@@ -270,7 +271,7 @@ export async function createCostReport(projectId: string, subProjectId: string |
     where: { projectId, status: "running", createdAt: { gte: new Date(Date.now() - 20 * 60_000) } },
     select: { id: true },
   });
-  if (busy) throw new Error("Report se už připravuje – počkej, až doběhne.");
+  if (busy) throw new UserError("Report se už připravuje – počkej, až doběhne.");
   const r = await prisma.costReport.create({
     data: { projectId, subProjectId, prompt: prompt?.trim() || null, model: REPORT_MODEL, createdById: userId },
     select: { id: true },

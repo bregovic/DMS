@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { managedProjectIds } from "@/server/access";
 import { amountCzk, vatRowsCzk } from "@/lib/vat";
@@ -119,7 +120,7 @@ export async function buildKhXml(userId: string, period: KhPeriod) {
       },
     }),
   ]);
-  if (!me) throw new Error("Uživatel nenalezen.");
+  if (!me) throw new UserError("Uživatel nenalezen.");
 
   const taxed = expenses.filter((e) => e.vatAmount != null || e.vatBase != null);
   const missing: string[] = [];

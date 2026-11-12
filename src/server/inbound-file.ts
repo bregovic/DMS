@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { requestFolder } from "@/server/document-files";
@@ -64,12 +65,12 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
       attachments: { select: { id: true, fileName: true, originalName: true, mimeType: true, size: true, kind: true } },
     },
   });
-  if (!mail) throw new Error("Zpráva nenalezena.");
+  if (!mail) throw new UserError("Zpráva nenalezena.");
   const project = await prisma.project.findUnique({
     where: { id: t.projectId },
     select: { id: true, ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   const platne = t.requestIds.length
     ? await prisma.request.findMany({
@@ -77,7 +78,7 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
         select: { id: true, title: true },
       })
     : [];
-  if (platne.length !== t.requestIds.length) throw new Error("Některá vybraná žádanka do projektu nepatří.");
+  if (platne.length !== t.requestIds.length) throw new UserError("Některá vybraná žádanka do projektu nepatří.");
   // Hlavní žádanka nese dokument, na kterém stojí vytěžení.
   const requestId = platne[0]?.id ?? null;
 
@@ -85,7 +86,7 @@ export async function fileInbound(t: FileTarget): Promise<FileResult> {
     .map((x) => ({ ...x, a: mail.attachments.find((m) => m.id === x.id) }))
     .filter((x): x is typeof x & { a: NonNullable<typeof x.a> } => !!x.a);
   const withEmail = t.withEmail && !!mail.rawKey;
-  if (vybrane.length === 0 && !withEmail) throw new Error("Vyber aspoň jednu přílohu, nebo přilož e-mail.");
+  if (vybrane.length === 0 && !withEmail) throw new UserError("Vyber aspoň jednu přílohu, nebo přilož e-mail.");
 
   // U přeposlané pošty je odesílatel sám uživatel, proto se k příloze
   // píše dodavatel zjištěný z obsahu. E-mail si nechá odesílatele a předmět.

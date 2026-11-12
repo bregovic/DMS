@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -110,7 +112,7 @@ export async function deleteMaterial(formData: FormData) {
   const id = String(formData.get("id"));
   const used = await prisma.operationMaterial.count({ where: { materialId: id } });
   if (used > 0) {
-    throw new Error("Materiál je použitý v receptu úkonu – nejdřív ho odeber z receptů.");
+    throw new UserError("Materiál je použitý v receptu úkonu – nejdřív ho odeber z receptů.");
   }
   await prisma.material.deleteMany({ where: { id } });
   revalidatePath("/katalog/materialy");

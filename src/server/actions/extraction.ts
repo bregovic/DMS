@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -23,10 +25,10 @@ async function docCtx(documentId: string) {
     where: { id: documentId },
     select: { id: true, projectId: true, requestId: true, uploadedById: true },
   });
-  if (!doc?.requestId) throw new Error("Příloha nenalezena.");
+  if (!doc?.requestId) throw new UserError("Příloha nenalezena.");
   const role = await getProjectRole(doc.projectId, user);
   if (!(isManager(role) || (canWrite(role) && doc.uploadedById === user.id)))
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   return { user, doc };
 }
 
@@ -54,9 +56,9 @@ export async function getExtraction(extractionId: string) {
       document: { select: { originalName: true } },
     },
   });
-  if (!ex) throw new Error("Návrh nenalezen.");
+  if (!ex) throw new UserError("Návrh nenalezen.");
   const role = await getProjectRole(ex.projectId, user);
-  if (!isManager(role)) throw new Error("Návrh potvrzuje správce projektu.");
+  if (!isManager(role)) throw new UserError("Návrh potvrzuje správce projektu.");
   const project = await prisma.project.findUnique({ where: { id: ex.projectId }, select: { ownerId: true } });
   const result = ex.result as ExtractionResult | null;
 
@@ -114,10 +116,10 @@ export async function applyExtraction(formData: FormData) {
     where: { id },
     select: { id: true, projectId: true, result: true },
   });
-  if (!ex?.result) throw new Error("Návrh nenalezen.");
-  if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Návrh potvrzuje správce projektu.");
+  if (!ex?.result) throw new UserError("Návrh nenalezen.");
+  if (!isManager(await getProjectRole(ex.projectId, user))) throw new UserError("Návrh potvrzuje správce projektu.");
   const project = await prisma.project.findUnique({ where: { id: ex.projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   const result = ex.result as unknown as ExtractionResult;
 
   // Dodavatel: vybraný z evidence, nebo nový z vytěžených údajů.
@@ -128,7 +130,7 @@ export async function applyExtraction(formData: FormData) {
       where: { id: String(formData.get("vendorId") || ""), ownerId: project.ownerId },
       select: { id: true, bankAccount: true },
     });
-    if (!v) throw new Error("Vyber dodavatele.");
+    if (!v) throw new UserError("Vyber dodavatele.");
     vendorId = v.id;
     // Účet z nabídky doplnit, jen když ho dodavatel ještě nemá (nepřepisovat).
     if (result.vendor.bankAccount && !v.bankAccount)
@@ -136,8 +138,8 @@ export async function applyExtraction(formData: FormData) {
   } else if (vendorMode === "new") {
     const name = String(formData.get("vendorName") || "").trim();
     const email = String(formData.get("vendorEmail") || "").trim().toLowerCase();
-    if (!name) throw new Error("Zadej název dodavatele.");
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Zadej e-mail dodavatele.");
+    if (!name) throw new UserError("Zadej název dodavatele.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new UserError("Zadej e-mail dodavatele.");
     const dup = await prisma.vendor.findFirst({
       where: { ownerId: project.ownerId, email: { equals: email, mode: "insensitive" } },
       select: { id: true },
@@ -171,7 +173,7 @@ export async function applyExtraction(formData: FormData) {
     .map((p, i) => ({ p, i }))
     .filter(({ i }) => formData.get(`use_${i}`) === "1" && !String(formData.get(`req_${i}`) || ""));
   if (bezZadanky.length)
-    throw new Error(
+    throw new UserError(
       `Vyber žádanku u ${bezZadanky.length === 1 ? "části" : "částí"}: ${bezZadanky
         .map((x) => x.p.label)
         .join(", ")}.`,
@@ -208,7 +210,7 @@ export async function dismissExtraction(formData: FormData) {
     select: { id: true, projectId: true },
   });
   if (!ex) return;
-  if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Nemáš oprávnění.");
+  if (!isManager(await getProjectRole(ex.projectId, user))) throw new UserError("Nemáš oprávnění.");
   await prisma.extraction.update({ where: { id: ex.id }, data: { status: "dismissed" } });
   revalidatePath(`/projects/${ex.projectId}`);
 }
@@ -220,15 +222,15 @@ export async function appendSpecsToRequest(formData: FormData) {
     where: { id: String(formData.get("id")) },
     select: { projectId: true, result: true, document: { select: { originalName: true } } },
   });
-  if (!ex?.result) throw new Error("Návrh nenalezen.");
-  if (!isManager(await getProjectRole(ex.projectId, user))) throw new Error("Nemáš oprávnění.");
+  if (!ex?.result) throw new UserError("Návrh nenalezen.");
+  if (!isManager(await getProjectRole(ex.projectId, user))) throw new UserError("Nemáš oprávnění.");
   const req = await prisma.request.findFirst({
     where: { id: String(formData.get("requestId") || ""), projectId: ex.projectId },
     select: { id: true, description: true },
   });
-  if (!req) throw new Error("Vyber žádanku.");
+  if (!req) throw new UserError("Vyber žádanku.");
   const specs = (ex.result as unknown as ExtractionResult).technicalSpecs ?? [];
-  if (!specs.length) throw new Error("Dokument nemá technické údaje.");
+  if (!specs.length) throw new UserError("Dokument nemá technické údaje.");
   const block = [`Z dokumentu ${ex.document.originalName}:`, ...specs.map((x) => `• ${x}`)].join("\n");
   await prisma.request.update({
     where: { id: req.id },
@@ -244,8 +246,8 @@ export async function startComparison(formData: FormData) {
     where: { id: String(formData.get("requestId")) },
     select: { id: true, projectId: true },
   });
-  if (!req) throw new Error("Žádanka nenalezena.");
-  if (!isManager(await getProjectRole(req.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
+  if (!req) throw new UserError("Žádanka nenalezena.");
+  if (!isManager(await getProjectRole(req.projectId, user))) throw new UserError("Porovnání spouští správce projektu.");
   const id = await createComparison(
     req.id,
     user.id,
@@ -263,8 +265,8 @@ export async function startBundleComparison(formData: FormData) {
     where: { id: String(formData.get("bundleId")) },
     select: { id: true, projectId: true },
   });
-  if (!b) throw new Error("Balíček nenalezen.");
-  if (!isManager(await getProjectRole(b.projectId, user))) throw new Error("Porovnání spouští správce projektu.");
+  if (!b) throw new UserError("Balíček nenalezen.");
+  if (!isManager(await getProjectRole(b.projectId, user))) throw new UserError("Porovnání spouští správce projektu.");
   const id = await createBundleComparison(
     b.id,
     user.id,
@@ -285,15 +287,15 @@ export async function startRequestExtractions(formData: FormData) {
     where: { id: String(formData.get("requestId")) },
     select: { id: true, projectId: true },
   });
-  if (!req) throw new Error("Žádanka nenalezena.");
-  if (!isManager(await getProjectRole(req.projectId, user))) throw new Error("Přílohy zpracovává správce projektu.");
+  if (!req) throw new UserError("Žádanka nenalezena.");
+  if (!isManager(await getProjectRole(req.projectId, user))) throw new UserError("Přílohy zpracovává správce projektu.");
   const docs = await prisma.document.findMany({
     where: { requestId: req.id, extractions: { none: {} } },
     select: { id: true, mimeType: true, originalName: true },
     orderBy: { createdAt: "asc" },
   });
   const todo = docs.filter((d) => extractable(d.mimeType, d.originalName));
-  if (todo.length === 0) throw new Error("Všechny přílohy už jsou zpracované.");
+  if (todo.length === 0) throw new UserError("Všechny přílohy už jsou zpracované.");
   // První založit hned (ať je vidět průběh), ostatní postupně na pozadí.
   const first = await createExtraction(todo[0].id, user.id);
   after(async () => {

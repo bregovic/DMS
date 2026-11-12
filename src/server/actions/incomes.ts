@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -17,14 +19,14 @@ export async function createIncome(formData: FormData) {
 
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
+    throw new UserError("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název.");
+  if (!title) throw new UserError("Zadej název.");
 
   const amount = num(formData.get("amount"));
-  if (!amount || amount <= 0) throw new Error("Zadej částku.");
+  if (!amount || amount <= 0) throw new UserError("Zadej částku.");
 
   let subProjectId = String(formData.get("subProjectId") || "") || null;
   if (subProjectId) {
@@ -39,7 +41,7 @@ export async function createIncome(formData: FormData) {
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!subProjectId || !scope.has(subProjectId)) {
-      throw new Error("Do této složky nemáš oprávnění přidávat.");
+      throw new UserError("Do této složky nemáš oprávnění přidávat.");
     }
   }
 
@@ -87,20 +89,20 @@ export async function updateIncome(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Upravit příjem může jen vlastník projektu.");
+    throw new UserError("Upravit příjem může jen vlastník projektu.");
   }
 
   const existing = await prisma.income.findFirst({
     where: { id, projectId },
     select: { id: true },
   });
-  if (!existing) throw new Error("Příjem nenalezen.");
+  if (!existing) throw new UserError("Příjem nenalezen.");
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název.");
+  if (!title) throw new UserError("Zadej název.");
 
   const amount = num(formData.get("amount"));
-  if (!amount || amount <= 0) throw new Error("Zadej částku.");
+  if (!amount || amount <= 0) throw new UserError("Zadej částku.");
 
   let subProjectId = String(formData.get("subProjectId") || "") || null;
   if (subProjectId) {
@@ -138,7 +140,7 @@ export async function deleteIncome(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Mazat může jen vlastník projektu.");
+    throw new UserError("Mazat může jen vlastník projektu.");
   }
   await prisma.income.deleteMany({ where: { id, projectId } });
 

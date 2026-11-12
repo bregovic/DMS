@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/dal";
@@ -19,7 +21,7 @@ import { runTenderSuggest, type TenderSuggestion } from "@/server/tender-ai";
 async function managerOf(projectId: string) {
   const user = await requireUser();
   const role = await getProjectRole(projectId, user);
-  if (!isManager(role)) throw new Error("Poptávková řízení spravuje vlastník projektu.");
+  if (!isManager(role)) throw new UserError("Poptávková řízení spravuje vlastník projektu.");
   return user;
 }
 
@@ -28,7 +30,7 @@ async function tenderCtx(tenderId: string) {
     where: { id: tenderId },
     select: { id: true, projectId: true, project: { select: { ownerId: true } } },
   });
-  if (!t) throw new Error("Řízení nenalezeno.");
+  if (!t) throw new UserError("Řízení nenalezeno.");
   const user = await managerOf(t.projectId);
   return { user, tender: t };
 }
@@ -107,7 +109,7 @@ export async function updateTender(_prev: { error?: string; ok?: boolean } | und
 export async function setTenderStatus(formData: FormData) {
   const { tender } = await tenderCtx(String(formData.get("id")));
   const status = String(formData.get("status"));
-  if (!["draft", "open", "closed"].includes(status)) throw new Error("Neplatný stav.");
+  if (!["draft", "open", "closed"].includes(status)) throw new UserError("Neplatný stav.");
   await prisma.tender.update({ where: { id: tender.id }, data: { status } });
   revalidatePath(path(tender.projectId, tender.id));
   revalidatePath(path(tender.projectId));
@@ -210,7 +212,7 @@ export async function addGalleryPhotos(formData: FormData): Promise<{ error?: st
 export async function removeGalleryPhoto(formData: FormData) {
   const id = String(formData.get("id"));
   const d = await prisma.document.findUnique({ where: { id }, select: { id: true, projectId: true, gallery: true } });
-  if (!d || !d.gallery) throw new Error("Fotka nenalezena.");
+  if (!d || !d.gallery) throw new UserError("Fotka nenalezena.");
   await managerOf(d.projectId);
   await deleteWithFiles({ id: d.id }, () => prisma.document.delete({ where: { id: d.id } }));
   const tenderId = String(formData.get("tenderId") || "");
@@ -271,7 +273,7 @@ export async function toggleInviteSent(formData: FormData) {
     where: { id: String(formData.get("id")) },
     select: { id: true, tenderId: true, sentAt: true },
   });
-  if (!inv) throw new Error("Pozvánka nenalezena.");
+  if (!inv) throw new UserError("Pozvánka nenalezena.");
   const { tender } = await tenderCtx(inv.tenderId);
   const sent = String(formData.get("sent") ?? "") !== "0";
   await prisma.tenderInvite.update({ where: { id: inv.id }, data: { sentAt: sent ? (inv.sentAt ?? new Date()) : null } });

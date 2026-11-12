@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
@@ -150,7 +151,7 @@ export async function createPlanDraft(
 ) {
   await assertBudget(await aiAccountForProject(projectId));
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
+  if (busy) throw new UserError("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const allowed = new Set((await planDocuments(projectId)).map((d) => d.id));
   const ids = documentIds.filter((id) => allowed.has(id)).slice(0, MAX_PLAN_DOCS);
   const d = await prisma.planDraft.create({
@@ -439,9 +440,9 @@ export async function costCandidates(projectId: string, all = false) {
 export async function createCostDraft(projectId: string, userId: string, prompt?: string | null, all = false) {
   await assertBudget(userId);
   const busy = await prisma.planDraft.findFirst({ where: { projectId, status: "running" }, select: { id: true } });
-  if (busy) throw new Error("Na plánu projektu už běží zpracování – počkej, až doběhne.");
+  if (busy) throw new UserError("Na plánu projektu už běží zpracování – počkej, až doběhne.");
   const n = (await costCandidates(projectId, all)).length;
-  if (n === 0) throw new Error(all ? "V plánu nejsou nehotové úkoly." : "Všechny nehotové úkoly už odhad nákladů mají.");
+  if (n === 0) throw new UserError(all ? "V plánu nejsou nehotové úkoly." : "Všechny nehotové úkoly už odhad nákladů mají.");
   const d = await prisma.planDraft.create({
     // u odhadu nákladů znamená replaceExisting přepočet i úkolů, které odhad už mají
     data: { projectId, kind: "costs", replaceExisting: all, documentIds: [], prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },

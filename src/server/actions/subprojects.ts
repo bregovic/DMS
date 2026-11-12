@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -16,11 +18,11 @@ export async function createSubProject(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   }
 
   const name = String(formData.get("name") || "").trim();
-  if (!name) throw new Error("Zadej název subprojektu.");
+  if (!name) throw new UserError("Zadej název subprojektu.");
 
   let parentId = String(formData.get("parentId") || "") || null;
   if (parentId) {
@@ -35,7 +37,7 @@ export async function createSubProject(formData: FormData) {
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!parentId || !scope.has(parentId)) {
-      throw new Error("Subprojekt smíš založit jen uvnitř své složky.");
+      throw new UserError("Subprojekt smíš založit jen uvnitř své složky.");
     }
   }
 
@@ -63,13 +65,13 @@ export async function updateSubProject(formData: FormData) {
     where: { id, projectId },
     select: { createdById: true },
   });
-  if (!sub) throw new Error("Subprojekt nenalezen.");
+  if (!sub) throw new UserError("Subprojekt nenalezen.");
   if (!isManager(role) && !(sub.createdById === user.id && canWrite(role))) {
-    throw new Error("Nemáš oprávnění upravit tento subprojekt.");
+    throw new UserError("Nemáš oprávnění upravit tento subprojekt.");
   }
 
   const name = String(formData.get("name") || "").trim();
-  if (!name) throw new Error("Zadej název subprojektu.");
+  if (!name) throw new UserError("Zadej název subprojektu.");
 
   await prisma.subProject.update({
     where: { id },
@@ -96,7 +98,7 @@ export async function deleteSubProject(formData: FormData) {
   if (!sub) return;
 
   const allowed = isManager(role) || (sub.createdById === user.id && canWrite(role));
-  if (!allowed) throw new Error("Nemáš oprávnění smazat tento subprojekt.");
+  if (!allowed) throw new UserError("Nemáš oprávnění smazat tento subprojekt.");
 
   // Smaže i vnořené (cascade); položky se odpojí (subProjectId -> null).
   await prisma.subProject.delete({ where: { id } });

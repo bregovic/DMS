@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/dal";
@@ -38,7 +40,7 @@ async function doplnitZAres(vendorId: string, ico: string) {
 async function writable(projectId: string) {
   const user = await requireUser();
   const role = await getProjectRole(projectId, user);
-  if (!canWrite(role)) throw new Error("Nemáš oprávnění.");
+  if (!canWrite(role)) throw new UserError("Nemáš oprávnění.");
   return user;
 }
 
@@ -46,7 +48,7 @@ async function writable(projectId: string) {
 export async function scanDocument(formData: FormData) {
   const documentId = String(formData.get("documentId"));
   const doc = await prisma.document.findUnique({ where: { id: documentId }, select: { projectId: true } });
-  if (!doc) throw new Error("Příloha nenalezena.");
+  if (!doc) throw new UserError("Příloha nenalezena.");
   const user = await writable(doc.projectId);
   const id = await createDocScan(doc.projectId, documentId, user.id);
   after(() => runDocScan(id));
@@ -134,10 +136,10 @@ export async function restartScan(formData: FormData) {
     where: { id },
     select: { id: true, projectId: true, inboundAttachment: { select: { mail: { select: { ownerId: true } } } } },
   });
-  if (!scan) throw new Error("Návrh nenalezen.");
+  if (!scan) throw new UserError("Návrh nenalezen.");
   const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
   if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   await prisma.docScan.update({
     where: { id },
     data: { status: "running", error: null, result: Prisma.JsonNull, model: AI_MODEL },
@@ -160,8 +162,8 @@ export async function deleteScan(formData: FormData) {
   if (!scan) return;
   const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
   if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
-    throw new Error("Nemáš oprávnění.");
-  if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl – smaž nejdřív ten výdaj.");
+    throw new UserError("Nemáš oprávnění.");
+  if (scan.expenseId) throw new UserError("Z tohoto dokladu už výdaj vznikl – smaž nejdřív ten výdaj.");
   await prisma.docScan.delete({ where: { id } });
   revalidatePath("/doklady");
 }
@@ -234,11 +236,11 @@ export async function getDocScan(id: string) {
       },
     },
   });
-  if (!scan) throw new Error("Návrh nenalezen.");
+  if (!scan) throw new UserError("Návrh nenalezen.");
   // Doklad z pošty ještě projekt nemá – právo se odvozuje od majitele schránky.
   const user = scan.projectId ? await writable(scan.projectId) : await requireUser();
   if (!scan.projectId && scan.inboundAttachment && scan.inboundAttachment.mail.ownerId !== user.id)
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   const result = (scan.result ?? null) as ScanResult | null;
 
   // Vystavil doklad majitel projektu? Poznáme podle jeho IČO/DIČ z nastavení
@@ -322,22 +324,22 @@ export async function applyDocScan(formData: FormData) {
       inboundAttachment: { select: { id: true, fileName: true, originalName: true, mimeType: true, mail: { select: { subject: true, fromName: true, fromAddress: true } } } },
     },
   });
-  if (!scan) throw new Error("Návrh nenalezen.");
-  if (scan.expenseId) throw new Error("Z tohoto dokladu už výdaj vznikl.");
+  if (!scan) throw new UserError("Návrh nenalezen.");
+  if (scan.expenseId) throw new UserError("Z tohoto dokladu už výdaj vznikl.");
   /* Nabídka není doklad k zaúčtování – výdaj by z ní udělal náklad, který
      nevznikl. Vytěžení se ale občas netrefí (ceník, zakázkový list), takže
      když uživatel v dialogu druh přepne na doklad, platí jeho volba. */
   if ((scan.result as { docKind?: string } | null)?.docKind === "nabidka" && formData.get("jakoDoklad") !== "1")
-    throw new Error("Tohle je nabídka, ne doklad k zaúčtování. Přepni druh na doklad, nebo z ní založ nabídku.");
+    throw new UserError("Tohle je nabídka, ne doklad k zaúčtování. Přepni druh na doklad, nebo z ní založ nabídku.");
 
   /* Doklad z pošty projekt nemá – zvolí se až tady, v kontrole. Teprve
      potvrzením se soubor přesune do projektu a vznikne dokument; do té doby
      leží v poště a nikde nepřekáží. */
   const cilovy = scan.projectId ?? String(formData.get("targetProjectId") || "");
-  if (!cilovy) throw new Error("Vyber projekt.");
+  if (!cilovy) throw new UserError("Vyber projekt.");
   const user = await writable(cilovy);
   const project = await prisma.project.findUnique({ where: { id: cilovy }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   if (!scan.projectId && scan.inboundAttachment) {
     const a = scan.inboundAttachment;
@@ -454,7 +456,7 @@ export async function applyDocScan(formData: FormData) {
           where: { project: { ownerId: project.ownerId }, docNumber: dupNum, ...(dupIcoRaw ? { supplierIco: dupIcoRaw } : {}) },
           select: { id: true },
         });
-    if (exists) throw new Error(`Doklad č. ${dupNum} od téhle protistrany už v evidenci je. Když ho chceš přesto založit, potvrď to v dialogu.`);
+    if (exists) throw new UserError(`Doklad č. ${dupNum} od téhle protistrany už v evidenci je. Když ho chceš přesto založit, potvrď to v dialogu.`);
   }
 
   // Vystavený doklad = příjem a uskutečněné plnění (do DPH na výstupu)
@@ -611,15 +613,15 @@ export async function uploadReceipt(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber nebo vyfoť soubor.");
-  if (file.size > 14 * 1024 * 1024) throw new Error("Soubor je větší než 14 MB.");
+  if (!(file instanceof File) || file.size === 0) throw new UserError("Vyber nebo vyfoť soubor.");
+  if (file.size > 14 * 1024 * 1024) throw new UserError("Soubor je větší než 14 MB.");
 
   const role = await getProjectRole(projectId, user);
   const taskOnly = role ? null : await getTaskOnlyAccess(projectId, user);
-  if (!canWrite(role) && !taskOnly) throw new Error("K tomuhle projektu nemáš přístup.");
+  if (!canWrite(role) && !taskOnly) throw new UserError("K tomuhle projektu nemáš přístup.");
 
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   const docType = formData.get("type") === "invoice" ? "invoice" : "receipt";
   // Složka, kterou vybral nahrávající – čtení ji pak nehádá z obsahu.
   const subProjectId = await overSlozku(projectId, formData.get("subProjectId"));
@@ -847,7 +849,7 @@ export async function applyOfferScan(formData: FormData) {
       },
     },
   });
-  if (!scan) throw new Error("Návrh nenalezen.");
+  if (!scan) throw new UserError("Návrh nenalezen.");
 
   const requestIds = (JSON.parse(String(formData.get("requestIds") || "[]")) as string[]).filter(Boolean);
 
@@ -857,7 +859,7 @@ export async function applyOfferScan(formData: FormData) {
   if (requestIds.length === 0) {
     const [zarProjekt, zarSub] = String(formData.get("zarazeni") || "").split(":");
     const cilovy = zarProjekt || scan.projectId;
-    if (!cilovy) throw new Error("Vyber žádanku, nebo projekt, do kterého žádanka patří.");
+    if (!cilovy) throw new UserError("Vyber žádanku, nebo projekt, do kterého žádanka patří.");
     const u = await writable(cilovy);
     const nazev =
       String(formData.get("requestTitle") || "").trim() ||
@@ -882,14 +884,14 @@ export async function applyOfferScan(formData: FormData) {
     where: { id: { in: requestIds } },
     select: { id: true, projectId: true, title: true, bundleId: true },
   });
-  if (zadanky.length !== requestIds.length) throw new Error("Některá žádanka už neexistuje.");
+  if (zadanky.length !== requestIds.length) throw new UserError("Některá žádanka už neexistuje.");
   const projectId = zadanky[0].projectId;
   if (zadanky.some((r) => r.projectId !== projectId))
-    throw new Error("Vybrané žádanky nejsou ze stejného projektu.");
+    throw new UserError("Vybrané žádanky nejsou ze stejného projektu.");
 
   const user = await writable(projectId);
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   // dodavatel: vybraný, nebo podle IČO / názvu, případně nový z ARESu
   const ico = String(formData.get("supplierIco") || "").replace(/\D/g, "") || null;

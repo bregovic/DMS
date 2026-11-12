@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -71,13 +73,13 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
       project: { select: { ownerId: true, defaultCategory: true, defaultCurrency: true } },
     },
   });
-  if (!task) throw new Error("Úkol nenalezen.");
+  if (!task) throw new UserError("Úkol nenalezen.");
 
   const isVendor = !!email && task.vendor?.email?.toLowerCase() === email;
   const isAssignee = !!email && task.assigneeEmail?.toLowerCase() === email;
   if (!isVendor && !isAssignee) {
     const access = await getProjectAccess(task.projectId, user);
-    if (!access || !canWrite(access.role)) throw new Error(`Na úkol „${task.title}“ nemůžeš vykazovat.`);
+    if (!access || !canWrite(access.role)) throw new UserError(`Na úkol „${task.title}“ nemůžeš vykazovat.`);
   }
   // Denní strop nahrávání ohlídat dřív, než vznikne výdaj – jinak by výkaz
   // zůstal založený a akce spadla až na příloze.
@@ -87,7 +89,7 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
   let amount: number | null = null;
   const worked = !!inp.hours && inp.hours > 0;
   if (worked) {
-    if (!inp.rate || inp.rate <= 0) throw new Error("Zadej hodinovou sazbu.");
+    if (!inp.rate || inp.rate <= 0) throw new UserError("Zadej hodinovou sazbu.");
     amount = Math.round(inp.hours! * inp.rate * 100) / 100;
   } else if (inp.amount && inp.amount > 0) {
     amount = inp.amount;
@@ -95,7 +97,7 @@ async function logOne(user: SessionUser, taskId: string, inp: LogInput) {
   const progressOnly = amount == null;
   const infoHours = !worked && amount != null && inp.infoHours && inp.infoHours > 0 ? inp.infoHours : null;
   if (progressOnly && inp.percent == null && !inp.expectedEnd && inp.files.length === 0)
-    throw new Error(`U úkolu „${task.title}“ zadej hodiny, částku, % hotovo nebo termín.`);
+    throw new UserError(`U úkolu „${task.title}“ zadej hodiny, částku, % hotovo nebo termín.`);
 
   // Dodavatel výdaje: ten z úkolu, když jsem to já; jinak můj záznam
   // v evidenci vlastníka projektu (stejný e-mail), pokud existuje.
@@ -199,7 +201,7 @@ async function afterLog(results: { projectId: string; subProjectId: string | nul
 function filesFrom(formData: FormData) {
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const big = files.find((f) => f.size > MAX_FILE);
-  if (big) throw new Error(`Soubor „${big.name}“ je větší než 14 MB.`);
+  if (big) throw new UserError(`Soubor „${big.name}“ je větší než 14 MB.`);
   return files;
 }
 
@@ -230,7 +232,7 @@ export async function logTaskExpense(formData: FormData) {
 export async function logTasksExpenseBulk(formData: FormData) {
   const user = await requireUser();
   const ids = formData.getAll("taskIds").map(String).filter(Boolean);
-  if (ids.length === 0) throw new Error("Nevybral jsi žádný úkol.");
+  if (ids.length === 0) throw new UserError("Nevybral jsi žádný úkol.");
   const files = filesFrom(formData);
   const common = {
     rate: num(formData.get("rate")),
@@ -249,7 +251,7 @@ export async function logTasksExpenseBulk(formData: FormData) {
       await logOne(user, id, { ...common, hours, amount, infoHours, percent, expectedEnd, files }),
     );
   }
-  if (results.length === 0) throw new Error("Vyplň aspoň u jednoho úkolu hodiny, částku, % nebo termín.");
+  if (results.length === 0) throw new UserError("Vyplň aspoň u jednoho úkolu hodiny, částku, % nebo termín.");
   await afterLog(results);
   return { logged: results.length };
 }

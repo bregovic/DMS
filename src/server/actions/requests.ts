@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -18,17 +20,17 @@ export async function createRequest(formData: FormData) {
 
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění přidávat do tohoto projektu.");
+    throw new UserError("Nemáš oprávnění přidávat do tohoto projektu.");
   }
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej, co se poptává.");
+  if (!title) throw new UserError("Zadej, co se poptává.");
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
@@ -53,7 +55,7 @@ export async function createRequest(formData: FormData) {
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!subProjectId || !scope.has(subProjectId)) {
-      throw new Error("Do této složky nemáš oprávnění přidávat.");
+      throw new UserError("Do této složky nemáš oprávnění přidávat.");
     }
   }
 
@@ -97,14 +99,14 @@ export async function updateRequest(formData: FormData) {
     where: { id, projectId },
     select: { id: true, createdById: true, project: { select: { ownerId: true } } },
   });
-  if (!existing) throw new Error("Žádanka nenalezena.");
+  if (!existing) throw new UserError("Žádanka nenalezena.");
   const mayEdit =
     !!access &&
     (isManager(access.role) || (canWrite(access.role) && existing.createdById === user.id));
-  if (!mayEdit) throw new Error("Tuto žádanku nemůžeš upravit.");
+  if (!mayEdit) throw new UserError("Tuto žádanku nemůžeš upravit.");
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej, co se poptává.");
+  if (!title) throw new UserError("Zadej, co se poptává.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   if (vendorId) {
@@ -141,7 +143,7 @@ export async function setRequestStatus(formData: FormData) {
   const status = String(formData.get("status") || "new");
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Měnit stav může jen vlastník projektu.");
+    throw new UserError("Měnit stav může jen vlastník projektu.");
   }
   await prisma.request.updateMany({ where: { id, projectId }, data: { status } });
   revalidatePath(`/projects/${projectId}`);
@@ -153,12 +155,12 @@ export async function createExpenseFromRequest(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Výdaj ze žádanky může založit jen vlastník projektu.");
+    throw new UserError("Výdaj ze žádanky může založit jen vlastník projektu.");
   }
   const req = await prisma.request.findFirst({ where: { id, projectId } });
-  if (!req) throw new Error("Žádanka nenalezena.");
+  if (!req) throw new UserError("Žádanka nenalezena.");
   if (!req.vendorId || req.price == null) {
-    throw new Error("Žádanka musí mít vyplněného dodavatele a cenu.");
+    throw new UserError("Žádanka musí mít vyplněného dodavatele a cenu.");
   }
 
   await prisma.expense.create({
@@ -193,7 +195,7 @@ export async function deleteRequest(formData: FormData) {
   const projectId = String(formData.get("projectId"));
 
   if (!isManager(await getProjectRole(projectId, user))) {
-    throw new Error("Mazat může jen vlastník projektu.");
+    throw new UserError("Mazat může jen vlastník projektu.");
   }
   // Přílohy žádanky i jejích nabídek pryč i z úložiště.
   await deleteWithFiles(

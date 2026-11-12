@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createExtraction, extractable, runExtraction } from "@/server/extraction";
@@ -21,15 +23,15 @@ export async function attachIncomeDocument(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const incomeId = String(formData.get("incomeId"));
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Vyber soubor.");
-  if (file.size > MAX_UPLOAD) throw new Error("Soubor je větší než 14 MB.");
+  if (!(file instanceof File) || file.size === 0) throw new UserError("Vyber soubor.");
+  if (file.size > MAX_UPLOAD) throw new UserError("Soubor je větší než 14 MB.");
 
   const role = await getProjectRole(projectId, user);
-  if (!isManager(role)) throw new Error("Nemáš oprávnění.");
+  if (!isManager(role)) throw new UserError("Nemáš oprávnění.");
   const income = await prisma.income.findFirst({ where: { id: incomeId, projectId }, select: { id: true } });
-  if (!income) throw new Error("Příjem nenalezen.");
+  if (!income) throw new UserError("Příjem nenalezen.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   const docType = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name) ? "invoice" : "receipt";
   const key = await storage.save(Buffer.from(await file.arrayBuffer()), file.name, `${project.ownerId}/${projectId}/${docType}`);
@@ -58,15 +60,15 @@ export async function attachExpenseScan(formData: FormData) {
   const expenseId = String(formData.get("expenseId"));
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Vyber soubor.");
+    throw new UserError("Vyber soubor.");
   }
   if (file.size > MAX_UPLOAD) {
-    throw new Error("Soubor je větší než 14 MB.");
+    throw new UserError("Soubor je větší než 14 MB.");
   }
 
   const role = await getProjectRole(projectId, user);
   if (!canWrite(role)) {
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   }
 
   const expense = await prisma.expense.findFirst({
@@ -77,13 +79,13 @@ export async function attachExpenseScan(formData: FormData) {
     },
     select: { id: true },
   });
-  if (!expense) throw new Error("Položka nenalezena.");
+  if (!expense) throw new UserError("Položka nenalezena.");
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   const docType = String(formData.get("type") || "receipt");
   await assertUploadQuota(user, projectId, file.size);
@@ -117,11 +119,11 @@ export async function uploadDocument(formData: FormData) {
   const file = formData.get("file");
 
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Vyber soubor k nahrání.");
+    throw new UserError("Vyber soubor k nahrání.");
   }
 
   if (file.size > MAX_UPLOAD) {
-    throw new Error("Soubor je větší než 14 MB.");
+    throw new UserError("Soubor je větší než 14 MB.");
   }
 
   // Doklad (účtenka, faktura) nahraje i dodavatel – ten je na stavbě a má ho
@@ -131,13 +133,13 @@ export async function uploadDocument(formData: FormData) {
   const role = await getProjectRole(projectId, user);
   const isReceipt = rawType === "receipt" || rawType === "invoice";
   if (!isManager(role) && !(isReceipt && canWrite(role)))
-    throw new Error("Dokumenty projektu nahrává správce projektu.");
+    throw new UserError("Dokumenty projektu nahrává správce projektu.");
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { id: true, ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
 
   let docType = rawType;
   if (docType === "__new__") {
@@ -205,7 +207,7 @@ export async function attachRequestFiles(formData: FormData) {
   const requestId = String(formData.get("requestId"));
 
   const role = await getProjectRole(projectId, user);
-  if (!canWrite(role)) throw new Error("Nemáš oprávnění.");
+  if (!canWrite(role)) throw new UserError("Nemáš oprávnění.");
 
   const request = await prisma.request.findFirst({
     where: {
@@ -215,17 +217,17 @@ export async function attachRequestFiles(formData: FormData) {
     },
     select: { id: true, project: { select: { ownerId: true } } },
   });
-  if (!request) throw new Error("Žádanka nenalezena.");
+  if (!request) throw new UserError("Žádanka nenalezena.");
 
   const files = formData
     .getAll("files")
     .filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) throw new Error("Vyber soubor.");
+  if (files.length === 0) throw new UserError("Vyber soubor.");
   if (files.length > MAX_REQUEST_FILES) {
-    throw new Error(`Najednou jde přiložit nejvýš ${MAX_REQUEST_FILES} souborů.`);
+    throw new UserError(`Najednou jde přiložit nejvýš ${MAX_REQUEST_FILES} souborů.`);
   }
   const tooBig = files.find((f) => f.size > MAX_UPLOAD);
-  if (tooBig) throw new Error(`Soubor „${tooBig.name}" je větší než 14 MB.`);
+  if (tooBig) throw new UserError(`Soubor „${tooBig.name}" je větší než 14 MB.`);
   await assertUploadQuota(user, projectId, files.reduce((a, f) => a + f.size, 0));
 
   const [emailType, offerType] = await Promise.all([
@@ -316,8 +318,8 @@ export async function updateDocumentNote(formData: FormData) {
     where: { id: String(formData.get("id")) },
     select: { id: true, projectId: true },
   });
-  if (!doc) throw new Error("Dokument nenalezen.");
-  if (!isManager(await getProjectRole(doc.projectId, user))) throw new Error("Poznámku mění správce projektu.");
+  if (!doc) throw new UserError("Dokument nenalezen.");
+  if (!isManager(await getProjectRole(doc.projectId, user))) throw new UserError("Poznámku mění správce projektu.");
   await prisma.document.update({
     where: { id: doc.id },
     data: { note: String(formData.get("note") || "").trim().slice(0, 4000) || null },
@@ -334,13 +336,13 @@ export async function updateDocumentNote(formData: FormData) {
 export async function createTextNote(formData: FormData) {
   const user = await requireUser();
   const projectId = String(formData.get("projectId"));
-  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Poznámky přidává správce projektu.");
+  if (!isManager(await getProjectRole(projectId, user))) throw new UserError("Poznámky přidává správce projektu.");
   const title = String(formData.get("title") || "").trim().slice(0, 120) || "Poznámka";
   const text = String(formData.get("text") || "").trim();
-  if (!text) throw new Error("Napiš text poznámky.");
-  if (text.length > 50_000) throw new Error("Poznámka je příliš dlouhá.");
+  if (!text) throw new UserError("Napiš text poznámky.");
+  if (text.length > 50_000) throw new UserError("Poznámka je příliš dlouhá.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   const docType = await resolveDocTypeKey("Poznámka");
   const buffer = Buffer.from(`${title}\n\n${text}\n`, "utf8");
   const fileName = `${title.replace(/[\/:*?"<>|]+/g, "-")}.txt`;

@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -48,7 +50,7 @@ export async function addCodelistItem(formData: FormData) {
   await requireUser();
   const kind = String(formData.get("kind")) as Kind;
   const label = String(formData.get("label") || "").trim();
-  if (!label) throw new Error("Zadej název.");
+  if (!label) throw new UserError("Zadej název.");
 
   if (kind === "projectType") {
     await prisma.projectType.upsert({
@@ -86,7 +88,7 @@ export async function renameCodelistItem(formData: FormData) {
   const kind = String(formData.get("kind")) as Kind;
   const id = String(formData.get("id"));
   const label = String(formData.get("label") || "").trim();
-  if (!label) throw new Error("Zadej název.");
+  if (!label) throw new UserError("Zadej název.");
 
   if (kind === "projectType")
     await prisma.projectType.update({ where: { id }, data: { label } });
@@ -107,7 +109,7 @@ export async function deleteCodelistItem(formData: FormData) {
   const key = await getKey(kind, id);
   if (!key) return;
   if ((await usedCount(kind, key)) > 0) {
-    throw new Error("Nelze smazat – položka je používaná.");
+    throw new UserError("Nelze smazat – položka je používaná.");
   }
 
   if (kind === "projectType")

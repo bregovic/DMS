@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -10,7 +12,7 @@ import { createCostReport, runCostReport } from "@/server/cost-report";
 
 async function managerOf(projectId: string) {
   const user = await requireUser();
-  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Report připravuje správce projektu.");
+  if (!isManager(await getProjectRole(projectId, user))) throw new UserError("Report připravuje správce projektu.");
   return user;
 }
 
@@ -21,7 +23,7 @@ export async function startCostReport(formData: FormData) {
   const user = await managerOf(projectId);
   if (sub) {
     const s = await prisma.subProject.findFirst({ where: { id: sub, projectId }, select: { id: true } });
-    if (!s) throw new Error("Složka nenalezena.");
+    if (!s) throw new UserError("Složka nenalezena.");
   }
   const id = await createCostReport(projectId, sub, user.id, String(formData.get("prompt") || ""));
   after(() => runCostReport(id));
@@ -34,7 +36,7 @@ export async function rerunCostReport(formData: FormData) {
     where: { id: String(formData.get("id")) },
     select: { projectId: true, subProjectId: true, prompt: true },
   });
-  if (!r) throw new Error("Report nenalezen.");
+  if (!r) throw new UserError("Report nenalezen.");
   const user = await managerOf(r.projectId);
   const prompt = formData.has("prompt") ? String(formData.get("prompt") || "") : r.prompt;
   const id = await createCostReport(r.projectId, r.subProjectId, user.id, prompt);
@@ -48,13 +50,13 @@ const MAX_PDF = 14 * 1024 * 1024;
 export async function saveCostReportPdf(formData: FormData) {
   const id = String(formData.get("id"));
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) throw new Error("PDF se nepodařilo vytvořit.");
-  if (file.size > MAX_PDF) throw new Error("PDF je větší než 14 MB.");
+  if (!(file instanceof File) || file.size === 0) throw new UserError("PDF se nepodařilo vytvořit.");
+  if (file.size > MAX_PDF) throw new UserError("PDF je větší než 14 MB.");
   const r = await prisma.costReport.findUnique({
     where: { id },
     select: { id: true, projectId: true, subProjectId: true, documentId: true, project: { select: { ownerId: true } } },
   });
-  if (!r) throw new Error("Report nenalezen.");
+  if (!r) throw new UserError("Report nenalezen.");
   const user = await managerOf(r.projectId);
 
   const key = await storage.save(Buffer.from(await file.arrayBuffer()), file.name, `${r.project.ownerId}/${r.projectId}/other`);

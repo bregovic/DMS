@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +33,7 @@ async function loadTaskForPlan(taskId: string, user: SUser) {
     where: { id: taskId },
     select: { id: true, title: true, projectId: true, subProjectId: true, startDate: true, createdById: true },
   });
-  if (!task) throw new Error("Úkol nenalezen.");
+  if (!task) throw new UserError("Úkol nenalezen.");
   const access = await getProjectAccess(task.projectId, user);
   let ok = false;
   if (access) {
@@ -44,7 +46,7 @@ async function loadTaskForPlan(taskId: string, user: SUser) {
       }
     }
   }
-  if (!ok) throw new Error("Na tento úkol nemáš oprávnění.");
+  if (!ok) throw new UserError("Na tento úkol nemáš oprávnění.");
   return task;
 }
 
@@ -100,11 +102,11 @@ export async function setLinkedRequestStatus(formData: FormData) {
   const id = String(formData.get("requestId"));
   const status = String(formData.get("status") || "").trim();
   const req = await prisma.request.findUnique({ where: { id }, select: { projectId: true, taskId: true, vendorId: true } });
-  if (!req) throw new Error("Žádanka nenalezena.");
+  if (!req) throw new UserError("Žádanka nenalezena.");
   const access = await getProjectAccess(req.projectId, user);
   if (!isManager(access?.role)) {
     if (req.taskId) await loadTaskForPlan(req.taskId, user);
-    else throw new Error("Nemáš oprávnění.");
+    else throw new UserError("Nemáš oprávnění.");
   }
   await prisma.request.update({ where: { id }, data: { status } });
   done(req.projectId);
@@ -128,9 +130,9 @@ export async function getRequestDetail(id: string) {
       },
     },
   });
-  if (!r) throw new Error("Výběrové řízení nenalezeno.");
+  if (!r) throw new UserError("Výběrové řízení nenalezeno.");
   const access = await getProjectAccess(r.projectId, user);
-  if (!access) throw new Error("Nemáš přístup.");
+  if (!access) throw new UserError("Nemáš přístup.");
   return {
     id: r.id,
     title: r.title,
@@ -157,10 +159,10 @@ export async function updateRequestDates(formData: FormData) {
   const user = await requireUser();
   const id = String(formData.get("id"));
   const r = await prisma.request.findUnique({ where: { id }, select: { projectId: true } });
-  if (!r) throw new Error("Výběrové řízení nenalezeno.");
+  if (!r) throw new UserError("Výběrové řízení nenalezeno.");
   const access = await getProjectAccess(r.projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění.");
+    throw new UserError("Nemáš oprávnění.");
   }
   const status = String(formData.get("status") || "").trim();
   await prisma.request.update({

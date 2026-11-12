@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { getProjectRole, isManager } from "@/server/access";
 
@@ -53,17 +54,17 @@ export async function assertUploadQuota(
     where: { id: projectId },
     select: { ownerId: true },
   });
-  if (!project) throw new Error("Projekt nenalezen.");
+  if (!project) throw new UserError("Projekt nenalezen.");
   if (project.ownerId === user.id) return;
   if (isManager(await getProjectRole(projectId, user))) return;
 
   const used = await uploadQuotaUsage(user.id);
   if (used.docs >= UPLOAD_QUOTA.docsPerDay)
-    throw new Error(
+    throw new UserError(
       `Dnešní limit nahrávání je vyčerpaný (${UPLOAD_QUOTA.docsPerDay} souborů). Zkus to zítra, nebo pošli doklad majiteli projektu.`,
     );
   if (used.bytes + bytes > UPLOAD_QUOTA.bytesPerDay)
-    throw new Error(
+    throw new UserError(
       `Dnešní limit nahrávání je vyčerpaný (${Math.round(UPLOAD_QUOTA.bytesPerDay / MB)} MB). Zkus to zítra, nebo pošli doklad majiteli projektu.`,
     );
 }

@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 
@@ -24,7 +26,7 @@ async function canManageVendor(vendorId: string) {
     },
     select: { id: true },
   });
-  if (!v) throw new Error("Na tohoto dodavatele nemáš oprávnění.");
+  if (!v) throw new UserError("Na tohoto dodavatele nemáš oprávnění.");
   return v;
 }
 
@@ -35,13 +37,13 @@ export async function fillAvailability(formData: FormData) {
 
   const from = utcDate(String(formData.get("from") || ""));
   const to = utcDate(String(formData.get("to") || ""));
-  if (!from || !to || to < from) throw new Error("Zadej platné rozmezí dat.");
+  if (!from || !to || to < from) throw new UserError("Zadej platné rozmezí dat.");
 
   const available = String(formData.get("available")) === "1";
   const wd = new Set(
     formData.getAll("wd").map((v) => Number(v)).filter((n) => n >= 0 && n <= 6),
   );
-  if (wd.size === 0) throw new Error("Vyber alespoň jeden den v týdnu.");
+  if (wd.size === 0) throw new UserError("Vyber alespoň jeden den v týdnu.");
 
   const maxDays = 800;
   let count = 0;
@@ -68,7 +70,7 @@ export async function clearAvailability(formData: FormData) {
   await canManageVendor(vendorId);
   const from = utcDate(String(formData.get("from") || ""));
   const to = utcDate(String(formData.get("to") || ""));
-  if (!from || !to || to < from) throw new Error("Zadej platné rozmezí dat.");
+  if (!from || !to || to < from) throw new UserError("Zadej platné rozmezí dat.");
   const res = await prisma.vendorAvailability.deleteMany({
     where: { vendorId, date: { gte: from, lte: to } },
   });

@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -17,13 +19,13 @@ export async function setMemberRole(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const email = normEmail(String(formData.get("email") || ""));
   const role = String(formData.get("role") || "none");
-  if (!email || !email.includes("@")) throw new Error("Zadej platný e-mail.");
+  if (!email || !email.includes("@")) throw new UserError("Zadej platný e-mail.");
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, ownerId: user.id },
     select: { id: true },
   });
-  if (!project) throw new Error("Nemáš oprávnění.");
+  if (!project) throw new UserError("Nemáš oprávnění.");
 
   // propojení s dodavatelem (pokud takový e-mail v evidenci je) – jen informativní
   const vendor = await prisma.vendor.findFirst({
@@ -49,13 +51,13 @@ export async function setSubMemberRole(formData: FormData) {
   const subProjectId = String(formData.get("subProjectId"));
   const email = normEmail(String(formData.get("email") || ""));
   const role = String(formData.get("role") || "none");
-  if (!email || !email.includes("@")) throw new Error("Zadej platný e-mail.");
+  if (!email || !email.includes("@")) throw new UserError("Zadej platný e-mail.");
 
   const sub = await prisma.subProject.findUnique({
     where: { id: subProjectId },
     select: { id: true, projectId: true, project: { select: { ownerId: true } } },
   });
-  if (!sub || sub.project.ownerId !== user.id) throw new Error("Nemáš oprávnění.");
+  if (!sub || sub.project.ownerId !== user.id) throw new UserError("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
@@ -89,15 +91,15 @@ export async function setVendorRole(formData: FormData) {
     where: { id: projectId, ownerId: user.id },
     select: { id: true },
   });
-  if (!project) throw new Error("Nemáš oprávnění.");
+  if (!project) throw new UserError("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
     where: { id: vendorId },
     select: { email: true },
   });
-  if (!vendor) throw new Error("Dodavatel nenalezen.");
+  if (!vendor) throw new UserError("Dodavatel nenalezen.");
   // Přístup se páruje podle e-mailu – přihlašuje se jím. Bez něj to nejde.
-  if (!vendor.email) throw new Error("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
+  if (!vendor.email) throw new UserError("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
   const email = vendor.email.toLowerCase();
 
   if (role === "vendor") {
@@ -127,15 +129,15 @@ export async function setVendorSubRole(formData: FormData) {
     where: { id: subProjectId },
     select: { id: true, projectId: true, project: { select: { ownerId: true } } },
   });
-  if (!sub || sub.project.ownerId !== user.id) throw new Error("Nemáš oprávnění.");
+  if (!sub || sub.project.ownerId !== user.id) throw new UserError("Nemáš oprávnění.");
 
   const vendor = await prisma.vendor.findFirst({
     where: { id: vendorId },
     select: { email: true },
   });
-  if (!vendor) throw new Error("Dodavatel nenalezen.");
+  if (!vendor) throw new UserError("Dodavatel nenalezen.");
   // Přístup se páruje podle e-mailu – přihlašuje se jím. Bez něj to nejde.
-  if (!vendor.email) throw new Error("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
+  if (!vendor.email) throw new UserError("Dodavatel nemá e-mail – doplň ho v evidenci, přístup se páruje podle něj.");
   const email = vendor.email.toLowerCase();
 
   if (role === "vendor") {
@@ -158,7 +160,7 @@ export async function setMemberScan(formData: FormData) {
   const email = normEmail(String(formData.get("email") || ""));
   const allow = String(formData.get("allow")) === "1";
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId: user.id }, select: { id: true } });
-  if (!project) throw new Error("Nemáš oprávnění.");
+  if (!project) throw new UserError("Nemáš oprávnění.");
   await prisma.projectMembership.updateMany({ where: { projectId, email }, data: { canScan: allow } });
   revalidatePath(`/projects/${projectId}`);
 }

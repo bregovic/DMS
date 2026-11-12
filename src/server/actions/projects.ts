@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -30,14 +32,14 @@ export async function createProject(formData: FormData) {
     description: formData.get("description") || undefined,
   });
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Neplatné údaje.");
+    throw new UserError(parsed.error.issues[0]?.message ?? "Neplatné údaje.");
   }
 
   // Typ: existující klíč, nebo nově zadaný vlastní typ (přidá se do číselníku)
   let type = String(formData.get("type") || "other");
   if (type === "__new__") {
     const label = String(formData.get("newType") || "").trim();
-    if (!label) throw new Error("Zadej název nového typu.");
+    if (!label) throw new UserError("Zadej název nového typu.");
     const key = slugifyType(label);
     await prisma.projectType.upsert({
       where: { key },
@@ -69,16 +71,16 @@ export async function updateProject(formData: FormData) {
     where: { id, ownerId: user.id },
     select: { id: true, startDate: true },
   });
-  if (!project) throw new Error("Nemáš oprávnění.");
+  if (!project) throw new UserError("Nemáš oprávnění.");
 
   const name = String(formData.get("name") || "").trim();
-  if (!name) throw new Error("Zadej název projektu.");
+  if (!name) throw new UserError("Zadej název projektu.");
 
   // Typ: existující klíč, nebo nově zadaný vlastní typ
   let type = String(formData.get("type") || "other");
   if (type === "__new__") {
     const label = String(formData.get("newType") || "").trim();
-    if (!label) throw new Error("Zadej název nového typu.");
+    if (!label) throw new UserError("Zadej název nového typu.");
     const key = slugifyType(label);
     await prisma.projectType.upsert({
       where: { key },
@@ -145,7 +147,7 @@ export async function addVendorToProject(formData: FormData) {
       select: { id: true },
     }),
   ]);
-  if (!project || !vendor) throw new Error("Nenalezeno.");
+  if (!project || !vendor) throw new UserError("Nenalezeno.");
 
   await prisma.project.update({
     where: { id: projectId },
@@ -163,7 +165,7 @@ export async function removeVendorFromProject(formData: FormData) {
     where: { id: projectId, ownerId: user.id },
     select: { id: true },
   });
-  if (!project) throw new Error("Nenalezeno.");
+  if (!project) throw new UserError("Nenalezeno.");
 
   await prisma.project.update({
     where: { id: projectId },

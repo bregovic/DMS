@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -58,11 +60,11 @@ export async function createTask(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění přidávat úkoly.");
+    throw new UserError("Nemáš oprávnění přidávat úkoly.");
   }
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název úkolu.");
+  if (!title) throw new UserError("Zadej název úkolu.");
 
   let subProjectId = String(formData.get("subProjectId") || "") || null;
   if (subProjectId) {
@@ -95,7 +97,7 @@ export async function createTask(formData: FormData) {
   if (access.scopeSubIds) {
     const scope = await expandScope(projectId, access.scopeSubIds);
     if (!subProjectId || !scope.has(subProjectId)) {
-      throw new Error("Do této složky nemáš oprávnění přidávat.");
+      throw new UserError("Do této složky nemáš oprávnění přidávat.");
     }
   }
 
@@ -165,7 +167,7 @@ async function taskCtx(id: string) {
       vendor: { select: { email: true } },
     },
   });
-  if (!task) throw new Error("Úkol nenalezen.");
+  if (!task) throw new UserError("Úkol nenalezen.");
   const access = await getProjectAccess(task.projectId, user);
   // spolusprávce (owner|member) smí editovat/mazat veškeré úkoly
   const isOwner = isManager(access?.role);
@@ -183,10 +185,10 @@ async function taskCtx(id: string) {
 export async function updateTask(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, task, isOwner, isCreator } = await taskCtx(id);
-  if (!isOwner && !isCreator) throw new Error("Tento úkol nemůžeš upravit.");
+  if (!isOwner && !isCreator) throw new UserError("Tento úkol nemůžeš upravit.");
 
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Zadej název úkolu.");
+  if (!title) throw new UserError("Zadej název úkolu.");
 
   // Vazba na fázi lze měnit jen u běžného úkolu (ne u fáze)
   let parentUpdate: { parentId?: string | null; subProjectId?: string | null } = {
@@ -420,7 +422,7 @@ export async function recomputeSchedule(formData: FormData) {
   const subProjectId = String(formData.get("subProjectId") || "") || null;
   const access = await getProjectAccess(projectId, user);
   if (!access || !canWrite(access.role)) {
-    throw new Error("Nemáš oprávnění plánovat.");
+    throw new UserError("Nemáš oprávnění plánovat.");
   }
   await scheduleProject(projectId, subProjectId);
   revalidatePath(`/projects/${projectId}`);
@@ -444,9 +446,9 @@ export async function getTaskDetail(id: string) {
       project: { select: { ownerId: true } },
     },
   });
-  if (!task) throw new Error("Prvek nenalezen.");
+  if (!task) throw new UserError("Prvek nenalezen.");
   const access = await getProjectAccess(task.projectId, user);
-  if (!access) throw new Error("Nemáš přístup.");
+  if (!access) throw new UserError("Nemáš přístup.");
   const canEdit = await canPlan(
     { projectId: task.projectId, createdById: task.createdById, subProjectId: task.subProjectId },
     user
@@ -671,7 +673,7 @@ export async function getTaskDetail(id: string) {
 export async function updateTaskPlan(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, task } = await taskCtx(id);
-  if (!(await canPlan(task, user))) throw new Error("Tento prvek nemůžeš upravit.");
+  if (!(await canPlan(task, user))) throw new UserError("Tento prvek nemůžeš upravit.");
 
   let vendorId = String(formData.get("vendorId") || "") || null;
   // „svépomocí" = bez dodavatele, ale vědomě (stav připravenosti ho nehlásí jako chybějícího)
@@ -811,11 +813,11 @@ export async function scheduleTaskByAvailability(formData: FormData) {
       dependsOn: { select: { dependsOn: { select: { dueDate: true } } } },
     },
   });
-  if (!task) throw new Error("Úkol nenalezen.");
-  if (!(await canPlan(task, user))) throw new Error("Tento úkol nemůžeš plánovat.");
-  if (!task.vendorId) throw new Error("Úkol nemá přiřazeného dodavatele.");
+  if (!task) throw new UserError("Úkol nenalezen.");
+  if (!(await canPlan(task, user))) throw new UserError("Tento úkol nemůžeš plánovat.");
+  if (!task.vendorId) throw new UserError("Úkol nemá přiřazeného dodavatele.");
   const need = task.estimateDays ?? 0;
-  if (need <= 0) throw new Error("Úkol nemá zadaný odhad dní.");
+  if (need <= 0) throw new UserError("Úkol nemá zadaný odhad dní.");
 
   // nejdřívější možný začátek: dnes, případně po termínu předchůdců
   const now = new Date();
@@ -830,7 +832,7 @@ export async function scheduleTaskByAvailability(formData: FormData) {
 
   const s = await availabilityDates(task.vendorId, earliest, need);
   if (!s) {
-    throw new Error(
+    throw new UserError(
       "Dodavatel nemá v kalendáři žádné dostupné dny od plánovaného začátku. Doplň mu dostupnost.",
     );
   }
@@ -857,7 +859,7 @@ export async function setTaskStatus(formData: FormData) {
   const status = String(formData.get("status") || "todo").trim() || "todo";
   const { task, isOwner, isCreator, isAssignee } = await taskCtx(id);
   if (!isOwner && !isCreator && !isAssignee) {
-    throw new Error("Stav tohoto úkolu nemůžeš měnit.");
+    throw new UserError("Stav tohoto úkolu nemůžeš měnit.");
   }
   await prisma.task.update({
     where: { id: task.id },
@@ -881,7 +883,7 @@ export async function updateTodo(formData: FormData) {
   const id = String(formData.get("id"));
   const { user, task, isOwner, isCreator, isAssignee } = await taskCtx(id);
   if (!isOwner && !isCreator && !isAssignee) {
-    throw new Error("Tento úkol nemůžeš upravit.");
+    throw new UserError("Tento úkol nemůžeš upravit.");
   }
 
   const data: {
@@ -898,7 +900,7 @@ export async function updateTodo(formData: FormData) {
   if (formData.has("priority")) data.priority = toPriority(formData.get("priority"));
   if (formData.has("title")) {
     const title = String(formData.get("title") || "").trim();
-    if (!title) throw new Error("Zadej název úkolu.");
+    if (!title) throw new UserError("Zadej název úkolu.");
     data.title = title;
   }
   // Přidělit dodavatele smí jen ten, kdo úkol spravuje - ne sám dodavatel.
@@ -923,7 +925,7 @@ export async function updateTodo(formData: FormData) {
 export async function deleteTask(formData: FormData) {
   const id = String(formData.get("id"));
   const { task, isOwner, isCreator } = await taskCtx(id);
-  if (!isOwner && !isCreator) throw new Error("Tento úkol nemůžeš smazat.");
+  if (!isOwner && !isCreator) throw new UserError("Tento úkol nemůžeš smazat.");
   await prisma.task.delete({ where: { id: task.id } });
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/planning");
@@ -943,8 +945,8 @@ export async function bulkUpdateTasks(formData: FormData) {
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   const status = String(formData.get("status") || "").trim();
   const vendorRaw = String(formData.get("vendorId") || "").trim();
-  if (ids.length === 0) throw new Error("Nevybral jsi žádný úkol.");
-  if (!status && !vendorRaw) throw new Error("Vyber stav nebo dodavatele.");
+  if (ids.length === 0) throw new UserError("Nevybral jsi žádný úkol.");
+  if (!status && !vendorRaw) throw new UserError("Vyber stav nebo dodavatele.");
 
   const tasks = await prisma.task.findMany({
     where: { id: { in: ids }, ...(projectId ? { projectId } : {}) },
@@ -977,7 +979,7 @@ export async function bulkUpdateTasks(formData: FormData) {
   else if (vendorRaw === "__self") vendorFor = () => ({ vendorId: null, selfPerformed: true });
   else if (vendorRaw) {
     const v = await prisma.vendor.findUnique({ where: { id: vendorRaw }, select: { id: true, ownerId: true } });
-    if (!v) throw new Error("Dodavatel nenalezen.");
+    if (!v) throw new UserError("Dodavatel nenalezen.");
     // dodavatel musí být z evidence vlastníka projektu
     vendorFor = (ownerId) => (ownerId === v.ownerId ? { vendorId: v.id, selfPerformed: false } : null);
   }
@@ -1022,12 +1024,12 @@ export async function moveTaskDates(formData: FormData) {
   const mode = formData.get("mode") === "resize" ? "resize" : "move";
   if (!days) return;
   const { user, task } = await taskCtx(id);
-  if (!(await canPlan(task, user))) throw new Error("Tento prvek nemůžeš přeplánovat.");
+  if (!(await canPlan(task, user))) throw new UserError("Tento prvek nemůžeš přeplánovat.");
   const t = await prisma.task.findUnique({
     where: { id: task.id },
     select: { startDate: true, dueDate: true, kind: true, _count: { select: { children: true } } },
   });
-  if (!t?.startDate && !t?.dueDate) throw new Error("Prvek nemá termín.");
+  if (!t?.startDate && !t?.dueDate) throw new UserError("Prvek nemá termín.");
   const DAY = 86400000;
   const s0 = (t.startDate ?? t.dueDate)!.getTime();
   const e0 = (t.dueDate ?? t.startDate)!.getTime();
@@ -1038,7 +1040,7 @@ export async function moveTaskDates(formData: FormData) {
       data: { startDate: new Date(s0 + days * DAY), dueDate: new Date(e0 + days * DAY), dateLocked: true },
     });
   } else {
-    if (t.kind === "phase" && t._count.children > 0) throw new Error("Délka fáze se řídí jejími úkoly.");
+    if (t.kind === "phase" && t._count.children > 0) throw new UserError("Délka fáze se řídí jejími úkoly.");
     const e = Math.max(s0, e0 + days * DAY);
     await prisma.task.update({
       where: { id: task.id },

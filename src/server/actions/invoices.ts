@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -41,7 +43,7 @@ export async function createInvoices(formData: FormData): Promise<{ ids: string[
 async function createInvoicesInner(formData: FormData) {
   const user = await requireUser();
   const ids = formData.getAll("expenseIds").map(String).filter(Boolean);
-  if (!ids.length) throw new Error("Vyber výkazy k fakturaci.");
+  if (!ids.length) throw new UserError("Vyber výkazy k fakturaci.");
   const note = String(formData.get("note") || "").trim().slice(0, 500) || null;
   // faktura, nebo žádost o úhradu (kdo nemá živnost / IČO)
   const kind = formData.get("kind") === "request" ? "request" : "invoice";
@@ -60,15 +62,15 @@ async function createInvoicesInner(formData: FormData) {
     },
   });
   if (!me?.billingName || !me.billingAccount)
-    throw new Error("Nejdřív doplň fakturační údaje v Nastavení (jméno/firma a číslo účtu).");
-  if (!resolveIban(me.billingAccount)) throw new Error("Číslo účtu v Nastavení nejde převést na IBAN – zkontroluj ho.");
+    throw new UserError("Nejdřív doplň fakturační údaje v Nastavení (jméno/firma a číslo účtu).");
+  if (!resolveIban(me.billingAccount)) throw new UserError("Číslo účtu v Nastavení nejde převést na IBAN – zkontroluj ho.");
 
   const exps = await prisma.expense.findMany({
     where: { id: { in: ids }, createdById: user.id, invoiceId: null },
     select: { id: true, projectId: true, amount: true, currency: true, stage: true },
   });
   const usable = exps.filter((e) => !isExpensePaid(e.stage) && Number(e.amount) > 0);
-  if (!usable.length) throw new Error("Vybrané výkazy už jsou fakturované nebo zaplacené.");
+  if (!usable.length) throw new UserError("Vybrané výkazy už jsou fakturované nebo zaplacené.");
 
   const supplier: InvoiceParty = {
     name: me.billingName,
@@ -87,7 +89,7 @@ async function createInvoicesInner(formData: FormData) {
   const created: string[] = [];
   for (const [projectId, list] of byProject) {
     const currencies = new Set(list.map((e) => e.currency));
-    if (currencies.size > 1) throw new Error("Výkazy jednoho projektu mají různé měny – fakturuj je zvlášť.");
+    if (currencies.size > 1) throw new UserError("Výkazy jednoho projektu mají různé měny – fakturuj je zvlášť.");
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
@@ -153,7 +155,7 @@ async function invoiceCtx(id: string) {
     where: { id },
     select: { id: true, number: true, kind: true, projectId: true, issuerId: true, recipientId: true, status: true, amount: true, currency: true },
   });
-  if (!inv) throw new Error("Faktura nenalezena.");
+  if (!inv) throw new UserError("Faktura nenalezena.");
   const manager = inv.recipientId === user.id || isManager(await getProjectRole(inv.projectId, user));
   return { user, inv, manager, issuer: inv.issuerId === user.id };
 }
@@ -161,8 +163,8 @@ async function invoiceCtx(id: string) {
 /** Vlastník: faktura zaplacena → výkazy uhrazené, oznámení dodavateli. */
 export async function markInvoicePaid(formData: FormData) {
   const { user, inv, manager } = await invoiceCtx(String(formData.get("id")));
-  if (!manager) throw new Error("Úhradu potvrzuje vlastník projektu.");
-  if (inv.status !== "requested") throw new Error("Faktura už není k úhradě.");
+  if (!manager) throw new UserError("Úhradu potvrzuje vlastník projektu.");
+  if (inv.status !== "requested") throw new UserError("Faktura už není k úhradě.");
   await prisma.$transaction([
     prisma.invoice.update({ where: { id: inv.id }, data: { status: "paid", paidAt: new Date() } }),
     prisma.expense.updateMany({ where: { invoiceId: inv.id }, data: { stage: EXPENSE_PAID_STAGE } }),
@@ -184,8 +186,8 @@ export async function markInvoicePaid(formData: FormData) {
 /** Dodavatel: stornovat nezaplacenou fakturu – výkazy se uvolní k nové fakturaci. */
 export async function cancelInvoice(formData: FormData) {
   const { inv, issuer } = await invoiceCtx(String(formData.get("id")));
-  if (!issuer) throw new Error("Stornovat může jen vystavitel.");
-  if (inv.status !== "requested") throw new Error("Zaplacenou fakturu nejde stornovat.");
+  if (!issuer) throw new UserError("Stornovat může jen vystavitel.");
+  if (inv.status !== "requested") throw new UserError("Zaplacenou fakturu nejde stornovat.");
   await prisma.$transaction([
     prisma.invoice.update({ where: { id: inv.id }, data: { status: "cancelled" } }),
     prisma.expense.updateMany({ where: { invoiceId: inv.id }, data: { invoiceId: null } }),

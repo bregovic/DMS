@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import type { Prisma } from "@/generated/prisma/client";
@@ -277,11 +278,11 @@ export async function prepareOfferItems(bundleOfferId: string) {
       documents: { select: { originalName: true, mimeType: true } },
     },
   });
-  if (!o) throw new Error("Nabídka nenalezena.");
+  if (!o) throw new UserError("Nabídka nenalezena.");
   if (!o.documents.some((d) => extractable(d.mimeType, d.originalName)))
-    throw new Error("Nabídka nemá přílohu, kterou jde přečíst.");
+    throw new UserError("Nabídka nemá přílohu, kterou jde přečíst.");
   const stale = o.itemsAt && Date.now() - o.itemsAt.getTime() > STALE_MS;
-  if (o.itemsStatus === "running" && !stale) throw new Error("Rozpis už běží.");
+  if (o.itemsStatus === "running" && !stale) throw new UserError("Rozpis už běží.");
   await assertBudget(await aiAccountForProject(o.bundle.projectId));
   await prisma.bundleOffer.update({
     where: { id: o.id },
@@ -326,7 +327,7 @@ export async function runOfferItems(bundleOfferId: string) {
       parts.push(await filePart(await storage.read(d.fileName), d.originalName, d.mimeType));
       if (d.note) notes.push(`${d.originalName}: ${d.note}`);
     }
-    if (!parts.length) throw new Error("Nabídka nemá přílohu, kterou jde přečíst.");
+    if (!parts.length) throw new UserError("Nabídka nemá přílohu, kterou jde přečíst.");
 
     const reqList = requests.map((r) => ({
       requestId: r.id,
@@ -533,15 +534,15 @@ export async function runOfferItems(bundleOfferId: string) {
 
 export async function createItemReview(requestId: string, userId: string, prompt?: string | null) {
   const rq = await prisma.request.findUnique({ where: { id: requestId }, select: { projectId: true } });
-  if (!rq) throw new Error("Žádanka nenalezena.");
+  if (!rq) throw new UserError("Žádanka nenalezena.");
   const count = await prisma.offerItem.count({ where: { requestId } });
-  if (!count) throw new Error("K žádance zatím nejsou rozepsané položky.");
+  if (!count) throw new UserError("K žádance zatím nejsou rozepsané položky.");
   await assertBudget(await aiAccountForProject(rq.projectId));
   const busy = await prisma.itemReview.findFirst({
     where: { requestId, status: "running", createdAt: { gte: new Date(Date.now() - STALE_MS) } },
     select: { id: true },
   });
-  if (busy) throw new Error("Rozbor už běží.");
+  if (busy) throw new UserError("Rozbor už běží.");
   const r = await prisma.itemReview.create({
     data: { requestId, prompt: prompt?.trim() || null, model: AI_MODEL, createdById: userId },
     select: { id: true },
@@ -587,7 +588,7 @@ export async function runItemReview(reviewId: string) {
     // Známkují se hlavní prvky; příslušenství jde k firmě jako kontext.
     const accessories = items.filter((i) => i.kind !== "product");
     items.splice(0, items.length, ...items.filter((i) => i.kind === "product"));
-    if (!items.length) throw new Error("K žádance nejsou rozepsané žádné hlavní prvky.");
+    if (!items.length) throw new UserError("K žádance nejsou rozepsané žádné hlavní prvky.");
     // Co je u firmy v ceně navíc (montáž, doprava) – kvůli férovému srovnání.
     const offerIds = [...new Set(items.map((i) => i.bundleOfferId))];
     const shared = await prisma.offerItem.findMany({

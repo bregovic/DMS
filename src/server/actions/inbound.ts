@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -39,8 +41,8 @@ async function mailCtx(mailId: string) {
       },
     },
   });
-  if (!mail) throw new Error("Zpráva nenalezena.");
-  if (mail.ownerId !== user.id) throw new Error("Tahle pošta ti nepatří.");
+  if (!mail) throw new UserError("Zpráva nenalezena.");
+  if (mail.ownerId !== user.id) throw new UserError("Tahle pošta ti nepatří.");
   return { user, mail };
 }
 
@@ -59,10 +61,10 @@ export async function runMailbox() {
 
 export async function fileMail(formData: FormData) {
   const { user, mail } = await mailCtx(String(formData.get("mailId")));
-  if (mail.status === "zarazena") throw new Error("Tahle zpráva už je zařazená.");
+  if (mail.status === "zarazena") throw new UserError("Tahle zpráva už je zařazená.");
 
   const projectId = String(formData.get("projectId") || "");
-  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Do tohoto projektu nemáš přístup.");
+  if (!isManager(await getProjectRole(projectId, user))) throw new UserError("Do tohoto projektu nemáš přístup.");
 
   const res = await fileInbound({
     mailId: mail.id,
@@ -116,7 +118,7 @@ export async function resuggestMail(formData: FormData) {
       attachments: { select: { id: true, fileName: true, originalName: true, mimeType: true, size: true } },
     },
   });
-  if (!row) throw new Error("Zpráva nenalezena.");
+  if (!row) throw new UserError("Zpráva nenalezena.");
 
   const suggestion = await suggestRouting(
     {
@@ -139,7 +141,7 @@ export async function resuggestMail(formData: FormData) {
     row.ownerId,
     { projectId: row.projectId, subProjectId: row.subProjectId },
   );
-  if (!suggestion) throw new Error("Návrh se nepodařilo spočítat – zkus to za chvíli.");
+  if (!suggestion) throw new UserError("Návrh se nepodařilo spočítat – zkus to za chvíli.");
 
   await prisma.inboundMail.update({
     where: { id: row.id },
@@ -209,7 +211,7 @@ export async function projectOptions(projectId: string) {
 export async function saveNotifySettings(formData: FormData) {
   const user = await requireUser();
   const email = String(formData.get("notifyEmail") || "").trim().toLowerCase();
-  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Zadej platný e-mail.");
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new UserError("Zadej platný e-mail.");
   await prisma.user.update({
     where: { id: user.id },
     data: { notifyByEmail: formData.get("notifyByEmail") === "1", notifyEmail: email || null },

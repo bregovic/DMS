@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -12,8 +14,8 @@ import { createItemReview, prepareOfferItems, runItemReview, runOfferItems } fro
 async function managerOfBundle(bundleId: string) {
   const user = await requireUser();
   const b = await prisma.requestBundle.findUnique({ where: { id: bundleId }, select: { id: true, projectId: true } });
-  if (!b) throw new Error("Balíček nenalezen.");
-  if (!isManager(await getProjectRole(b.projectId, user))) throw new Error("Rozpis spouští správce projektu.");
+  if (!b) throw new UserError("Balíček nenalezen.");
+  if (!isManager(await getProjectRole(b.projectId, user))) throw new UserError("Rozpis spouští správce projektu.");
   return { user, bundle: b };
 }
 
@@ -23,7 +25,7 @@ export async function startOfferItems(formData: FormData) {
     where: { id: String(formData.get("id")) },
     select: { id: true, bundleId: true },
   });
-  if (!o) throw new Error("Nabídka nenalezena.");
+  if (!o) throw new UserError("Nabídka nenalezena.");
   const { bundle } = await managerOfBundle(o.bundleId);
   await prepareOfferItems(o.id);
   after(() => runOfferItems(o.id));
@@ -54,7 +56,7 @@ export async function startBundleItems(formData: FormData) {
       firstError ??= e instanceof Error ? e.message : "Rozpis nejde spustit.";
     }
   }
-  if (!ids.length) throw new Error(firstError ?? "Všechny nabídky jsou rozepsané a součty sedí.");
+  if (!ids.length) throw new UserError(firstError ?? "Všechny nabídky jsou rozepsané a součty sedí.");
   after(async () => {
     for (const id of ids) await runOfferItems(id);
   });
@@ -68,8 +70,8 @@ export async function startItemReview(formData: FormData) {
     where: { id: String(formData.get("requestId")) },
     select: { id: true, projectId: true },
   });
-  if (!rq) throw new Error("Žádanka nenalezena.");
-  if (!isManager(await getProjectRole(rq.projectId, user))) throw new Error("Rozbor spouští správce projektu.");
+  if (!rq) throw new UserError("Žádanka nenalezena.");
+  if (!isManager(await getProjectRole(rq.projectId, user))) throw new UserError("Rozbor spouští správce projektu.");
   const id = await createItemReview(rq.id, user.id, String(formData.get("prompt") || ""));
   after(() => runItemReview(id));
   revalidatePath(`/projects/${rq.projectId}`);

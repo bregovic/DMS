@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -55,10 +57,10 @@ export async function updateBilling(formData: FormData) {
      odešlo s neplatným úřadem. */
   const ufo = t("taxOfficeCode");
   if (ufo && !/^\d{1,4}$/.test(ufo))
-    throw new Error("Kód finančního úřadu je číslo z číselníku (např. 451 pro Prahu).");
+    throw new UserError("Kód finančního úřadu je číslo z číselníku (např. 451 pro Prahu).");
   const ufoBranch = t("taxOfficeBranch");
   if (ufoBranch && !/^\d{1,5}$/.test(ufoBranch))
-    throw new Error("Územní pracoviště je číslo z číselníku (např. 2009).");
+    throw new UserError("Územní pracoviště je číslo z číselníku (např. 2009).");
   await prisma.user.update({
     where: { id: user.id },
     data: {
@@ -117,8 +119,8 @@ export async function updateAiKey(formData: FormData) {
   if (formData.get("clear") === "1") {
     await prisma.user.update({ where: { id: user.id }, data: { openaiApiKey: null } });
   } else {
-    if (!key) throw new Error("Zadej klíč.");
-    if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) throw new Error("Tohle nevypadá na klíč k OpenAI (začíná „sk-“).");
+    if (!key) throw new UserError("Zadej klíč.");
+    if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) throw new UserError("Tohle nevypadá na klíč k OpenAI (začíná „sk-“).");
     await prisma.user.update({ where: { id: user.id }, data: { openaiApiKey: encryptSecret(key) } });
   }
   revalidatePath("/settings/technicke");

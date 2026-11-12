@@ -1,5 +1,7 @@
 "use server";
 
+
+import { UserError } from "@/lib/user-error";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
@@ -21,7 +23,7 @@ import { recomputeSchedule } from "@/server/actions/tasks";
 
 async function managerOf(projectId: string) {
   const user = await requireUser();
-  if (!isManager(await getProjectRole(projectId, user))) throw new Error("Plán z dokumentace připravuje správce projektu.");
+  if (!isManager(await getProjectRole(projectId, user))) throw new UserError("Plán z dokumentace připravuje správce projektu.");
   return user;
 }
 
@@ -51,7 +53,7 @@ export async function getPlanDraft(id: string) {
     where: { id },
     select: { id: true, projectId: true, status: true, result: true, prompt: true, costUsd: true, createdAt: true, documentIds: true, replaceExisting: true },
   });
-  if (!d) throw new Error("Návrh nenalezen.");
+  if (!d) throw new UserError("Návrh nenalezen.");
   await managerOf(d.projectId);
   return { ...d, result: d.result as unknown as PlanResult | null, createdAt: d.createdAt.toISOString() };
 }
@@ -66,12 +68,12 @@ export async function applyPlanDraft(formData: FormData) {
     where: { id },
     select: { id: true, projectId: true, status: true, result: true, replaceExisting: true },
   });
-  if (!d?.result) throw new Error("Návrh nenalezen.");
-  if (d.status === "applied") throw new Error("Návrh už je v plánu.");
+  if (!d?.result) throw new UserError("Návrh nenalezen.");
+  if (d.status === "applied") throw new UserError("Návrh už je v plánu.");
   const user = await managerOf(d.projectId);
   const plan = d.result as unknown as PlanResult;
   const chosen = plan.phases.map((ph, i) => ({ ph, i })).filter(({ i }) => formData.get(`phase_${i}`) === "1");
-  if (chosen.length === 0) throw new Error("Vyber aspoň jednu fázi.");
+  if (chosen.length === 0) throw new UserError("Vyber aspoň jednu fázi.");
 
   // Nahradit dřívější návrh: smazat jeho nezačaté úkoly (a prázdné fáze).
   if (d.replaceExisting) {
@@ -193,7 +195,7 @@ export async function createRequestsFromPlan(formData: FormData) {
     select: { id: true, title: true, procurement: true, subProjectId: true, startDate: true },
     orderBy: { startDate: "asc" },
   });
-  if (tasks.length === 0) throw new Error("V plánu není nic k poptání (nebo už žádanky existují).");
+  if (tasks.length === 0) throw new UserError("V plánu není nic k poptání (nebo už žádanky existují).");
   await prisma.request.createMany({
     data: tasks.map((t) => ({
       projectId,
@@ -237,7 +239,7 @@ export async function getCostDraft(id: string) {
     where: { id },
     select: { id: true, projectId: true, kind: true, status: true, result: true, replaceExisting: true },
   });
-  if (!d || d.kind !== "costs") throw new Error("Návrh nenalezen.");
+  if (!d || d.kind !== "costs") throw new UserError("Návrh nenalezen.");
   await managerOf(d.projectId);
   const result = d.result as unknown as CostEstimateResult | null;
   const tasks = await prisma.task.findMany({
@@ -268,7 +270,7 @@ export async function applyCostDraft(formData: FormData) {
     where: { id },
     select: { id: true, projectId: true, kind: true, result: true, replaceExisting: true },
   });
-  if (!d?.result || d.kind !== "costs") throw new Error("Návrh nenalezen.");
+  if (!d?.result || d.kind !== "costs") throw new UserError("Návrh nenalezen.");
   await managerOf(d.projectId);
   const items = (d.result as unknown as CostEstimateResult).items;
   const updates: { id: string; v: number }[] = [];

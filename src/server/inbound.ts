@@ -1,3 +1,4 @@
+import { UserError } from "@/lib/user-error";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { fetchUnseen, mailboxConfigured, type FetchedMail } from "@/lib/mailbox";
@@ -310,7 +311,7 @@ const AUTO_MIN_CONFIDENCE = Number(process.env.MAIL_AUTO_MIN_CONFIDENCE || 75);
  */
 export async function ingestMailbox(): Promise<IngestResult> {
   const res = emptyIngest();
-  if (!mailboxConfigured()) throw new Error("Schránka pro příjem pošty není nastavená.");
+  if (!mailboxConfigured()) throw new UserError("Schránka pro příjem pošty není nastavená.");
 
   const mails = await fetchUnseen();
   res.fetched = mails.length;
