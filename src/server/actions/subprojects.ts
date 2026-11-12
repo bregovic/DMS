@@ -64,7 +64,7 @@ export async function updateSubProject(formData: FormData) {
     select: { createdById: true },
   });
   if (!sub) throw new Error("Subprojekt nenalezen.");
-  if (!isManager(role) && sub.createdById !== user.id) {
+  if (!isManager(role) && !(sub.createdById === user.id && canWrite(role))) {
     throw new Error("Nemáš oprávnění upravit tento subprojekt.");
   }
 
@@ -95,7 +95,7 @@ export async function deleteSubProject(formData: FormData) {
   });
   if (!sub) return;
 
-  const allowed = isManager(role) || sub.createdById === user.id;
+  const allowed = isManager(role) || (sub.createdById === user.id && canWrite(role));
   if (!allowed) throw new Error("Nemáš oprávnění smazat tento subprojekt.");
 
   // Smaže i vnořené (cascade); položky se odpojí (subProjectId -> null).

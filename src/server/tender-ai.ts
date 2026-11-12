@@ -121,6 +121,19 @@ Uváděj jen firmy, které jsi na webu skutečně našel. Firmy, které už jsou
 
 note: jedna věta k trhu (např. obvyklá cena za m², sezónnost), nebo null.`;
 
+/** Odkazy na zdroje, které model vkládá do textu: „([web](https://…))“. */
+function cisty(t: string | null | undefined): string | null {
+  if (!t) return t ?? null;
+  return (
+    t
+      .replace(/\s*\(\[[^\]]*\]\([^)]*\)\)/g, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim() || null
+  );
+}
+const bezUtm = (u: string | null) => (u ? u.replace(/[?&]utm_[^&#]*/g, "").replace(/\?$/, "") : u);
+
 /** Spustí návrh (volá se v after()). Stav a výsledek ukládá do řízení. */
 export async function runTenderSuggest(tenderId: string) {
   const t = await prisma.tender.findUnique({
@@ -172,7 +185,11 @@ export async function runTenderSuggest(tenderId: string) {
 
     // Ověření: IČO v ARES, shoda s evidencí, platné žádanky.
     const validIds = new Set(t.requests.map((r) => r.request.id));
-    data.requests = (data.requests ?? []).filter((r) => validIds.has(r.requestId));
+    data.requests = (data.requests ?? [])
+      .filter((r) => validIds.has(r.requestId))
+      .map((r) => ({ ...r, gaps: r.gaps.map((g) => cisty(g) ?? "").filter(Boolean) }));
+    data.note = cisty(data.note);
+    data.criteria = (data.criteria ?? []).map((c) => ({ ...c, note: cisty(c.note) ?? "" }));
     const evid = await prisma.vendor.findMany({
       where: { ownerId: t.project.ownerId },
       select: { id: true, ico: true, email: true, name: true },
@@ -191,6 +208,10 @@ export async function runTenderSuggest(tenderId: string) {
         );
         return {
           ...v,
+          web: bezUtm(v.web),
+          city: cisty(v.city),
+          references: cisty(v.references),
+          why: cisty(v.why) ?? "",
           ico: ico.length === 8 ? ico : null,
           email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
           requestIds: (v.requestIds ?? []).filter((id) => validIds.has(id)),

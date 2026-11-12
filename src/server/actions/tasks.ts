@@ -169,7 +169,8 @@ async function taskCtx(id: string) {
   const access = await getProjectAccess(task.projectId, user);
   // spolusprávce (owner|member) smí editovat/mazat veškeré úkoly
   const isOwner = isManager(access?.role);
-  const isCreator = task.createdById === user.id;
+  // Autor jen dokud má do projektu zápis – po odebrání přístupu už ne.
+  const isCreator = task.createdById === user.id && canWrite(access?.role);
   const myEmail = user.email?.toLowerCase();
   // Řešitel je i dodavatel, kterému je úkol přidělený (#29) - smí měnit stav.
   const isAssignee =
