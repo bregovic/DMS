@@ -71,7 +71,7 @@ function ItemOffer({ item, single, n, onTotals }: { item: Item; single: boolean;
 
       {on && (
         <div className="space-y-5 border-t border-stone-200 px-5 py-5 sm:px-7">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
             <div>
               <span className={label}>Cena bez DPH (Kč) *</span>
               <input
@@ -116,7 +116,7 @@ function ItemOffer({ item, single, n, onTotals }: { item: Item; single: boolean;
           </div>
           {rc && <p className="-mt-2 text-xs text-stone-500">Daň přizná odběratel – faktura bez DPH.</p>}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
             <div>
               <span className={label}>Termín dodání / realizace</span>
               <input type="date" name={`delivery_${item.id}`} className={field} />
@@ -128,12 +128,12 @@ function ItemOffer({ item, single, n, onTotals }: { item: Item; single: boolean;
           </div>
 
           {item.fields.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
               {item.fields.map((f, i) => (
                 <div key={i}>
                   <span className={label}>
                     {f.label}
-                    {f.unit ? ` [${f.unit}]` : ""}
+                    {f.unit && !f.label.includes(f.unit) ? ` [${f.unit}]` : ""}
                     {f.required ? " *" : ""}
                   </span>
                   <input name={`param_${item.id}_${i}`} required={f.required} className={field} />
@@ -259,7 +259,7 @@ export function PortalOfferForm({
       <div>
         <h2 className="kicker mb-3">Dodavatel</h2>
         <div className="space-y-4 border border-stone-300/80 bg-white px-5 py-5 sm:px-7">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
             <div>
               <span className={label}>IČO</span>
               <input
@@ -278,7 +278,7 @@ export function PortalOfferForm({
               {address && <p className="mt-1 text-xs text-stone-500">{address}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
             <div>
               <span className={label}>E-mail *</span>
               <input name="email" type="email" required defaultValue={defaults.email} className={field} />

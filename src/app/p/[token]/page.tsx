@@ -191,7 +191,7 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
                             <span className="mt-1.5 size-1.5 shrink-0 bg-amber-500" />
                             <span>
                               {f.label}
-                              {f.unit ? <span className="text-stone-400"> [{f.unit}]</span> : ""}
+                              {f.unit && !f.label.includes(f.unit) ? <span className="text-stone-400"> [{f.unit}]</span> : ""}
                             </span>
                           </li>
                         ))}
