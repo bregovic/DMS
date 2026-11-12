@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { canWrite, getProjectRole, getTaskOnlyAccess, isManager, managedProjectIds } from "@/server/access";
 import { storage } from "@/lib/storage";
 import { assertUploadQuota } from "@/server/upload-quota";
+import { vychoziNarok } from "@/lib/vat";
 import { createDocScan, createMailScan, fetchAres, runDocScan, scanAfterUpload, type ScanResult } from "@/server/doc-scan";
 import { AI_MODEL } from "@/server/extraction";
 import { Prisma } from "@/generated/prisma/client";
@@ -15,6 +16,24 @@ import { EXPENSE_PAID_STAGE } from "@/lib/constants";
 import { claimedTotals } from "@/lib/vat";
 import { extractable } from "@/server/extraction";
 import { getExpenseCategories, slugifyCategory } from "@/server/expense-categories";
+
+/** Doplní nově založenému dodavateli údaje z ARES (název, DIČ, adresu). */
+async function doplnitZAres(vendorId: string, ico: string) {
+  const ares = await fetchAres(ico);
+  if (!ares) return;
+  const v = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { dic: true, address: true } });
+  if (!v) return;
+  await prisma.vendor
+    .update({
+      where: { id: vendorId },
+      data: {
+        ...(ares.name ? { name: ares.name.slice(0, 200) } : {}),
+        ...(!v.dic && ares.dic ? { dic: ares.dic } : {}),
+        ...(!v.address && ares.address ? { address: ares.address } : {}),
+      },
+    })
+    .catch(() => undefined);
+}
 
 async function writable(projectId: string) {
   const user = await requireUser();
@@ -366,21 +385,22 @@ export async function applyDocScan(formData: FormData) {
       await prisma.vendor.update({ where: { id: found.id }, data: { bankAccount } });
   }
   if (!vendorId && createVendor && (ico || supplierName)) {
-    const ares = ico ? await fetchAres(ico) : null;
+    // Založit hned z údajů dokladu; ARES (bývá i několik sekund) doplní
+    // oficiální název, DIČ a adresu až po odeslání odpovědi.
     const v = await prisma.vendor.create({
       data: {
         ownerId: project.ownerId,
-        name: (ares?.name || supplierName || ico || "Dodavatel").slice(0, 200),
+        name: (supplierName || ico || "Dodavatel").slice(0, 200),
         email: null,
         category: "other",
         ico,
-        dic: dic ?? ares?.dic ?? null,
-        address: ares?.address ?? null,
+        dic,
         bankAccount,
       },
       select: { id: true },
     });
     vendorId = v.id;
+    if (ico) after(() => doplnitZAres(v.id, ico));
   }
 
   const vatRows = JSON.parse(String(formData.get("vatRows") || "[]")) as { rate: number; base: number; vat: number }[];
@@ -500,7 +520,8 @@ export async function applyDocScan(formData: FormData) {
       exchangeRate: num(formData.get("exchangeRate")),
       supplierIco: ico,
       supplierDic: dic,
-      deductible: formData.get("deductible") !== "0",
+      // Všechny položky mimo nárok = doklad do podkladu nepatří.
+      deductible: formData.get("deductible") !== "0" && (items.length === 0 || items.some((i) => i.deductible !== false)),
       vendorId,
       createdById: user.id,
       items: {
@@ -790,7 +811,7 @@ export async function applyReadyScans(formData: FormData) {
       put("vatBase", r.totalBase ?? "");
       put("vatAmount", r.totalVat ?? "");
       put("category", issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"));
-      put("deductible", "1");
+      put("deductible", vychoziNarok(r.items, issued) ? "1" : "0");
       put("paid", r.docType === "receipt" ? "1" : "0");
       put("subProjectId", r.subProjectId ?? vychoziSub);
       fd.set("vatRows", JSON.stringify(r.vatBreakdown ?? []));

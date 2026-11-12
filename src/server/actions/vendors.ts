@@ -65,15 +65,14 @@ export async function createVendor(
   // Sdílený číselník: dodavatel se hledá GLOBÁLNĚ podle IČO (normalizované),
   // jinak podle e-mailu. Když už v systému je, nezakládáme duplicitu.
   const existing = await findVendorByIcoOrEmail(
+    user.id,
     parsed.data.ico,
     parsed.data.email,
     undefined,
     parsed.data.phone,
   );
   if (existing) {
-    return {
-      error: `Dodavatel „${existing.name}" už v systému existuje a je dostupný všem uživatelům.`,
-    };
+    return { error: `Dodavatel „${existing.name}" už v evidenci je.` };
   }
 
   await prisma.vendor.create({ data: { ...parsed.data, ownerId: user.id } });
@@ -81,17 +80,20 @@ export async function createVendor(
   return { ok: true };
 }
 
-/** Najde existujícího dodavatele napříč všemi uživateli podle kteréhokoli
+/** Najde existujícího dodavatele v evidenci účtu podle kteréhokoli
  *  identifikátoru: IČO (po odstranění nečíslic), e-mail (bez ohledu na
- *  velikost písmen), nebo telefon (po odstranění nečíslic a předvolby). */
+ *  velikost písmen), nebo telefon (po odstranění nečíslic a předvolby).
+ *  Dřív se hledalo napříč všemi účty – hláška „už existuje“ pak bránila
+ *  založit dodavatele, kterého uživatel ve svém seznamu neviděl. */
 async function findVendorByIcoOrEmail(
+  ownerId: string,
   ico: string | undefined,
   email: string | undefined,
   excludeId?: string,
   phone?: string,
 ): Promise<{ id: string; name: string } | null> {
   const cislice = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
-  const not = excludeId ? { NOT: { id: excludeId } } : {};
+  const not = { ownerId, ...(excludeId ? { NOT: { id: excludeId } } : {}) };
   const icoNorm = cislice(ico);
   if (icoNorm) {
     const cands = await prisma.vendor.findMany({
@@ -132,13 +134,13 @@ export async function updateVendor(
     return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
   }
 
-  const existing = await prisma.vendor.findUnique({
-    where: { id },
+  const existing = await prisma.vendor.findFirst({
+    where: { id, ownerId: user.id },
     select: { id: true },
   });
   if (!existing) return { error: "Dodavatel nenalezen." };
 
-  const dup = await findVendorByIcoOrEmail(parsed.data.ico, parsed.data.email, id, parsed.data.phone);
+  const dup = await findVendorByIcoOrEmail(user.id, parsed.data.ico, parsed.data.email, id, parsed.data.phone);
   if (dup) return { error: `Jiný dodavatel („${dup.name}") s tímto IČO/e-mailem už existuje.` };
 
   await prisma.vendor.update({
@@ -161,9 +163,9 @@ export async function updateVendor(
 }
 
 export async function deleteVendor(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const id = String(formData.get("id"));
-  // Sdílený číselník – maže kterýkoli přihlášený uživatel (volá jen owner UI).
-  await prisma.vendor.deleteMany({ where: { id } });
+  // Smazat jde jen dodavatele z vlastní evidence.
+  await prisma.vendor.deleteMany({ where: { id, ownerId: user.id } });
   revalidatePath("/vendors");
 }

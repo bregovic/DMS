@@ -471,7 +471,8 @@ export function normalize(d: ScanResult, catKeys?: Set<string>): ScanResult {
     vatRate: num(i.vatRate),
     deductibleNote: i.deductibleNote?.slice(0, 120) || null,
     category: cat(i.category),
-    deductible: i.deductible !== false,
+    // Bez výslovného rozhodnutí se neuplatňuje (při pochybnosti ne).
+    deductible: i.deductible === true,
   }));
   d.category = cat(d.category);
   d.newCategory = String(d.newCategory ?? "").trim().slice(0, 40) || null;

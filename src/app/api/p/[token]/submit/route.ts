@@ -214,6 +214,20 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
     }
   }
 
+  // Společný odkaz: nabídku přiřadit k oslovenému podle dodavatele nebo e-mailu.
+  const inviteId =
+    ref.inviteId ??
+    (
+      await prisma.tenderInvite.findFirst({
+        where: {
+          tenderId: tender.id,
+          OR: [{ vendorId }, { email: { equals: email, mode: "insensitive" } }],
+        },
+        select: { id: true },
+      })
+    )?.id ??
+    null;
+
   let code = newTrackingCode();
   for (let i = 0; i < 3 && (await prisma.tenderSubmission.findUnique({ where: { code }, select: { id: true } })); i++)
     code = newTrackingCode();
@@ -221,7 +235,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/p/[token]/s
   const submission = await prisma.tenderSubmission.create({
     data: {
       tenderId: tender.id,
-      inviteId: ref.inviteId,
+      inviteId,
       vendorId,
       code,
       companyName: (companyName || ico || email).slice(0, 200),

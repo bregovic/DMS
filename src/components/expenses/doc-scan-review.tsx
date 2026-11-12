@@ -22,6 +22,7 @@ import { DocPreview } from "@/components/documents/doc-preview";
 import { formatCurrency } from "@/lib/utils";
 import { claimedTotals } from "@/lib/vat";
 import type { ScanResult } from "@/server/doc-scan";
+import { vychoziNarok } from "@/lib/vat";
 import { chybaAkce } from "@/lib/chyba-akce";
 
 const input =
@@ -43,6 +44,7 @@ export function DocScanReview({
   label = "Zkontrolovat doklad",
   autoOpen = false,
   hideButton = false,
+  linkText,
   onDone,
 }: {
   scanId: string | null;
@@ -56,6 +58,8 @@ export function DocScanReview({
   autoOpen?: boolean;
   /** Dialog řídí někdo jiný (fronta kontroly) – vlastní tlačítko se nekreslí. */
   hideButton?: boolean;
+  /** Místo tlačítka odkaz s tímto textem (číslo dokladu v seznamu). */
+  linkText?: string;
   /** "done" = doklad vyřízený (založený nebo zahozený), "close" = uživatel odešel. */
   onDone?: (vysledek: "done" | "close") => void;
 }) {
@@ -92,7 +96,13 @@ export function DocScanReview({
   const claim = claimedTotals(rows, items);
   const kraceno = !issuedDoc && items.some((i) => i.deductible === false) && rows.length > 0;
   const setItem = (idx: number, patch: Partial<ScanResult["items"][number]>) =>
-    setItems((list) => list.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    setItems((list) => {
+      const next = list.map((it, i) => (i === idx ? { ...it, ...patch } : it));
+      // Zaškrtnutí položky doklad do podkladu vrátí, odškrtnutí všech ho vyřadí.
+      if ("deductible" in patch && form.direction !== "issued")
+        setForm((f) => ({ ...f, deductible: next.some((it) => it.deductible !== false) ? "1" : "0" }));
+      return next;
+    });
 
   async function load(id: string) {
     const s = await getDocScan(id);
@@ -142,7 +152,7 @@ export function DocScanReview({
         category: issued ? "prodej" : katKlic(r.category) ?? (r.newCategory ? `__new__:${r.newCategory}` : "other"),
         subProjectId: r.subProjectId ?? vychoziSub ?? "",
         zarazeni: r.projectId ? `${r.projectId}:${r.subProjectId ?? vychoziSub ?? ""}` : "",
-        deductible: "1",
+        deductible: vychoziNarok(r.items, issued) ? "1" : "0",
         paid: r.docType === "receipt" ? "1" : "0",
       });
     }
@@ -238,7 +248,15 @@ export function DocScanReview({
   }
 
   if (!open)
-    return hideButton ? null : (
+    return hideButton ? null : linkText != null ? (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="block max-w-full cursor-pointer truncate text-left text-stone-900 underline-offset-2 hover:underline sm:overflow-visible sm:whitespace-normal"
+      >
+        {linkText}
+      </button>
+    ) : (
       <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
         <FileSearch className="size-4" /> {label}
       </Button>

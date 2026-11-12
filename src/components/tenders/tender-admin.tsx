@@ -10,6 +10,7 @@ import {
   addGalleryPhotos,
   addInvites,
   deleteInvite,
+  markInvitesSent,
   removeGalleryPhoto,
   saveSubmissionReply,
   toggleInviteSent,
@@ -333,19 +334,21 @@ export function InviteAdder({ tenderId, vendors }: { tenderId: string; vendors: 
 /** Předmět a text e-mailu ke zkopírování, odkaz do pošty. */
 export function EmailDraft({
   to,
+  toLabel = "Komu",
   subject,
   body,
   trigger,
-  onSent,
+  markSent,
 }: {
   to: string | null;
+  toLabel?: string;
   subject: string;
   body: string;
   trigger: string;
-  onSent?: { inviteId: string; sent: boolean };
+  markSent?: { tenderId: string; count: number };
 }) {
   const [open, setOpen] = useState(false);
-  const mailto = `mailto:${to ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const mailto = `mailto:${markSent ? "" : (to ?? "")}?${markSent && to ? `bcc=${encodeURIComponent(to)}&` : ""}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={btnOutline}>
@@ -356,9 +359,9 @@ export function EmailDraft({
         <Dialog title="E-mail" onClose={() => setOpen(false)} size="2xl">
           <div className="space-y-4">
             {to && (
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm">
-                  <span className="kicker mr-2">Komu</span>
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 break-words text-sm">
+                  <span className="kicker mr-2">{toLabel}</span>
                   {to}
                 </p>
                 <CopyButton text={to} label="Kopírovat" />
@@ -384,12 +387,11 @@ export function EmailDraft({
               <a href={mailto} className={btnOutline}>
                 Otevřít v poště
               </a>
-              {onSent && !onSent.sent && (
-                <form action={toggleInviteSent} onSubmit={() => setOpen(false)}>
-                  <input type="hidden" name="id" value={onSent.inviteId} />
-                  <input type="hidden" name="sent" value="1" />
+              {markSent && (
+                <form action={markInvitesSent} onSubmit={() => setOpen(false)}>
+                  <input type="hidden" name="id" value={markSent.tenderId} />
                   <button type="submit" className={btn}>
-                    Označit jako odeslané
+                    Označit jako odeslané ({markSent.count})
                   </button>
                 </form>
               )}
@@ -416,11 +418,11 @@ export function InviteRowActions({ inviteId, sent }: { inviteId: string; sent: b
       <form
         action={deleteInvite}
         onSubmit={(e) => {
-          if (!window.confirm("Odebrat pozvánku? Odkaz přestane fungovat.")) e.preventDefault();
+          if (!window.confirm("Odebrat ze seznamu oslovených?")) e.preventDefault();
         }}
       >
         <input type="hidden" name="id" value={inviteId} />
-        <button type="submit" aria-label="Odebrat pozvánku" className="flex size-8 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer">
+        <button type="submit" aria-label="Odebrat ze seznamu" className="flex size-8 items-center justify-center text-stone-400 hover:bg-stone-950 hover:text-white cursor-pointer">
           <X className="size-4" />
         </button>
       </form>

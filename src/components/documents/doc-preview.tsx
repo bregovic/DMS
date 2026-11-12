@@ -16,6 +16,7 @@ export function DocPreview({
   mimeType,
   label,
   className = "",
+  extra,
 }: {
   documentId?: string;
   /** Jiný zdroj než dokument projektu – třeba příloha z pošty. */
@@ -25,6 +26,8 @@ export function DocPreview({
   /** Text tlačítka; bez něj je jen ikona oka. */
   label?: string;
   className?: string;
+  /** Akce navíc v hlavičce náhledu – např. kontrola přečteného dokladu. */
+  extra?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const url = urlProp ?? `/api/documents/${documentId}`;
@@ -50,6 +53,7 @@ export function DocPreview({
           onClose={() => setOpen(false)}
           actions={
             <div className="flex items-center gap-1">
+              {extra}
               <a
                 href={url}
                 download={name}

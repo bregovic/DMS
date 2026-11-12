@@ -615,13 +615,24 @@ export default async function DocsPage({
                       </span>
                     </td>
                     <td className="py-1.5 align-top">
-                      <Link
-                        href={r.href}
-                        title={r.docNumber ?? undefined}
-                        className="block truncate text-stone-900 underline-offset-2 hover:underline sm:overflow-visible sm:whitespace-normal"
-                      >
-                        {r.docNumber ?? "—"}
-                      </Link>
+                      {r.scan && r.status !== "čtu doklad…" ? (
+                        <DocScanReview
+                          scanId={r.scan.id}
+                          documentId={r.doc?.id ?? null}
+                          projectId={r.projectId || null}
+                          subProjects={slozkyProjektu(r.projectId)}
+                          categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                          linkText={r.docNumber ?? "zkontrolovat"}
+                        />
+                      ) : (
+                        <Link
+                          href={r.href}
+                          title={r.docNumber ?? undefined}
+                          className="block truncate text-stone-900 underline-offset-2 hover:underline sm:overflow-visible sm:whitespace-normal"
+                        >
+                          {r.docNumber ?? "—"}
+                        </Link>
+                      )}
                     </td>
                     <td className="py-1.5 align-top text-stone-600">
                       <span className="block truncate sm:overflow-visible sm:whitespace-normal" title={r.party ?? undefined}>
@@ -642,7 +653,23 @@ export default async function DocsPage({
                     <td className="py-1.5 pl-2 text-right align-top">
                       <span className="flex flex-wrap items-center justify-end gap-1 sm:flex-nowrap sm:whitespace-nowrap">
                       {r.doc ? (
-                        <DocPreview documentId={r.doc.id} name={r.doc.name} mimeType={r.doc.mimeType} />
+                        <DocPreview
+                          documentId={r.doc.id}
+                          name={r.doc.name}
+                          mimeType={r.doc.mimeType}
+                          extra={
+                            r.scan && r.status === "ke kontrole" ? (
+                              <DocScanReview
+                                scanId={r.scan.id}
+                                documentId={r.doc.id}
+                                projectId={r.projectId || null}
+                                subProjects={slozkyProjektu(r.projectId)}
+                                categories={categories.map((c) => ({ key: c.key, label: c.label }))}
+                                label="Zkontrolovat"
+                              />
+                            ) : undefined
+                          }
+                        />
                       ) : (
                         <Link href={r.href} className="text-xs text-stone-400 underline-offset-2 hover:text-stone-950 hover:underline">
                           otevřít

@@ -70,7 +70,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
       },
       invites: {
         orderBy: { createdAt: "asc" },
-        include: { submissions: { select: { id: true, createdAt: true } } },
+        include: { vendor: { select: { ico: true } } },
       },
       submissions: {
         orderBy: { createdAt: "desc" },
@@ -112,6 +112,16 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
   const requestTitles = t.requests.map((r) => r.request.title);
   const mailBase = { title: t.title, location: t.location, deadline: t.deadline, requests: requestTitles };
   const generic = inviteEmail(mailBase, link, senderInfo);
+  const unsent = t.invites.filter((i) => !i.sentAt).length;
+  // Odpověď osloveného: podle pozvánky, dodavatele, e-mailu nebo IČO.
+  const submissionOf = (inv: (typeof t.invites)[number]) =>
+    t.submissions.find(
+      (s) =>
+        s.inviteId === inv.id ||
+        (inv.vendorId && s.vendorId === inv.vendorId) ||
+        (inv.email && s.email.toLowerCase() === inv.email.toLowerCase()) ||
+        (inv.vendor?.ico && s.ico === inv.vendor.ico),
+    );
   const back = `/projects/${id}/rizeni`;
 
   return (
@@ -273,18 +283,26 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
         {t.invites.length === 0 ? (
           <p className="text-sm text-stone-500">Zatím nikdo.</p>
         ) : (
+          <>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <EmailDraft
+              to={t.invites.map((i) => i.email).filter(Boolean).join(", ") || null}
+              toLabel="Komu (skrytá kopie)"
+              subject={generic.subject}
+              body={generic.body}
+              trigger="Pozvánka pro všechny"
+              markSent={unsent > 0 ? { tenderId: t.id, count: unsent } : undefined}
+            />
+          </div>
           <ul className="border-t border-stone-200">
             {t.invites.map((inv) => {
-              const mail = inviteEmail(mailBase, portalLink(inv.token), senderInfo);
-              const answered = inv.submissions.length > 0;
-              const state = answered
-                ? { text: `nabídka ${formatDate(inv.submissions[0].createdAt)}`, cls: "border-emerald-700 text-emerald-800" }
-                : inv.openedAt
-                  ? { text: `otevřel ${formatDate(inv.openedAt)}`, cls: "border-stone-950 text-stone-950" }
-                  : inv.sentAt && !accepting
-                    ? { text: "nereagoval", cls: "border-amber-600 text-amber-800" }
-                    : inv.sentAt
-                    ? { text: "odesláno", cls: "border-stone-400 text-stone-600" }
+              const sub = submissionOf(inv);
+              const state = sub
+                ? { text: `nabídka ${formatDate(sub.createdAt)}`, cls: "border-emerald-700 text-emerald-800" }
+                : inv.sentAt && !accepting
+                  ? { text: "nereagoval", cls: "border-amber-600 text-amber-800" }
+                  : inv.sentAt
+                    ? { text: `odesláno ${formatDate(inv.sentAt)}`, cls: "border-stone-400 text-stone-600" }
                     : { text: "neodesláno", cls: "border-stone-300 text-stone-500" };
               const st = inv.vendorId ? statsLabel(stats.get(inv.vendorId)) : null;
               return (
@@ -293,26 +311,18 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
                     <p className="text-sm text-stone-900">{inv.name}</p>
                     <p className="text-xs text-stone-500">
                       {inv.email ?? "bez e-mailu"}
-                      {inv.sentAt ? ` · odesláno ${formatDate(inv.sentAt)}` : ""}
                       {st ? ` · ${st}` : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${state.cls}`}>{state.text}</span>
-                    <CopyButton text={portalLink(inv.token)} label="Odkaz" />
-                    <EmailDraft
-                      to={inv.email}
-                      subject={mail.subject}
-                      body={mail.body}
-                      trigger="Pozvánka"
-                      onSent={{ inviteId: inv.id, sent: !!inv.sentAt }}
-                    />
                     <InviteRowActions inviteId={inv.id} sent={!!inv.sentAt} />
                   </div>
                 </li>
               );
             })}
           </ul>
+          </>
         )}
       </section>
 

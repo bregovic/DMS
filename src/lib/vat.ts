@@ -131,3 +131,13 @@ export function claimedTotals(rows: VatRow[], items: ClaimItem[]): { base: numbe
     vat: round2(list.reduce((a, r) => a + num(r.vat), 0)),
   };
 }
+
+/**
+ * Výchozí „Zahrnout do podkladu pro DPH“ u přijatého dokladu: jen když je
+ * v nároku aspoň jedna položka. Dřív bylo zaškrtnuté vždy, takže do podkladu
+ * šly i doklady, jejichž položky byly všechny mimo nárok (rodinný dům).
+ */
+export function vychoziNarok(items: { deductible?: boolean }[] | null | undefined, issued: boolean): boolean {
+  if (issued) return true;
+  return (items ?? []).some((i) => i.deductible === true);
+}

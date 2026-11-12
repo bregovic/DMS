@@ -273,6 +273,13 @@ export async function toggleInviteSent(formData: FormData) {
   revalidatePath(path(tender.projectId, tender.id));
 }
 
+/** Všem dosud neodeslaným pozvánkám zapíše odeslání (jeden e-mail všem). */
+export async function markInvitesSent(formData: FormData) {
+  const { tender } = await tenderCtx(String(formData.get("id")));
+  await prisma.tenderInvite.updateMany({ where: { tenderId: tender.id, sentAt: null }, data: { sentAt: new Date() } });
+  revalidatePath(path(tender.projectId, tender.id));
+}
+
 export async function deleteInvite(formData: FormData) {
   const inv = await prisma.tenderInvite.findUnique({
     where: { id: String(formData.get("id")) },
