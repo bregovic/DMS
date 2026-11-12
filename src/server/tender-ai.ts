@@ -118,7 +118,7 @@ Pracuješ samostatně: nikdy se neptej a nic neodkládej – uživatel nemůže 
 - references: jednou větou doložitelné reference nebo specializace.
 - why: proč ji navrhuješ, jednou větou.
 - requestIds: na které položky se hodí.
-Uváděj jen firmy, které jsi na webu skutečně našel. Firmy, které už jsou v evidenci uživatele (seznam níže), zahrň taky, pokud se hodí – použij stejný název a IČO.
+Uváděj jen firmy, které jsi na webu skutečně našel. Firmy z evidence uživatele (seznam níže) zahrň jen tehdy, když tuto práci prokazatelně dělají – použij stejný název a IČO. Obchody a firmy z jiného oboru nezařazuj.
 
 note: jedna věta k trhu (např. obvyklá cena za m², sezónnost), nebo null.`;
 
@@ -144,6 +144,7 @@ export async function runTenderSuggest(tenderId: string) {
       title: true,
       intro: true,
       location: true,
+      realization: true,
       aiPrompt: true,
       projectId: true,
       project: { select: { ownerId: true } },
@@ -170,6 +171,7 @@ export async function runTenderSuggest(tenderId: string) {
       .join("\n");
     const text =
       `Řízení: ${t.title}\nMísto stavby: ${t.location ?? "neuvedeno"}` +
+      (t.realization ? `\nTermín realizace: ${t.realization}` : "") +
       (t.intro ? `\nÚvod pro dodavatele: ${t.intro}` : "") +
       (t.aiPrompt ? `\nUpřesnění od stavebníka: ${t.aiPrompt}` : "") +
       `\n\nPoložky:\n${zadani}` +
