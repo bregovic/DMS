@@ -175,7 +175,7 @@ export function PortalOfferForm({
   const [address, setAddress] = useState<string | null>(null);
   const [icoState, setIcoState] = useState<"idle" | "loading" | "missing">("idle");
   const [totals, setTotals] = useState<Record<string, Totals>>({});
-  const picked = Object.values(totals).filter((x) => x.on);
+  const picked = Object.values(totals).filter((x) => x.on && (x.base ?? 0) > 0);
   const sumBase = picked.reduce((a, x) => a + (x.base ?? 0), 0);
   const sumGross = picked.reduce((a, x) => a + (x.gross ?? 0), 0);
 

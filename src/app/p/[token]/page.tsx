@@ -126,7 +126,7 @@ export default async function PortalPage({ params }: PageProps<"/p/[token]">) {
                 <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400">{m.k}</dt>
                 <dd className="mt-1 text-[15px] text-white">
                   {m.v}
-                  {m.badge && <span className="ml-2 bg-amber-400 px-1.5 py-0.5 align-middle text-[11px] font-medium text-stone-950">{m.badge}</span>}
+                  {m.badge && <span className="ml-2 inline-block whitespace-nowrap bg-amber-400 px-1.5 py-0.5 align-middle text-[11px] font-medium text-stone-950">{m.badge}</span>}
                 </dd>
               </div>
             ))}
