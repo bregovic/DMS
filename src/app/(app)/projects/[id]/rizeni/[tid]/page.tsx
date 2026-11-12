@@ -21,6 +21,9 @@ import {
 } from "@/server/tenders";
 import { deleteTender, setTenderRequests, setTenderStatus } from "@/server/actions/tenders";
 import { CopyButton } from "@/components/portal/copy-button";
+import { AutoRefresh } from "@/components/ui/auto-refresh";
+import { TenderSuggest, type SuggestionView } from "@/components/tenders/tender-suggest";
+import type { TenderSuggestion } from "@/server/tender-ai";
 import { DeleteButton } from "@/components/ui/delete-button";
 import {
   EmailDraft,
@@ -123,6 +126,43 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
         (inv.vendor?.ico && s.ico === inv.vendor.ico),
     );
   const back = `/projects/${id}/rizeni`;
+  // Návrh dodavatelů: běh starší 15 min bez výsledku se bere jako chyba.
+  const aiRunning = t.aiStatus === "running" && Date.now() - t.updatedAt.getTime() < 15 * 60_000;
+  const aiStatus = aiRunning ? "running" : t.aiStatus === "running" ? "error" : ((t.aiStatus ?? "idle") as "idle" | "ready" | "error");
+  const raw = t.aiResult as TenderSuggestion | null;
+  const reqTitle = new Map(t.requests.map((r) => [r.requestId, r.request.title]));
+  const suggestion: SuggestionView | null = raw
+    ? {
+        note: raw.note ?? null,
+        criteria: raw.criteria ?? [],
+        requests: (raw.requests ?? []).map((r) => ({
+          requestId: r.requestId,
+          title: reqTitle.get(r.requestId) ?? "",
+          offerFields: (r.offerFields ?? []).map((f) => ({ label: f.label, unit: f.unit ?? null, required: !!f.required })),
+          gaps: r.gaps ?? [],
+        })),
+        vendors: (raw.vendors ?? []).map((v) => ({
+          name: v.name,
+          ico: v.ico,
+          web: v.web,
+          email: v.email,
+          phone: v.phone,
+          city: v.city,
+          rating: v.rating,
+          ratingCount: v.ratingCount,
+          ratingSource: v.ratingSource,
+          references: v.references,
+          why: v.why,
+          aresName: v.aresName ?? null,
+          aresOk: !!v.aresOk,
+          vendorId: v.vendorId ?? null,
+          invited: t.invites.some(
+            (i) => (v.vendorId && i.vendorId === v.vendorId) || (v.email && i.email?.toLowerCase() === v.email),
+          ),
+          forRequests: (v.requestIds ?? []).map((x) => reqTitle.get(x) ?? "").filter(Boolean),
+        })),
+      }
+    : null;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -269,6 +309,15 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
         )}
       </section>
 
+      {/* Návrh dodavatelů a kritérií */}
+      <section className="mb-12">
+        <AutoRefresh when={aiRunning} ms={10000} />
+        <h2 className="kicker mb-3">Návrh dodavatelů a kritérií</h2>
+        <div className="border border-stone-300/80 bg-white p-5">
+          <TenderSuggest tenderId={t.id} status={aiStatus} error={t.aiError} prompt={t.aiPrompt} result={suggestion} />
+        </div>
+      </section>
+
       {/* Pozvánky */}
       <section className="mb-12">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -396,6 +445,7 @@ export default async function TenderPage({ params }: { params: Promise<{ id: str
               location: t.location,
               contact: t.contact,
               deadline: t.deadline ? t.deadline.toISOString().slice(0, 10) : null,
+              criteria: t.criteria,
             }}
           />
         </div>

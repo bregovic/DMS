@@ -34,6 +34,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * Předměty podnikání vlastníka (volný text, např. „programování,
    * poradenství v IT“). Jde do posouzení nároku na odpočet: IT živnostník
    * si lešení neuplatní, stavební firma ano.
@@ -435,6 +436,17 @@ model Tender {
   contact      String? // jméno a telefon pro dotazy
   deadline     DateTime? // termín pro podání nabídek
   status       String    @default("draft") // draft | open | closed
+  /**
+   * Podle čeho se vybírá – vidí dodavatel na portálu.
+   */
+  criteria     String?
+  // Návrh dodavatelů a kritérií (#49): running | ready | error.
+  aiStatus     String?
+  aiError      String?
+  aiPrompt     String?
+  aiResult     Json?
+  aiCostUsd    Float?
+  aiAt         DateTime?
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

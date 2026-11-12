@@ -40,7 +40,7 @@ function Saved({ state, pending }: { state: State; pending: boolean }) {
 export function TenderSettingsForm({
   tender,
 }: {
-  tender: { id: string; title: string; intro: string | null; location: string | null; contact: string | null; deadline: string | null };
+  tender: { id: string; title: string; intro: string | null; location: string | null; contact: string | null; deadline: string | null; criteria: string | null };
 }) {
   const [state, action, pending] = useFormAction<State>(updateTender, undefined);
   return (
@@ -67,6 +67,10 @@ export function TenderSettingsForm({
       <div>
         <label className={lbl}>Úvodní text</label>
         <textarea name="intro" rows={4} defaultValue={tender.intro ?? ""} className={field} />
+      </div>
+      <div>
+        <label className={lbl}>Podle čeho vybíráme</label>
+        <textarea name="criteria" rows={4} defaultValue={tender.criteria ?? ""} className={field} />
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={pending} className={btn}>

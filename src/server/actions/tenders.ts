@@ -7,7 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { getProjectRole, isManager } from "@/server/access";
 import { deleteWithFiles, requestFolder } from "@/server/document-files";
+import { after } from "next/server";
 import { newToken, offerFieldsFromText } from "@/server/tenders";
+import { runTenderSuggest, type TenderSuggestion } from "@/server/tender-ai";
 
 /**
  * Správa poptávkových řízení (#49). Řízení zakládá a spravuje jen vlastník
@@ -92,6 +94,7 @@ export async function updateTender(_prev: { error?: string; ok?: boolean } | und
         location: str(formData.get("location"), 200),
         contact: str(formData.get("contact"), 300),
         deadline: dateOrNull(formData.get("deadline")),
+        criteria: str(formData.get("criteria"), 2000),
       },
     });
     revalidatePath(path(tender.projectId, tender.id));
@@ -322,4 +325,108 @@ export async function saveSubmissionReply(_prev: { error?: string; ok?: boolean 
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Uložení se nepovedlo." };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Návrh údajů, kritérií a dodavatelů
+// ---------------------------------------------------------------------------
+
+const STALE_MS = 15 * 60_000;
+
+export async function startTenderSuggest(formData: FormData): Promise<{ error?: string }> {
+  const { tender } = await tenderCtx(String(formData.get("id")));
+  const t = await prisma.tender.findUnique({ where: { id: tender.id }, select: { aiStatus: true, aiAt: true, updatedAt: true } });
+  if (t?.aiStatus === "running" && Date.now() - t.updatedAt.getTime() < STALE_MS) return { error: "Návrh se už připravuje." };
+  await prisma.tender.update({
+    where: { id: tender.id },
+    data: { aiStatus: "running", aiError: null, aiPrompt: str(formData.get("prompt"), 1000) },
+  });
+  after(() => runTenderSuggest(tender.id));
+  revalidatePath(path(tender.projectId, tender.id));
+  return {};
+}
+
+async function suggestion(tenderId: string) {
+  const t = await prisma.tender.findUnique({ where: { id: tenderId }, select: { aiResult: true } });
+  return (t?.aiResult ?? null) as TenderSuggestion | null;
+}
+
+/** Navržené údaje k vyplnění převezme žádanka (přepíše dosavadní). */
+export async function applySuggestedFields(formData: FormData) {
+  const { tender } = await tenderCtx(String(formData.get("id")));
+  const s = await suggestion(tender.id);
+  const only = String(formData.get("requestId") || "");
+  for (const r of s?.requests ?? []) {
+    if (only && r.requestId !== only) continue;
+    const ok = await prisma.tenderRequest.findUnique({
+      where: { tenderId_requestId: { tenderId: tender.id, requestId: r.requestId } },
+      select: { requestId: true },
+    });
+    if (!ok) continue;
+    await prisma.request.update({
+      where: { id: r.requestId },
+      data: { offerFields: r.offerFields.map((f) => ({ label: f.label.slice(0, 120), unit: f.unit || null, required: !!f.required })) },
+    });
+  }
+  revalidatePath(path(tender.projectId, tender.id));
+}
+
+export async function applySuggestedCriteria(formData: FormData) {
+  const { tender } = await tenderCtx(String(formData.get("id")));
+  const s = await suggestion(tender.id);
+  if (!s?.criteria?.length) return;
+  const text = s.criteria.map((c) => `${c.label} – ${Math.round(c.weight)} %${c.note ? `: ${c.note}` : ""}`).join("\n");
+  await prisma.tender.update({ where: { id: tender.id }, data: { criteria: text.slice(0, 2000) } });
+  revalidatePath(path(tender.projectId, tender.id));
+}
+
+/** Vybrané navržené firmy do evidence dodavatelů a mezi oslovené. */
+export async function addSuggestedVendors(formData: FormData): Promise<{ error?: string; added?: number }> {
+  const { tender } = await tenderCtx(String(formData.get("id")));
+  const s = await suggestion(tender.id);
+  const picks = formData.getAll("pick").map((x) => Number(x)).filter((n) => Number.isInteger(n));
+  if (!s || !picks.length) return { error: "Vyber dodavatele." };
+  const ownerId = tender.project.ownerId;
+  const invited = await prisma.tenderInvite.findMany({ where: { tenderId: tender.id }, select: { vendorId: true, email: true } });
+  let added = 0;
+  for (const i of picks) {
+    const v = s.vendors[i];
+    if (!v) continue;
+    let vendorId = v.vendorId ?? null;
+    if (vendorId) {
+      const own = await prisma.vendor.findFirst({ where: { id: vendorId, ownerId }, select: { id: true } });
+      vendorId = own?.id ?? null;
+    }
+    if (!vendorId) {
+      const emailTaken = v.email ? await prisma.vendor.findFirst({ where: { ownerId, email: v.email }, select: { id: true } }) : null;
+      if (emailTaken) vendorId = emailTaken.id;
+    }
+    if (!vendorId) {
+      const desc = [v.web, v.references, v.rating != null ? `Hodnocení ${v.rating}${v.ratingCount ? ` (${v.ratingCount})` : ""}${v.ratingSource ? `, ${v.ratingSource}` : ""}` : null]
+        .filter(Boolean)
+        .join(" · ")
+        .slice(0, 1000);
+      const created = await prisma.vendor.create({
+        data: {
+          ownerId,
+          name: (v.aresName || v.name).slice(0, 200),
+          email: v.email,
+          phone: v.phone,
+          ico: v.ico,
+          category: "construction",
+          description: desc || null,
+        },
+        select: { id: true },
+      });
+      vendorId = created.id;
+    }
+    if (invited.some((x) => x.vendorId === vendorId || (v.email && x.email === v.email))) continue;
+    await prisma.tenderInvite.create({
+      data: { tenderId: tender.id, vendorId, name: (v.aresName || v.name).slice(0, 200), email: v.email, token: newToken() },
+    });
+    invited.push({ vendorId, email: v.email });
+    added++;
+  }
+  revalidatePath(path(tender.projectId, tender.id));
+  return { added };
 }
